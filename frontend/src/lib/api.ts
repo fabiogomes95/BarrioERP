@@ -263,7 +263,56 @@ export async function fetchCategories(): Promise<Category[]> {
   return data.items
 }
 
-export async function fetchMenuItems(): Promise<MenuItem[]> {
-  const data = await request<PaginatedResponse<MenuItem>>('/menu/items/?page_size=200')
+export async function fetchMenuItems(categoryId?: string): Promise<MenuItem[]> {
+  const qs = categoryId ? `&category_id=${categoryId}` : ''
+  const data = await request<PaginatedResponse<MenuItem>>(`/menu/items/?page_size=200${qs}`)
   return data.items
+}
+
+export async function createCategory(data: {
+  name: string
+  description?: string | null
+  sort_order?: number
+}): Promise<Category> {
+  return request<Category>('/menu/categories/', { method: 'POST', body: JSON.stringify(data) })
+}
+
+export async function updateCategory(
+  id: string,
+  data: { name?: string; description?: string | null; sort_order?: number; is_active?: boolean },
+): Promise<Category> {
+  return request<Category>(`/menu/categories/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+}
+
+export async function deleteCategory(id: string): Promise<void> {
+  return request<void>(`/menu/categories/${id}`, { method: 'DELETE' })
+}
+
+export async function createMenuItem(data: {
+  category_id: string
+  name: string
+  description?: string | null
+  price: number
+  sort_order?: number
+}): Promise<MenuItem> {
+  return request<MenuItem>('/menu/items/', { method: 'POST', body: JSON.stringify(data) })
+}
+
+export async function updateMenuItem(
+  id: string,
+  data: {
+    name?: string
+    description?: string | null
+    price?: number
+    sort_order?: number
+    is_active?: boolean
+    is_available?: boolean
+    category_id?: string
+  },
+): Promise<MenuItem> {
+  return request<MenuItem>(`/menu/items/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+}
+
+export async function deleteMenuItem(id: string): Promise<void> {
+  return request<void>(`/menu/items/${id}`, { method: 'DELETE' })
 }
