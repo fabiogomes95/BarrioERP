@@ -178,33 +178,43 @@ class OrderRepository(BaseRepository[Order]):
         self,
         establishment_id: UUID,
         *,
+        table_id: UUID | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[Order]:
         """
-        Lista todas as comandas abertas de um estabelecimento.
+        Lista comandas abertas de um estabelecimento com filtro opcional por mesa.
 
-        Carrega os itens de cada comanda via selectinload.
+        FILTRO table_id (opcional):
+            None        → retorna todas as comandas abertas do estabelecimento
+            UUID válido → retorna apenas a comanda aberta daquela mesa
 
-        COMO O selectinload FUNCIONA PARA UMA LISTA:
-            Query 1: SELECT * FROM orders WHERE establishment_id = ? AND closed_at IS NULL
-            Resultado: [order_A, order_B, order_C]
+        CASO DE USO DO FILTRO:
+            O garçom se aproxima da mesa 5 e quer ver o pedido em andamento.
+            GET /orders/open?table_id=uuid-da-mesa-5
+            → Retorna lista com 0 ou 1 item (mesa tem no máximo 1 comanda aberta)
 
-            Query 2: SELECT * FROM order_items WHERE order_id IN (id_A, id_B, id_C)
-            → O SQLAlchemy distribui os itens para as orders corretas automaticamente
+            Sem o filtro, o frontend baixaria todas as comandas abertas do salão
+            e filtraria no cliente — desnecessário quando só precisa de uma.
 
-            Total: 2 queries, independente de quantas orders existirem.
-            Muito mais eficiente que N+1 queries (uma por order).
+        Carrega os itens de cada comanda via selectinload (2 queries no total,
+        independente da quantidade de comandas retornadas).
 
-        ORDENAÇÃO por created_at: as comandas mais antigas aparecem primeiro.
-        Isso faz sentido para o garçom — ele vê primeiro as mesas que esperaram mais.
+        ORDENAÇÃO por created_at: as mais antigas aparecem primeiro —
+        o garçom vê as mesas que esperaram mais no topo da lista.
         """
+        filters = [
+            Order.establishment_id == establishment_id,
+            Order.closed_at.is_(None),
+        ]
+
+        # Filtro opcional: se informado, restringe a uma mesa específica
+        if table_id is not None:
+            filters.append(Order.table_id == table_id)
+
         stmt = (
             select(Order)
-            .where(
-                Order.establishment_id == establishment_id,
-                Order.closed_at.is_(None),
-            )
+            .where(*filters)
             .options(selectinload(Order.items))
             .order_by(Order.created_at)
             .limit(limit)
@@ -264,6 +274,37 @@ class OrderRepository(BaseRepository[Order]):
                 MenuItem.deleted_at.is_(None),
                 MenuCategory.establishment_id == establishment_id,
                 MenuCategory.deleted_at.is_(None),
+            )
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    # ── Queries de OrderItem ───────────────────────────────────────────────────
+
+    async def get_item(self, item_id: UUID, order_id: UUID) -> OrderItem | None:
+        """
+        Busca um item específico de uma comanda.
+
+        POR QUE FILTRAR POR order_id E NÃO SÓ POR item_id?
+            Segurança: um item pertence a uma comanda específica.
+            Se filtrarmos só por item_id, um garçom autenticado poderia
+            tentar acessar itens de outras comandas com um UUID arbitrário.
+
+            Ao exigir que o item pertença à comanda informada, garantimos
+            que o acesso ao item está limitado ao mesmo escopo de acesso
+            à comanda — que já foi validada pelo service (pertence ao
+            estabelecimento correto) antes deste método ser chamado.
+
+        QUERY GERADA:
+            SELECT * FROM order_items
+            WHERE id = :item_id
+              AND order_id = :order_id
+        """
+        stmt = (
+            select(OrderItem)
+            .where(
+                OrderItem.id == item_id,
+                OrderItem.order_id == order_id,
             )
         )
         result = await self.session.execute(stmt)

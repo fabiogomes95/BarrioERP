@@ -20,9 +20,15 @@ CONCEITO — tags:
 
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, menu, orders, payments, tables
+from app.api.v1.endpoints import auth, menu, onboarding, orders, payments, tables, users
 
 api_router = APIRouter()
+
+api_router.include_router(
+    onboarding.router,
+    prefix="/onboarding",
+    tags=["onboarding"],
+)
 
 api_router.include_router(
     auth.router,
@@ -52,4 +58,10 @@ api_router.include_router(
     menu.router,
     prefix="/menu",
     tags=["menu"],
+)
+
+api_router.include_router(
+    users.router,
+    prefix="/users",
+    tags=["users"],
 )

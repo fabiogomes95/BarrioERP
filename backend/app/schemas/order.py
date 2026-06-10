@@ -180,6 +180,10 @@ class OrderItemResponse(UUIDSchema, TimestampSchema):
     notes: str | None
     status: OrderItemStatus
 
+    # Campos de cancelamento — None para itens ativos, preenchidos ao cancelar
+    cancelled_at: datetime | None       # quando foi cancelado
+    cancelled_reason: str | None        # motivo informado pelo garçom/gestor
+
 
 # ── Schemas de Order ──────────────────────────────────────────────────────────
 

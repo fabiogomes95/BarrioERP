@@ -52,7 +52,7 @@ Por que POST /items retorna 200 e não 201?
 
 from uuid import UUID
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
 from app.api.deps import CurrentUser, DBSession
 from app.schemas.order import (
@@ -124,21 +124,38 @@ async def open_order(
     "/open",
     response_model=list[OrderResponse],
     summary="Listar comandas abertas",
-    description="Retorna todas as comandas abertas do estabelecimento, com seus itens.",
+    description=(
+        "Retorna comandas abertas do estabelecimento com seus itens. "
+        "Use `table_id` para filtrar pela comanda de uma mesa específica."
+    ),
 )
 async def list_open_orders(
     session: DBSession,
     current_user: CurrentUser,
+    table_id: UUID | None = Query(
+        default=None,
+        description=(
+            "Filtra pela comanda aberta de uma mesa específica. "
+            "Omita para listar todas as comandas abertas do salão."
+        ),
+    ),
 ) -> list[OrderResponse]:
     """
-    Lista todas as comandas com status OPEN do estabelecimento.
+    Lista comandas abertas do estabelecimento.
 
-    Inclui os itens de cada comanda (eager loaded).
-    Ordenadas por hora de abertura (mais antigas primeiro).
+    SEM FILTRO:
+        GET /orders/open
+        → Todas as comandas abertas (visão geral — útil para o painel do gerente)
 
-    Retorna lista vazia [] se não houver comandas abertas.
+    COM FILTRO:
+        GET /orders/open?table_id=uuid-da-mesa
+        → Apenas a comanda aberta dessa mesa (0 ou 1 resultado)
+        → Usado pelo frontend quando o garçom abre a tela de uma mesa específica
+
+    Inclui os itens de cada comanda (eager loaded — sem N+1 queries).
+    Ordenadas por hora de abertura: as mais antigas aparecem primeiro.
     """
-    return await _service(session, current_user).list_open()
+    return await _service(session, current_user).list_open(table_id=table_id)
 
 
 # ── GET /orders/{order_id} — Detalhes da comanda ──────────────────────────────
@@ -201,6 +218,71 @@ async def add_item(
     O campo `total` é recalculado automaticamente pelo servidor.
     """
     return await _service(session, current_user).add_item(order_id, data)
+
+
+# ── DELETE /orders/{order_id}/items/{item_id} — Cancelar item ─────────────────
+
+
+@router.delete(
+    "/{order_id}/items/{item_id}",
+    response_model=OrderResponse,
+    summary="Cancelar item da comanda",
+    description=(
+        "Cancela um item de uma comanda aberta. "
+        "O item é marcado como CANCELLED e o total da comanda é recalculado. "
+        "Itens já SERVED não podem ser cancelados. "
+        "Use o parâmetro opcional `reason` para registrar o motivo."
+    ),
+)
+async def cancel_item(
+    order_id: UUID,
+    item_id: UUID,
+    session: DBSession,
+    current_user: CurrentUser,
+    reason: str | None = Query(
+        default=None,
+        description="Motivo do cancelamento (opcional). Ex: 'Cliente desistiu', 'Pedido errado'.",
+        max_length=300,
+    ),
+) -> OrderResponse:
+    """
+    Cancela um item da comanda.
+
+    CONCEITO — DELETE com retorno de dados:
+        Convenção REST clássica: DELETE retorna 204 sem body.
+        Aqui fazemos uma exceção: retornamos a comanda atualizada (200 + body).
+
+        Por quê? O frontend precisa atualizar o estado da comanda imediatamente
+        após o cancelamento. Se retornássemos 204, o frontend teria que fazer
+        um GET separado para buscar a comanda atualizada — dois requests onde
+        um é suficiente. Para operações de UI interativa, isso importa.
+
+        Esse padrão (DELETE que retorna o recurso pai atualizado) é comum
+        em APIs de e-commerce e sistemas de pedidos.
+
+    CONCEITO — Query param vs body no DELETE:
+        Passar dados no body de um DELETE é tecnicamente válido (RFC 7231),
+        mas considerado má prática — alguns proxies e clientes descartam
+        o body de requisições DELETE.
+
+        Para dados simples como `reason` (uma string opcional), query param
+        é a escolha mais portável e compatível com todos os clientes HTTP.
+
+        Exemplo de uso:
+            DELETE /orders/{id}/items/{item_id}?reason=Pedido+errado
+            DELETE /orders/{id}/items/{item_id}          (sem motivo)
+
+    REGRAS (verificadas no service):
+        - Comanda deve ser OPEN ou BILL_REQUESTED
+        - Item não pode estar CANCELLED (já cancelado)
+        - Item não pode estar SERVED (já entregue — requer estorno manual)
+
+    Retorna a comanda completa com o item marcado como CANCELLED
+    e os totais recalculados.
+    """
+    return await _service(session, current_user).cancel_item(
+        order_id, item_id, reason=reason
+    )
 
 
 # ── PATCH /orders/{order_id}/close — Fechar comanda ───────────────────────────

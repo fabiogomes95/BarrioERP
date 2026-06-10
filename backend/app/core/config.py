@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     DATABASE_MAX_OVERFLOW: int = 20
     DATABASE_POOL_PRE_PING: bool = True
 
+    # Onboarding
+    # Chave exigida no header X-Onboarding-Secret para criar um novo tenant.
+    # Sem default: a aplicação não inicia sem este valor no .env.
+    ONBOARDING_SECRET: str
+
     # Auth
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7

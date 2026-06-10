@@ -78,7 +78,7 @@ class AuthService:
         if not user or not is_valid:
             # Mesma mensagem para "usuário não encontrado" e "senha errada"
             # Não revelamos qual dos dois falhou
-            raise AuthenticationError("Invalid credentials")
+            raise AuthenticationError("E-mail ou senha incorretos")
 
         # extra payload: dados úteis incluídos no JWT para evitar
         # queries desnecessárias a cada requisição autenticada

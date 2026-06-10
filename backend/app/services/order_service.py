@@ -276,33 +276,28 @@ class OrderService(BaseService):
         # 5. Retorna a comanda recém-criada (com items — vazia por enquanto)
         return await self._get_or_raise(order.id, establishment_id)
 
-    async def list_open(self) -> list[OrderResponse]:
+    async def list_open(
+        self,
+        *,
+        table_id: UUID | None = None,
+    ) -> list[OrderResponse]:
         """
-        Lista todas as comandas abertas do estabelecimento.
+        Lista comandas abertas do estabelecimento, com filtro opcional por mesa.
 
-        Inclui os itens de cada comanda (eager loaded via selectinload).
-        Ordenadas por hora de abertura — as mais antigas primeiro.
+        PARÂMETRO table_id (keyword-only):
+            None → todas as comandas abertas (visão geral do salão)
+            UUID → apenas a comanda da mesa informada (visão individual)
 
-        CONCEITO — N+1 Queries Problem:
-            O problema mais comum de performance em ORMs.
+        Inclui os itens de cada comanda (eager loaded — sem N+1 queries).
+        Ordenadas por hora de abertura: as mais antigas aparecem primeiro.
 
-            Versão ERRADA (N+1 queries):
-                orders = await fetch_orders()  ← 1 query
-                for order in orders:
-                    print(order.items)         ← N queries (uma por order!)
-
-            Se tivermos 20 comandas abertas: 1 + 20 = 21 queries!
-
-            Versão CORRETA (2 queries com selectinload):
-                Query 1: busca todas as orders
-                Query 2: busca todos os items para as orders encontradas
-
-            Independente de ter 5 ou 50 comandas abertas: sempre 2 queries.
-
-        RETORNA: lista de OrderResponse (pode ser vazia se não há comandas).
+        RETORNA: lista de OrderResponse (vazia se não há comandas abertas).
         """
         establishment_id = self._require_establishment()
-        orders = await self._order_repo.list_open(establishment_id)
+        orders = await self._order_repo.list_open(
+            establishment_id,
+            table_id=table_id,
+        )
         return [OrderResponse.model_validate(o) for o in orders]
 
     async def get(self, order_id: UUID) -> OrderResponse:
@@ -494,4 +489,97 @@ class OrderService(BaseService):
             raise OptimisticLockError("Order")
 
         # Retorna estado final da comanda
+        return await self._get_or_raise(order.id, establishment_id)
+
+    async def cancel_item(
+        self,
+        order_id: UUID,
+        item_id: UUID,
+        *,
+        reason: str | None = None,
+    ) -> OrderResponse:
+        """
+        Cancela um item de uma comanda aberta.
+
+        REGRAS DE NEGÓCIO:
+            1. A comanda deve existir e pertencer ao estabelecimento
+            2. A comanda deve estar OPEN ou BILL_REQUESTED
+               (não faz sentido cancelar item de comanda já fechada)
+            3. O item deve existir e pertencer à comanda informada
+            4. O item não pode já estar CANCELLED
+            5. O item não pode estar SERVED (já foi entregue ao cliente)
+
+        POR QUE NÃO PERMITIR CANCELAR ITENS SERVED?
+            Um item SERVED foi fisicamente entregue ao cliente.
+            Cancelar algo que já foi consumido é uma operação de crédito/
+            estorno, não um cancelamento simples — teria implicações fiscais
+            e de estoque. Para o MVP, bloqueamos. Se necessário, um OWNER
+            pode fechar e reabrir a comanda com ajuste manual.
+
+        TOTAIS APÓS CANCELAMENTO:
+            _recalculate_total() soma apenas itens com status != CANCELLED.
+            Ao marcar o item como CANCELLED antes de chamar esse método,
+            ele automaticamente sai do cálculo. A lógica está centralizada
+            — não precisamos subtrair manualmente.
+
+        LOCKING OTIMISTA:
+            Cancelar um item atualiza order.subtotal e order.total.
+            Como Order tem VersionMixin, qualquer UPDATE no registro
+            incrementa o version. Se dois cancelamentos simultâneos
+            ocorrerem, o segundo receberá StaleDataError → OptimisticLockError.
+            O frontend deve recarregar a comanda e tentar novamente.
+
+        LANÇA:
+            NotFoundError (404)       → comanda ou item não encontrado
+            BusinessRuleError (422)   → comanda fechada, item servido, já cancelado
+            OptimisticLockError (409) → conflito de versão concorrente
+        """
+        establishment_id = self._require_establishment()
+
+        # Carrega a comanda com seus itens (selectinload via get_with_items)
+        order = await self._get_or_raise(order_id, establishment_id)
+
+        # Regra 1: comanda deve estar em estado cancelável
+        if order.status not in (OrderStatus.OPEN, OrderStatus.BILL_REQUESTED):
+            raise BusinessRuleError(
+                f"Não é possível cancelar itens de uma comanda com status "
+                f"'{order.status.value}'. Apenas comandas ABERTAS ou com "
+                "CONTA SOLICITADA permitem cancelamento de itens."
+            )
+
+        # Regra 2: item deve pertencer a esta comanda
+        item = await self._order_repo.get_item(item_id, order_id)
+        if item is None:
+            raise NotFoundError("OrderItem", item_id)
+
+        # Regra 3: item não pode estar já cancelado
+        if item.status == OrderItemStatus.CANCELLED:
+            raise BusinessRuleError(
+                f"O item '{item.item_name}' já está cancelado."
+            )
+
+        # Regra 4: item não pode ter sido servido
+        if item.status == OrderItemStatus.SERVED:
+            raise BusinessRuleError(
+                f"O item '{item.item_name}' já foi servido e não pode ser cancelado. "
+                "Para ajustes pós-serviço, utilize o processo de estorno manual."
+            )
+
+        # Cancela o item — campos de auditoria registram quando e por quê
+        item.status = OrderItemStatus.CANCELLED
+        item.cancelled_at = datetime.now(UTC)
+        item.cancelled_reason = reason  # None se não fornecido — aceitável
+
+        # Recalcula subtotal e total da comanda (exclui automaticamente itens CANCELLED)
+        # _recalculate_total() itera sobre order.items já carregados em memória,
+        # então o item recém-cancelado já reflete o novo status.
+        self._recalculate_total(order)
+
+        try:
+            await self.session.flush()
+        except StaleDataError:
+            # Dois cancelamentos simultâneos tentaram atualizar o total da comanda.
+            # O frontend deve recarregar a comanda e tentar o cancelamento novamente.
+            raise OptimisticLockError("Order")
+
         return await self._get_or_raise(order.id, establishment_id)
