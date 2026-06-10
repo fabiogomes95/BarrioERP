@@ -259,13 +259,13 @@ export interface MenuItem {
 }
 
 export async function fetchCategories(): Promise<Category[]> {
-  const data = await request<PaginatedResponse<Category>>('/menu/categories/?page_size=100')
-  return data.items
+  // Endpoint retorna lista simples (não paginada) — sem trailing slash
+  return request<Category[]>('/menu/categories')
 }
 
 export async function fetchMenuItems(categoryId?: string): Promise<MenuItem[]> {
   const qs = categoryId ? `&category_id=${categoryId}` : ''
-  const data = await request<PaginatedResponse<MenuItem>>(`/menu/items/?page_size=200${qs}`)
+  const data = await request<PaginatedResponse<MenuItem>>(`/menu/items?page_size=200${qs}`)
   return data.items
 }
 
@@ -274,7 +274,7 @@ export async function createCategory(data: {
   description?: string | null
   sort_order?: number
 }): Promise<Category> {
-  return request<Category>('/menu/categories/', { method: 'POST', body: JSON.stringify(data) })
+  return request<Category>('/menu/categories', { method: 'POST', body: JSON.stringify(data) })
 }
 
 export async function updateCategory(
@@ -295,7 +295,7 @@ export async function createMenuItem(data: {
   price: number
   sort_order?: number
 }): Promise<MenuItem> {
-  return request<MenuItem>('/menu/items/', { method: 'POST', body: JSON.stringify(data) })
+  return request<MenuItem>('/menu/items', { method: 'POST', body: JSON.stringify(data) })
 }
 
 export async function updateMenuItem(
