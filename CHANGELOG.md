@@ -5,6 +5,129 @@
 
 ---
 
+## [v0.3.0] — Frontend SaaS completo (Mesas, Pedidos, Cardápio)
+
+### Frontend — Layout SaaS (Layout.tsx reescrito)
+
+**Arquivo modificado:** `frontend/src/components/Layout.tsx`
+
+Reescrita completa do shell de navegação. Abandonado o modelo de abas no topo em favor de layout SaaS moderno:
+
+- **Desktop (md+):** sidebar fixa de 56 (224 px) com marca, 4 itens de nav e perfil/logout no rodapé
+- **Mobile (<768 px):** header fixo com marca + avatar dropdown + nav inferior fixa com 4 ícones
+- Item ativo na sidebar: fundo `amber-500/10`, texto `amber-400` e ponto dourado à esquerda
+- Item ativo no nav inferior: texto `amber-400` + glow drop-shadow + linha dourada abaixo
+- Avatar: círculo com iniciais do usuário (`bg-amber-500/15`, borda `amber-500/25`)
+- Logout: `clearToken()` + `navigate('/login', { replace: true })`
+- Paleta: fundo `#0d0b08`, surface `#161210`, deep `#0f0d0a`, acento amber-500
+
+---
+
+### Frontend — LoginPage redesenhada
+
+**Arquivo modificado:** `frontend/src/pages/LoginPage.tsx`
+
+- Fundo escuro `#0d0b08` com gradiente radial âmbar sutil no topo
+- Card centralizado (`max-w-[340px]`) com borda `stone-800/70` e fundo `#121009`
+- Inputs com bordas `stone-800/80`, `focus:ring-amber-500/20`
+- Botão `bg-amber-500` → `hover:bg-amber-400`
+- Ícone SVG de alerta no card de erro
+
+---
+
+### Frontend — Página de Mesas (MesasPage.tsx)
+
+**Arquivo criado:** `frontend/src/pages/MesasPage.tsx` — commit `c75ac06`
+
+**Funcionalidades:**
+- Dados reais da API (`fetchTables`)
+- Filtros por status com chips clicáveis (Todas / Livre / Ocupada / Conta / Reservada / Bloqueada)
+- Grid responsivo: `grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5`
+- `TableCard`: barra de acento colorida à esquerda, número, badge de status, seção e capacidade
+- `SkeletonCard`: placeholder animado durante carregamento
+- Mapa de status → cor/label/hex para todas as 5 variantes
+
+**Modais:**
+- `NewTableModal`: criar mesa (número, label, capacidade, seção)
+- `OpenOrderModal`: abrir comanda em mesa livre (contagem de pessoas + nome do cliente)
+- `OccupiedModal`: mesa ocupada → navega para `/pedidos` com filtro pela mesa
+- `ModalOverlay`: fecha com Escape + backdrop blur
+
+---
+
+### Frontend — Página de Pedidos (PedidosPage.tsx)
+
+**Arquivo criado:** `frontend/src/pages/PedidosPage.tsx` — commit `ae4465a`
+
+**Funcionalidades:**
+- Layout split-pane: lista `w-full md:w-80` + detalhe `flex-1`
+- Mobile: toggle entre lista e detalhe via estado `mobileDetail`
+- `OrderCard`: número da mesa, nome do cliente, tempo (`timeAgo`), total, badge de status
+- Botão flutuante "Nova Comanda" na lista
+- `OrderDetail`: visão completa com itens, totais detalhados (subtotal / taxa / desconto / total) e ações
+
+**Ações em itens:**
+- Cancelar item com campo de motivo (inline, sem modal separado)
+- Após cancelar: atualiza estado local imediatamente sem recarregar tudo
+
+**AddItemModal (dois modos):**
+1. **Do cardápio**: chips de categoria → lista de itens → etapa de quantidade/notas
+2. **Manual**: nome, preço, quantidade, notas (para itens fora do cardápio)
+
+**Fluxo de fechamento:**
+- `handleClosed`: remove comanda da lista, limpa selecionado, reseta `mobileDetail`
+- `handleUpdated`: sincroniza comanda atualizada em `orders[]` e `selected`
+
+---
+
+### Frontend — Página de Cardápio (CardapioPage.tsx)
+
+**Arquivo criado:** `frontend/src/pages/CardapioPage.tsx` — commit `2eaba0f`
+
+**Funcionalidades:**
+- Layout split-pane: categorias `w-64` + itens `flex-1`
+- Mobile: toggle entre lista de categorias e grid de itens
+- RBAC: `canEdit = user.role === 'owner' || user.role === 'manager'`
+
+**Gerenciamento de categorias:**
+- Lista lateral com hover revealing edit/delete (opacity-0 → group-hover:opacity-100)
+- `CategoryModal`: nome, descrição (opcional), ordem, toggle is_active (edição)
+- Soft delete com confirmação inline
+
+**Gerenciamento de itens:**
+- Grid: itens ativos + seção "Inativos" separada
+- `ItemCard`: header nome+preço, descrição, toggle disponibilidade (verde/vermelho), editar, desativar
+- `ItemModal`: seletor de categoria, nome, descrição, preço (suporte a vírgula decimal), ordem, is_available, is_active
+- `handleToggleAvailable` / `handleToggleActive`: atualiza estado local instantaneamente (sem reload)
+- Componente `Toggle` reutilizável (22 px de altura)
+
+---
+
+### Bug Fix — Logout inesperado ao acessar Cardápio
+
+**Arquivo modificado:** `frontend/src/lib/api.ts` — commit `c886359`
+
+**Causa raiz 1 — URL com barra antes de query string:**
+
+URLs como `/menu/categories/?page_size=100` acionam `redirect_slashes=True` do FastAPI, gerando um redirect 307. O proxy Vite ao seguir o redirect não inclui o header `Authorization` na nova requisição → backend retorna 401 → `clearToken()` → logout automático.
+
+**Causa raiz 2 — tipo de resposta errado em `fetchCategories`:**
+
+`GET /api/v1/menu/categories` retorna `list[CategoryResponse]` diretamente (não paginado). O código usava `request<PaginatedResponse<Category>>` e tentava `.items`, que era `undefined` → TypeError.
+
+**Correções aplicadas:**
+
+| Função | Antes (buggy) | Depois (correto) |
+|--------|---------------|------------------|
+| `fetchCategories` | `PaginatedResponse<Category>` + `.items` + URL com `/?` | `Category[]` direto, URL `/menu/categories` |
+| `fetchMenuItems` | `/menu/items/?page_size=200` | `/menu/items?page_size=200` |
+| `createCategory` | `/menu/categories/` | `/menu/categories` |
+| `createMenuItem` | `/menu/items/` | `/menu/items` |
+
+**Regra derivada:** endpoints no router do menu usam rotas sem barra (`"/categories"`, `"/items"`). Rotas registradas com `"/"` (tabelas e pedidos) ficam em `/tables/` e `/orders/` — estes estavam corretos.
+
+---
+
 ## [v0.2.0] — Módulos de Usuários, Onboarding e Frontend base
 
 ### Backend — Módulo de Usuários
@@ -210,9 +333,9 @@ frontend/
 | Página | Rota | Status |
 |--------|------|--------|
 | Login | `/login` | ✅ Funcional |
-| Mesas | `/mesas` | 🔲 Placeholder |
-| Pedidos | `/pedidos` | 🔲 Placeholder |
-| Cardápio | `/cardapio` | 🔲 Placeholder |
+| Mesas | `/mesas` | ✅ Completa (CRUD + modais) |
+| Pedidos | `/pedidos` | ✅ Completa (split-pane + AddItem + close) |
+| Cardápio | `/cardapio` | ✅ Completa (CRUD categorias + itens, RBAC) |
 | Equipe | `/equipe` | 🔲 Placeholder |
 
 ---

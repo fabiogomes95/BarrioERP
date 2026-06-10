@@ -1370,3 +1370,142 @@ if active_only: stmt = stmt.where(...)
 ```
 
 *Última atualização: 2026-05-21*
+
+---
+
+## 23. Arquitetura do Frontend
+
+Stack e decisões de design da SPA React.
+
+### Stack
+
+| Ferramenta | Papel |
+|-----------|-------|
+| **Vite 8** | Build tool + dev server com HMR |
+| **React 19** | UI declarativa |
+| **TypeScript** | Tipagem estática |
+| **Tailwind CSS v4** | Utilitários CSS (`@tailwindcss/vite` plugin) |
+| **React Router DOM v7** | Roteamento client-side com rotas aninhadas |
+
+### Estrutura de pastas
+
+```
+frontend/src/
+├── lib/
+│   └── api.ts           # Camada de API: tipos, helpers auth, todas as chamadas HTTP
+├── components/
+│   └── Layout.tsx       # Shell: sidebar (desktop) + bottom nav (mobile) + header
+└── pages/
+    ├── LoginPage.tsx    # Tela de login (pública)
+    ├── MesasPage.tsx    # Gestão de mesas
+    ├── PedidosPage.tsx  # Gestão de comandas
+    ├── CardapioPage.tsx # CRUD de cardápio
+    └── EquipePage.tsx   # Gestão de equipe (placeholder)
+```
+
+### Autenticação — sem biblioteca JWT
+
+O token JWT é armazenado em `localStorage` como `barrio_token`. Os dados do usuário são decodificados via `atob()` nativo (sem dependência):
+
+```typescript
+function decodeToken(token: string): LocalUser {
+  const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+  return { id: payload.sub, name: payload.name, role: payload.role, company_id: payload.company_id }
+}
+```
+
+O JWT não é criptografado — apenas assinado. Decodificar o payload no cliente é seguro; a assinatura é verificada pelo backend a cada requisição.
+
+### Helper de requisição autenticada
+
+Todas as chamadas à API passam por `request<T>()`:
+
+```typescript
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const token = getToken()
+  const res = await fetch(`/api/v1${path}`, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...options.headers },
+  })
+  if (res.status === 401) { clearToken(); window.location.href = '/login'; throw new Error('Sessão expirada') }
+  if (res.status === 204) return undefined as T
+  if (!res.ok) { /* lança Error com msg do backend */ }
+  return res.json()
+}
+```
+
+Comportamento em 401: limpa token e redireciona para `/login`. **Nunca deve disparar por problemas de URL** — URLs erradas (ex: barra extra antes de `?`) causam redirect 307 no FastAPI que derruba o `Authorization` header.
+
+### Proxy de desenvolvimento
+
+```typescript
+// vite.config.ts
+server: { proxy: { '/api': { target: 'http://localhost:8000', changeOrigin: true } } }
+```
+
+Sem CORS em desenvolvimento. Em produção, Nginx ou similar faz o proxy.
+
+### Convenção de URLs na API
+
+O backend FastAPI tem `redirect_slashes=True`. As URLs devem ser precisas para não acionar redirects 307 (que podem derrubar o header `Authorization`):
+
+| Padrão da rota FastAPI | URL correta no frontend |
+|------------------------|------------------------|
+| `@router.get("/")` | `/tables/`, `/orders/` (com barra) |
+| `@router.get("/items")` | `/menu/items` (sem barra) |
+| `@router.get("/categories")` | `/menu/categories` (sem barra) |
+
+Regra prática: se a rota FastAPI é `"/"`, a URL tem barra. Se a rota é `"/nome"`, a URL não tem barra antes de `?`.
+
+### Layout SaaS — sidebar + bottom nav
+
+O `Layout.tsx` adapta a navegação ao tamanho da tela via classe Tailwind `md:`:
+
+```
+Desktop (md+):                    Mobile (<768px):
+┌──────────┬───────────────────┐  ┌───────────────────┐
+│ Sidebar  │                   │  │  Header (brand)   │
+│ ─────    │   <Outlet />      │  ├───────────────────┤
+│ Mesas    │   (página atual)  │  │                   │
+│ Pedidos  │                   │  │   <Outlet />      │
+│ Cardápio │                   │  │                   │
+│ Equipe   │                   │  ├───────────────────┤
+│ ─────    │                   │  │  Bottom Nav (4)   │
+│ [perfil] │                   │  └───────────────────┘
+└──────────┴───────────────────┘
+```
+
+### RBAC no frontend
+
+```typescript
+const canEdit = user.role === 'owner' || user.role === 'manager'
+```
+
+Controla visibilidade de botões de criação/edição/deleção. **Não é proteção de segurança** — o backend valida permissões em cada endpoint. O RBAC no frontend é apenas para UX.
+
+### Padrão split-pane (Pedidos e Cardápio)
+
+Páginas com lista + detalhe usam split-pane:
+
+```
+Desktop:
+┌──────────────┬────────────────────────────────┐
+│  Lista (280) │  Detalhe / Editor (flex-1)     │
+└──────────────┴────────────────────────────────┘
+
+Mobile:
+Estado mobileItems/mobileDetail controla qual painel renderiza.
+Botão "Voltar" na view de detalhe retorna à lista.
+```
+
+### Paleta de cores
+
+| Token | Valor | Uso |
+|-------|-------|-----|
+| Background | `#0d0b08` | Fundo geral da aplicação |
+| Surface | `#161210` | Cards e painéis |
+| Deep | `#0f0d0a` | Sidebar, inputs |
+| Accent | `amber-500` (#F59E0B) | Item ativo, botões primários, hovers |
+| Text | `stone-100` / `stone-400` / `stone-600` | Hierarquia tipográfica |
+
+*Última atualização: 2026-06-10*
