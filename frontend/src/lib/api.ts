@@ -1,17 +1,6 @@
-/**
- * api.ts — camada de comunicação com o backend
- *
- * Centraliza toda interação HTTP: URL base, headers, tratamento de erros.
- * Nenhum componente deve usar fetch() diretamente — sempre via funções aqui.
- *
- * O Vite está configurado com proxy: /api → http://localhost:8000
- * Então todas as chamadas usam caminhos relativos (/api/v1/...) e funcionam
- * tanto em desenvolvimento (proxy) quanto em produção (mesmo servidor).
- */
-
 const BASE = '/api/v1'
 
-// ── Token no localStorage ──────────────────────────────────────────────────
+// ── Token ─────────────────────────────────────────────────────────────────────
 
 export function getToken(): string | null {
   return localStorage.getItem('barrio_token')
@@ -26,7 +15,7 @@ export function clearToken(): void {
   localStorage.removeItem('barrio_user')
 }
 
-// ── Usuário local (decodificado do JWT) ────────────────────────────────────
+// ── Usuário local ─────────────────────────────────────────────────────────────
 
 export interface LocalUser {
   id: string
@@ -44,11 +33,6 @@ export function getUser(): LocalUser | null {
   return raw ? (JSON.parse(raw) as LocalUser) : null
 }
 
-/**
- * Decodifica o payload do JWT sem biblioteca externa.
- * JWTs são base64url — apenas lemos o payload (parte do meio).
- * NÃO verificamos a assinatura aqui — o backend faz isso em cada request.
- */
 function decodeToken(token: string): LocalUser {
   const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
   return {
@@ -59,16 +43,42 @@ function decodeToken(token: string): LocalUser {
   }
 }
 
-// ── Funções de autenticação ────────────────────────────────────────────────
+// ── Request helper autenticado ────────────────────────────────────────────────
+
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const token = getToken()
+  const res = await fetch(`${BASE}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers ?? {}),
+    },
+  })
+
+  if (res.status === 401) {
+    clearToken()
+    window.location.href = '/login'
+    throw new Error('Sessão expirada')
+  }
+
+  if (res.status === 204) return undefined as T
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    const msg = body.detail ?? body.message ?? `Erro ${res.status}`
+    throw new Error(Array.isArray(msg) ? msg.map((e: { msg: string }) => e.msg).join(', ') : msg)
+  }
+
+  return res.json() as Promise<T>
+}
+
+// ── Auth ──────────────────────────────────────────────────────────────────────
 
 export interface LoginResult {
   user: LocalUser
 }
 
-/**
- * Autentica o usuário e salva token + dados no localStorage.
- * Lança erro com mensagem legível se as credenciais forem inválidas.
- */
 export async function login(email: string, password: string): Promise<LoginResult> {
   const res = await fetch(`${BASE}/auth/login`, {
     method: 'POST',
@@ -77,16 +87,105 @@ export async function login(email: string, password: string): Promise<LoginResul
   })
 
   if (!res.ok) {
-    // O backend retorna { error: "...", message: "..." } nos erros de domínio
     const body = await res.json().catch(() => ({}))
     throw new Error(body.message ?? 'Credenciais inválidas')
   }
 
   const { access_token } = await res.json()
   const user = decodeToken(access_token)
-
   saveToken(access_token)
   saveUser(user)
-
   return { user }
+}
+
+// ── Mesas ─────────────────────────────────────────────────────────────────────
+
+export type TableStatus = 'free' | 'occupied' | 'bill_requested' | 'reserved' | 'blocked'
+
+export interface Table {
+  id: string
+  number: number
+  label: string
+  capacity: number
+  status: TableStatus
+  section: string | null
+  is_active: boolean
+  version: number
+  establishment_id: string
+  created_at: string
+  updated_at: string
+}
+
+interface PaginatedResponse<T> {
+  items: T[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export async function fetchTables(): Promise<Table[]> {
+  const data = await request<PaginatedResponse<Table>>('/tables/?page_size=100')
+  return data.items
+}
+
+export async function createTable(data: {
+  number: number
+  label: string
+  capacity: number
+  section?: string | null
+}): Promise<Table> {
+  return request<Table>('/tables/', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+// ── Pedidos ───────────────────────────────────────────────────────────────────
+
+export interface OrderItem {
+  id: string
+  item_name: string
+  unit_price: string
+  quantity: number
+  subtotal: string
+  notes: string | null
+  status: string
+  cancelled_at: string | null
+  cancelled_reason: string | null
+}
+
+export interface Order {
+  id: string
+  table_id: string | null
+  waiter_id: string | null
+  status: string
+  guest_count: number
+  customer_name: string | null
+  notes: string | null
+  total: string
+  subtotal: string
+  service_fee: string
+  discount: string
+  closed_at: string | null
+  version: number
+  items: OrderItem[]
+  created_at: string
+  updated_at: string
+}
+
+export async function fetchOpenOrders(tableId?: string): Promise<Order[]> {
+  const qs = tableId ? `?table_id=${tableId}` : ''
+  return request<Order[]>(`/orders/open${qs}`)
+}
+
+export async function createOrder(data: {
+  table_id: string
+  guest_count?: number
+  customer_name?: string | null
+  notes?: string | null
+}): Promise<Order> {
+  return request<Order>('/orders/', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
 }
