@@ -189,3 +189,81 @@ export async function createOrder(data: {
     body: JSON.stringify(data),
   })
 }
+
+export async function addOrderItem(
+  orderId: string,
+  data: {
+    menu_item_id?: string
+    item_name?: string
+    unit_price?: number
+    quantity: number
+    notes?: string | null
+  },
+): Promise<Order> {
+  return request<Order>(`/orders/${orderId}/items`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function cancelOrderItem(
+  orderId: string,
+  itemId: string,
+  reason?: string,
+): Promise<Order> {
+  const qs = reason ? `?reason=${encodeURIComponent(reason)}` : ''
+  return request<Order>(`/orders/${orderId}/items/${itemId}${qs}`, { method: 'DELETE' })
+}
+
+export async function closeOrder(
+  orderId: string,
+  version: number,
+  notes?: string | null,
+): Promise<Order> {
+  return request<Order>(`/orders/${orderId}/close`, {
+    method: 'PATCH',
+    body: JSON.stringify({ version, notes: notes ?? null }),
+  })
+}
+
+export async function updateTableStatus(
+  tableId: string,
+  status: TableStatus,
+  version: number,
+): Promise<Table> {
+  return request<Table>(`/tables/${tableId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status, version }),
+  })
+}
+
+// ── Cardápio ──────────────────────────────────────────────────────────────────
+
+export interface Category {
+  id: string
+  name: string
+  description: string | null
+  sort_order: number
+  is_active: boolean
+}
+
+export interface MenuItem {
+  id: string
+  category_id: string
+  name: string
+  description: string | null
+  price: string
+  sort_order: number
+  is_active: boolean
+  is_available: boolean
+}
+
+export async function fetchCategories(): Promise<Category[]> {
+  const data = await request<PaginatedResponse<Category>>('/menu/categories/?page_size=100')
+  return data.items
+}
+
+export async function fetchMenuItems(): Promise<MenuItem[]> {
+  const data = await request<PaginatedResponse<MenuItem>>('/menu/items/?page_size=200')
+  return data.items
+}
