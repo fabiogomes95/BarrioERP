@@ -316,3 +316,62 @@ export async function updateMenuItem(
 export async function deleteMenuItem(id: string): Promise<void> {
   return request<void>(`/menu/items/${id}`, { method: 'DELETE' })
 }
+
+// ── Equipe ────────────────────────────────────────────────────────────────────
+
+export type UserRole = 'owner' | 'manager' | 'cashier' | 'waiter' | 'kitchen'
+
+export interface TeamUser {
+  id: string
+  company_id: string
+  establishment_id: string | null
+  name: string
+  email: string
+  phone: string | null
+  role: UserRole
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export async function fetchUsers(): Promise<TeamUser[]> {
+  const data = await request<PaginatedResponse<TeamUser>>('/users/?page_size=100')
+  return data.items
+}
+
+export async function createUser(data: {
+  name: string
+  email: string
+  password: string
+  role: UserRole
+  phone?: string | null
+}): Promise<TeamUser> {
+  return request<TeamUser>('/users/', { method: 'POST', body: JSON.stringify(data) })
+}
+
+export async function updateUser(
+  id: string,
+  data: {
+    name?: string
+    email?: string
+    phone?: string | null
+    role?: UserRole
+    is_active?: boolean
+  },
+): Promise<TeamUser> {
+  return request<TeamUser>(`/users/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+}
+
+export async function deleteUser(id: string): Promise<void> {
+  return request<void>(`/users/${id}`, { method: 'DELETE' })
+}
+
+export async function resetUserPassword(
+  id: string,
+  newPassword: string,
+): Promise<TeamUser> {
+  return request<TeamUser>(`/users/${id}/password`, {
+    method: 'PATCH',
+    body: JSON.stringify({ new_password: newPassword, confirm_password: newPassword }),
+  })
+}
