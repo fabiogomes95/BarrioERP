@@ -126,9 +126,10 @@ function OrderCard({
 // ── Linha de item da comanda ──────────────────────────────────────────────────
 
 function OrderItemRow({
-  item, canCancel, onCancelled,
+  item, category, canCancel, onCancelled,
 }: {
   item: OrderItem
+  category?: string | null
   canCancel: boolean
   onCancelled: (updated: Order) => void
 }) {
@@ -164,6 +165,9 @@ function OrderItemRow({
               {item.item_name}
             </span>
           </div>
+          {category && (
+            <p className="text-stone-600 text-[10px] uppercase tracking-wider mt-0.5 pl-5">{category}</p>
+          )}
           {item.notes && (
             <p className="text-stone-600 text-xs mt-0.5 pl-5 italic">{item.notes}</p>
           )}
@@ -901,13 +905,14 @@ function PaymentModal({
 // ── Detalhe da comanda ────────────────────────────────────────────────────────
 
 function OrderDetail({
-  order, table, onUpdated, onClosed, onBack,
+  order, table, onUpdated, onClosed, onBack, categoryFor,
 }: {
   order: Order
   table: Table | undefined
   onUpdated: (o: Order) => void
   onClosed: (orderId: string) => void
   onBack?: () => void
+  categoryFor: (itemName: string) => string | null
 }) {
   const [showAddItem, setShowAddItem] = useState(false)
   const [showPayment, setShowPayment] = useState(false)
@@ -1011,6 +1016,7 @@ function OrderDetail({
               <OrderItemRow
                 key={item.id}
                 item={item}
+                category={categoryFor(item.item_name)}
                 canCancel={canEdit}
                 onCancelled={onUpdated}
               />
@@ -1025,7 +1031,7 @@ function OrderDetail({
                   </p>
                 </div>
                 {cancelledItems.map(item => (
-                  <OrderItemRow key={item.id} item={item} canCancel={false} onCancelled={onUpdated} />
+                  <OrderItemRow key={item.id} item={item} category={categoryFor(item.item_name)} canCancel={false} onCancelled={onUpdated} />
                 ))}
               </>
             )}
@@ -1142,14 +1148,38 @@ export default function PedidosPage() {
   const [mobileDetail, setMobileDetail] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
   const tableParam = searchParams.get('table')
+  // Mapa nome-do-item → categoria (para exibir a categoria na comanda)
+  const [catByItemName, setCatByItemName] = useState<Record<string, string>>({})
+
+  // Descobre a categoria de um item da comanda pelo nome (cardápio).
+  // Cobre item normal e meia a meia ("½ Bacon / ½ Camarão" → categoria do 1º sabor).
+  const categoryFor = useCallback((itemName: string): string | null => {
+    const direct = catByItemName[itemName.toLowerCase()]
+    if (direct) return direct
+    if (itemName.trimStart().startsWith('½')) {
+      const first = itemName.replace(/½/g, '').split('/')[0].trim().toLowerCase()
+      if (catByItemName[first]) return catByItemName[first]
+    }
+    return null
+  }, [catByItemName])
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const [os, ts] = await Promise.all([fetchOpenOrders(), fetchTables()])
+      const [os, ts, cats, its] = await Promise.all([
+        fetchOpenOrders(), fetchTables(), fetchCategories(), fetchMenuItems(),
+      ])
       setOrders(os)
       setTables(ts)
+      // Monta o mapa nome → categoria do cardápio
+      const catName = new Map(cats.map(c => [c.id, c.name]))
+      const lookup: Record<string, string> = {}
+      for (const it of its) {
+        const cn = catName.get(it.category_id)
+        if (cn) lookup[it.name.toLowerCase()] = cn
+      }
+      setCatByItemName(lookup)
       // Atualiza a comanda selecionada se ainda existe
       if (selected) {
         const fresh = os.find(o => o.id === selected.id)
@@ -1324,6 +1354,7 @@ export default function PedidosPage() {
             onUpdated={handleUpdated}
             onClosed={handleClosed}
             onBack={mobileDetail ? () => setMobileDetail(false) : undefined}
+            categoryFor={categoryFor}
           />
         ) : (
           <EmptyDetail />
