@@ -4,9 +4,10 @@ import {
   type Payment, type PaymentMethod,
   fetchCategories, fetchMenuItems,
   addOrderItem, cancelOrderItem, setItemQuantity, closeOrder, updateTableStatus,
-  fetchOrderPayments, registerPayment, finishOrder,
+  fetchOrderPayments, registerPayment, finishOrder, getUser,
 } from '../lib/api'
 import { maskCurrency, parseCurrency, toCurrencyInput } from '../lib/format'
+import { printComanda } from '../lib/print'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -875,6 +876,20 @@ export function OrderDetail({
               {order.guest_count} {order.guest_count === 1 ? 'pessoa' : 'pessoas'} · aberta há {timeAgo(order.created_at)}
             </p>
           </div>
+
+          {/* Imprimir recibo (impressora térmica 80mm) */}
+          <button
+            onClick={() => printComanda(order, table, getUser()?.company_name ?? 'BarrioERP')}
+            title="Imprimir comanda"
+            className="shrink-0 flex items-center justify-center w-9 h-9 rounded-xl
+                       border border-stone-800/60 text-stone-400 hover:text-amber-400
+                       hover:border-stone-700/60 transition-all"
+            style={{ background: '#161210' }}>
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+              <path strokeLinecap="round" strokeLinejoin="round"
+                d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a1 1 0 001-1v-4a1 1 0 00-1-1H9a1 1 0 00-1 1v4a1 1 0 001 1zm8-12V5a2 2 0 00-2-2H7a2 2 0 00-2 2v4h14z" />
+            </svg>
+          </button>
         </div>
 
         {actionError && (
