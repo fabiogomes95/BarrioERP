@@ -1,8 +1,16 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { clearToken, getUser } from '../lib/api'
 
 // ── Ícones ────────────────────────────────────────────────────────────────────
+
+function IconMenu() {
+  return (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.9}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+    </svg>
+  )
+}
 
 function IconHome() {
   return (
@@ -82,209 +90,154 @@ function userInitials(name?: string) {
   return name.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()
 }
 
-// ── Sidebar (desktop md+) ─────────────────────────────────────────────────────
+// ── Drawer lateral (recolhível) ─────────────────────────────────────────────────
 
-function Sidebar() {
+function SideDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const user = getUser()
   const navigate = useNavigate()
 
+  // Fecha com Escape
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', h)
+    return () => document.removeEventListener('keydown', h)
+  }, [onClose])
+
   return (
-    <aside
-      className="hidden md:flex flex-col w-56 shrink-0 border-r border-stone-800/50"
-      style={{ background: '#0f0d0a' }}
-    >
-      {/* Marca */}
-      <div className="px-5 py-5 border-b border-stone-800/50">
-        <div className="flex items-center gap-3">
+    <>
+      {/* Backdrop */}
+      <div
+        onClick={onClose}
+        className={[
+          'fixed inset-0 z-40 transition-opacity duration-200',
+          open ? 'opacity-100' : 'opacity-0 pointer-events-none',
+        ].join(' ')}
+        style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(2px)' }}
+      />
+
+      {/* Painel */}
+      <aside
+        className={[
+          'fixed top-0 left-0 h-full w-64 z-50 flex flex-col border-r border-stone-800/60',
+          'transform transition-transform duration-200 ease-out',
+          open ? 'translate-x-0' : '-translate-x-full',
+        ].join(' ')}
+        style={{ background: '#0f0d0a' }}
+      >
+        {/* Marca + fechar */}
+        <div className="px-5 py-5 border-b border-stone-800/50 flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20
                           flex items-center justify-center shrink-0 text-base">
             🍺
           </div>
-          <div className="min-w-0">
-            {/* TODO: nome do estabelecimento via API */}
-            <p className="text-stone-100 text-sm font-semibold leading-tight truncate">
-              BarrioERP
-            </p>
+          <div className="min-w-0 flex-1">
+            <p className="text-stone-100 text-sm font-semibold leading-tight truncate">BarrioERP</p>
             <p className="text-stone-600 text-[11px] mt-0.5">Gestão do bar</p>
           </div>
-        </div>
-      </div>
-
-      {/* Navegação */}
-      <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
-        {NAV.map(({ to, label, Icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            className={({ isActive }) =>
-              [
-                'group flex items-center gap-3 px-3 py-2.5 rounded-lg',
-                'text-sm font-medium transition-all duration-150',
-                isActive
-                  ? 'bg-amber-500/10 text-amber-400'
-                  : 'text-stone-500 hover:text-stone-200 hover:bg-stone-800/50',
-              ].join(' ')
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <span className={isActive ? 'text-amber-400' : 'text-stone-600 group-hover:text-stone-400 transition-colors'}>
-                  <Icon />
-                </span>
-                {label}
-                {isActive && (
-                  <span className="ml-auto w-1.5 h-1.5 rounded-full bg-amber-500" />
-                )}
-              </>
-            )}
-          </NavLink>
-        ))}
-      </nav>
-
-      {/* Perfil + Sair */}
-      <div className="p-3 border-t border-stone-800/50">
-        <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg">
-          <div className="w-7 h-7 rounded-full bg-amber-500/15 border border-amber-500/25
-                          flex items-center justify-center shrink-0">
-            <span className="text-[11px] font-bold text-amber-400">{userInitials(user?.name)}</span>
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-stone-200 text-xs font-semibold truncate leading-tight">{user?.name}</p>
-            <p className="text-stone-600 text-[10px] capitalize mt-0.5">{user?.role}</p>
-          </div>
-          <button
-            onClick={() => { clearToken(); navigate('/login', { replace: true }) }}
-            className="text-stone-700 hover:text-red-400 transition-colors p-1 rounded"
-            title="Sair"
-          >
-            <IconLogout />
+          <button onClick={onClose}
+            className="text-stone-600 hover:text-stone-300 transition-colors p-1 -mr-1" title="Fechar">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </button>
         </div>
-      </div>
-    </aside>
+
+        {/* Navegação */}
+        <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
+          {NAV.map(({ to, label, Icon }) => (
+            <NavLink
+              key={to}
+              to={to}
+              onClick={onClose}
+              className={({ isActive }) =>
+                [
+                  'group flex items-center gap-3 px-3 py-2.5 rounded-lg',
+                  'text-sm font-medium transition-all duration-150',
+                  isActive
+                    ? 'bg-amber-500/10 text-amber-400'
+                    : 'text-stone-500 hover:text-stone-200 hover:bg-stone-800/50',
+                ].join(' ')
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <span className={isActive ? 'text-amber-400' : 'text-stone-600 group-hover:text-stone-400 transition-colors'}>
+                    <Icon />
+                  </span>
+                  {label}
+                  {isActive && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-amber-500" />}
+                </>
+              )}
+            </NavLink>
+          ))}
+        </nav>
+
+        {/* Perfil + Sair */}
+        <div className="p-3 border-t border-stone-800/50">
+          <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg">
+            <div className="w-7 h-7 rounded-full bg-amber-500/15 border border-amber-500/25
+                            flex items-center justify-center shrink-0">
+              <span className="text-[11px] font-bold text-amber-400">{userInitials(user?.name)}</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-stone-200 text-xs font-semibold truncate leading-tight">{user?.name}</p>
+              <p className="text-stone-600 text-[10px] capitalize mt-0.5">{user?.role}</p>
+            </div>
+            <button
+              onClick={() => { clearToken(); navigate('/login', { replace: true }) }}
+              className="text-stone-700 hover:text-red-400 transition-colors p-1 rounded"
+              title="Sair"
+            >
+              <IconLogout />
+            </button>
+          </div>
+        </div>
+      </aside>
+    </>
   )
 }
 
-// ── Header mobile ─────────────────────────────────────────────────────────────
+// ── Top bar (hambúrguer) ────────────────────────────────────────────────────────
 
-function MobileHeader() {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-  const user = getUser()
-  const navigate = useNavigate()
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
-
+function TopBar({ onMenu }: { onMenu: () => void }) {
   return (
     <header
-      className="md:hidden flex items-center justify-between px-4 h-14 shrink-0 border-b border-stone-800/50"
+      className="flex items-center gap-3 px-3 sm:px-4 h-14 shrink-0 border-b border-stone-800/50"
       style={{ background: '#161210' }}
     >
-      {/* Marca */}
+      <button
+        onClick={onMenu}
+        className="flex items-center justify-center w-9 h-9 rounded-xl text-stone-300
+                   hover:text-amber-400 hover:bg-stone-800/60 active:scale-95 transition-all"
+        title="Menu"
+      >
+        <IconMenu />
+      </button>
       <div className="flex items-center gap-2.5">
         <span className="text-base">🍺</span>
         <span className="text-stone-200 text-sm font-bold tracking-tight">BarrioERP</span>
       </div>
-
-      {/* Avatar com menu */}
-      <div ref={ref} className="relative">
-        <button
-          onClick={() => setOpen(v => !v)}
-          className="w-8 h-8 rounded-full bg-amber-500/15 border border-amber-500/25
-                     flex items-center justify-center active:scale-95 transition-transform"
-        >
-          <span className="text-[11px] font-bold text-amber-400">{userInitials(user?.name)}</span>
-        </button>
-
-        {open && (
-          <div className="absolute right-0 top-10 z-50 w-48
-                          bg-stone-900 border border-stone-700/50 rounded-2xl
-                          shadow-2xl shadow-black/60 overflow-hidden">
-            <div className="px-4 py-3 border-b border-stone-800/80">
-              <p className="text-sm text-stone-100 font-semibold leading-tight">{user?.name}</p>
-              <p className="text-xs text-amber-500/70 capitalize mt-0.5">{user?.role}</p>
-            </div>
-            <button
-              onClick={() => { clearToken(); navigate('/login', { replace: true }) }}
-              className="w-full flex items-center gap-3 px-4 py-3 text-sm
-                         text-red-400/70 hover:bg-stone-800/60 hover:text-red-400
-                         transition-colors"
-            >
-              <IconLogout />
-              Sair
-            </button>
-          </div>
-        )}
-      </div>
     </header>
-  )
-}
-
-// ── Bottom nav (mobile) ───────────────────────────────────────────────────────
-
-function BottomNav() {
-  return (
-    <nav
-      className="md:hidden fixed bottom-0 left-0 right-0 flex items-stretch
-                 border-t border-stone-800/50 z-20 safe-area-inset-bottom"
-      style={{ background: '#161210' }}
-    >
-      {NAV.map(({ to, label, Icon }) => (
-        <NavLink
-          key={to}
-          to={to}
-          className={({ isActive }) =>
-            [
-              'flex-1 flex flex-col items-center justify-center gap-1 py-2.5',
-              'transition-colors duration-150 select-none',
-              isActive ? 'text-amber-400' : 'text-stone-600 active:text-stone-300',
-            ].join(' ')
-          }
-        >
-          {({ isActive }) => (
-            <>
-              <span className={isActive ? 'drop-shadow-[0_0_6px_rgba(245,158,11,0.5)]' : ''}>
-                <Icon />
-              </span>
-              <span className="text-[10px] font-semibold tracking-wide">{label}</span>
-              {isActive && <span className="absolute bottom-0 w-8 h-0.5 rounded-full bg-amber-500" />}
-            </>
-          )}
-        </NavLink>
-      ))}
-    </nav>
   )
 }
 
 // ── Layout principal ──────────────────────────────────────────────────────────
 
 export default function Layout() {
+  const [open, setOpen] = useState(false)
+
   return (
-    <div className="flex h-screen" style={{ background: '#0d0b08' }}>
+    <div className="flex flex-col h-screen" style={{ background: '#0d0b08' }}>
+      {/* Barra superior com o menu hambúrguer */}
+      <TopBar onMenu={() => setOpen(true)} />
 
-      {/* Sidebar — visível apenas desktop */}
-      <Sidebar />
+      {/* Drawer lateral recolhível */}
+      <SideDrawer open={open} onClose={() => setOpen(false)} />
 
-      {/* Área principal */}
-      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-
-        {/* Header — visível apenas mobile */}
-        <MobileHeader />
-
-        {/* Conteúdo da rota ativa */}
-        <main className="flex-1 overflow-auto pb-16 md:pb-0">
-          <Outlet />
-        </main>
-      </div>
-
-      {/* Bottom nav — visível apenas mobile */}
-      <BottomNav />
+      {/* Conteúdo da rota ativa */}
+      <main className="flex-1 overflow-auto min-h-0">
+        <Outlet />
+      </main>
     </div>
   )
 }
