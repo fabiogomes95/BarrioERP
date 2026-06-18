@@ -181,6 +181,16 @@ class OrderItemQuantityUpdate(BaseSchema):
     )
 
 
+class OrderDiscountUpdate(BaseSchema):
+    """Aplica/ajusta o desconto da comanda (valor em R$)."""
+
+    discount: Decimal = Field(
+        ...,
+        ge=Decimal("0"),
+        description="Valor do desconto em reais. Não pode exceder o subtotal.",
+    )
+
+
 class OrderItemResponse(UUIDSchema, TimestampSchema):
     """
     Representação completa de um item da comanda.

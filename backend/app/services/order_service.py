@@ -641,6 +641,31 @@ class OrderService(BaseService):
 
         return await self._get_or_raise(order.id, establishment_id)
 
+    async def set_discount(self, order_id: UUID, discount: Decimal) -> OrderResponse:
+        """Define o desconto (R$) da comanda e recalcula o total."""
+        establishment_id = self._require_establishment()
+        order = await self._get_or_raise(order_id, establishment_id)
+
+        if order.status not in (OrderStatus.OPEN, OrderStatus.BILL_REQUESTED):
+            raise BusinessRuleError(
+                f"Não é possível alterar o desconto de uma comanda com status "
+                f"'{order.status.value}'."
+            )
+        if discount > order.subtotal:
+            raise BusinessRuleError(
+                "O desconto não pode ser maior que o subtotal da comanda."
+            )
+
+        order.discount = discount
+        self._recalculate_total(order)
+
+        try:
+            await self.session.flush()
+        except StaleDataError:
+            raise OptimisticLockError("Order")
+
+        return await self._get_or_raise(order.id, establishment_id)
+
     # ── Relatórios / histórico ──────────────────────────────────────────────
 
     async def list_history(self, *, limit: int = 50, offset: int = 0) -> list[OrderResponse]:

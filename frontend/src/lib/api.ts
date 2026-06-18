@@ -273,6 +273,13 @@ export async function setItemQuantity(
   })
 }
 
+export async function setOrderDiscount(orderId: string, discount: number): Promise<Order> {
+  return request<Order>(`/orders/${orderId}/discount`, {
+    method: 'PATCH',
+    body: JSON.stringify({ discount: discount.toFixed(2) }),
+  })
+}
+
 export async function cancelOrderItem(
   orderId: string,
   itemId: string,

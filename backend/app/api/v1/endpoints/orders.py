@@ -58,6 +58,7 @@ from app.api.deps import CurrentUser, DBSession
 from app.schemas.order import (
     OrderClose,
     OrderCreate,
+    OrderDiscountUpdate,
     OrderItemAdd,
     OrderItemQuantityUpdate,
     OrderResponse,
@@ -244,6 +245,24 @@ async def update_item_quantity(
     return await _service(session, current_user).set_item_quantity(
         order_id, item_id, quantity=data.quantity
     )
+
+
+# ── PATCH /orders/{order_id}/discount — Aplicar desconto ──────────────────────
+
+
+@router.patch(
+    "/{order_id}/discount",
+    response_model=OrderResponse,
+    summary="Aplicar desconto na comanda",
+    description="Define o desconto (R$) da comanda e recalcula o total.",
+)
+async def set_discount(
+    order_id: UUID,
+    data: OrderDiscountUpdate,
+    session: DBSession,
+    current_user: CurrentUser,
+) -> OrderResponse:
+    return await _service(session, current_user).set_discount(order_id, data.discount)
 
 
 # ── DELETE /orders/{order_id}/items/{item_id} — Cancelar item ─────────────────

@@ -3,7 +3,7 @@ import {
   type Order, type OrderItem, type Table, type Category, type MenuItem,
   type Payment, type PaymentMethod,
   fetchCategories, fetchMenuItems,
-  addOrderItem, cancelOrderItem, setItemQuantity, closeOrder, updateTableStatus,
+  addOrderItem, cancelOrderItem, setItemQuantity, setOrderDiscount, closeOrder, updateTableStatus,
   fetchOrderPayments, registerPayment, finishOrder, getUser,
 } from '../lib/api'
 import { maskCurrency, parseCurrency, toCurrencyInput } from '../lib/format'
@@ -797,6 +797,104 @@ function PaymentModal({
   )
 }
 
+// ── Modal: Desconto ───────────────────────────────────────────────────────────
+
+function DiscountModal({
+  order, onClose, onUpdated,
+}: {
+  order: Order
+  onClose: () => void
+  onUpdated: (o: Order) => void
+}) {
+  const subtotal = Number(order.subtotal)
+  const [mode, setMode] = useState<'value' | 'percent'>('value')
+  const [value, setValue] = useState(Number(order.discount) > 0 ? toCurrencyInput(order.discount) : '')
+  const [percent, setPercent] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const discountValue = mode === 'value'
+    ? parseCurrency(value)
+    : Math.round(subtotal * (parseFloat(percent.replace(',', '.')) || 0)) / 100
+
+  async function apply(amount: number) {
+    setError(null)
+    if (isNaN(amount) || amount < 0) { setError('Valor inválido'); return }
+    if (amount > subtotal) { setError('O desconto não pode exceder o subtotal'); return }
+    setSaving(true)
+    try {
+      const updated = await setOrderDiscount(order.id, amount)
+      onUpdated(updated)
+      onClose()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao aplicar desconto')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <ModalOverlay onClose={onClose}>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-stone-100 text-base font-bold">Desconto</h2>
+        <button onClick={onClose} className="text-stone-600 hover:text-stone-400 transition-colors">
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <div className="flex gap-1 p-1 rounded-xl mb-4" style={{ background: '#0d0b08' }}>
+        {(['value', 'percent'] as const).map(m => (
+          <button key={m} onClick={() => setMode(m)}
+            className={['flex-1 py-2 rounded-lg text-xs font-semibold transition-all',
+              mode === m ? 'bg-amber-500/15 text-amber-400' : 'text-stone-500 hover:text-stone-300'].join(' ')}>
+            {m === 'value' ? 'Valor (R$)' : 'Percentual (%)'}
+          </button>
+        ))}
+      </div>
+
+      {error && (
+        <p className="text-red-400 text-xs bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2 mb-3">{error}</p>
+      )}
+
+      {mode === 'value' ? (
+        <Field label="Desconto (R$)">
+          <input type="text" inputMode="numeric" value={value} autoFocus
+            onChange={e => setValue(maskCurrency(e.target.value))}
+            placeholder="0,00" className={inputCls} style={{ background: '#0d0b08' }} />
+        </Field>
+      ) : (
+        <Field label="Desconto (%)">
+          <input type="number" min={0} max={100} value={percent} autoFocus
+            onChange={e => setPercent(e.target.value)}
+            placeholder="ex: 10" className={inputCls} style={{ background: '#0d0b08' }} />
+        </Field>
+      )}
+
+      <div className="flex justify-between text-xs px-1 mt-3">
+        <span className="text-stone-500">Desconto aplicado</span>
+        <span className="text-amber-400 font-bold">{brl(discountValue || 0)}</span>
+      </div>
+
+      <div className="flex gap-2 mt-4">
+        {Number(order.discount) > 0 && (
+          <button onClick={() => apply(0)} disabled={saving}
+            className="px-3 py-2.5 rounded-xl text-sm font-semibold text-red-400 border border-red-500/30
+                       hover:bg-red-500/10 disabled:opacity-40 transition-colors">
+            Remover
+          </button>
+        )}
+        <button onClick={() => apply(discountValue)} disabled={saving}
+          className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-amber-500 hover:bg-amber-400
+                     text-stone-900 disabled:opacity-40 transition-colors">
+          {saving ? 'Aplicando…' : 'Aplicar desconto'}
+        </button>
+      </div>
+    </ModalOverlay>
+  )
+}
+
 // ── Detalhe da comanda (tela cheia) ───────────────────────────────────────────
 
 export function OrderDetail({
@@ -810,6 +908,7 @@ export function OrderDetail({
 }) {
   const [showAddItem, setShowAddItem] = useState(false)
   const [showPayment, setShowPayment] = useState(false)
+  const [showDiscount, setShowDiscount] = useState(false)
   const [closing, setClosing] = useState(false)
   const [requestingBill, setRequestingBill] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -997,12 +1096,18 @@ export function OrderDetail({
                 Receber {brl(order.total)}
               </button>
             </div>
-            {/* Override do gerente: fechar sem checar pagamento */}
-            <button onClick={handleClose} disabled={closing}
-              className="w-full text-center text-[11px] text-stone-600 hover:text-stone-400
-                         disabled:opacity-40 transition-colors py-1">
-              {closing ? 'Fechando…' : 'Fechar sem pagamento (override)'}
-            </button>
+            <div className="flex items-center justify-between gap-3 pt-0.5">
+              <button onClick={() => setShowDiscount(true)}
+                className="text-[11px] font-semibold text-stone-500 hover:text-amber-400 transition-colors py-1">
+                {Number(order.discount) > 0 ? `Desconto: ${brl(order.discount)}` : '+ Desconto'}
+              </button>
+              {/* Override do gerente: fechar sem checar pagamento */}
+              <button onClick={handleClose} disabled={closing}
+                className="text-[11px] text-stone-600 hover:text-stone-400
+                           disabled:opacity-40 transition-colors py-1">
+                {closing ? 'Fechando…' : 'Fechar sem pagamento'}
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -1020,6 +1125,14 @@ export function OrderDetail({
           order={order}
           onClose={() => setShowPayment(false)}
           onFinished={id => { setShowPayment(false); onClosed(id) }}
+        />
+      )}
+
+      {showDiscount && (
+        <DiscountModal
+          order={order}
+          onClose={() => setShowDiscount(false)}
+          onUpdated={onUpdated}
         />
       )}
     </div>
