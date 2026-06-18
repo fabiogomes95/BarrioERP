@@ -100,6 +100,7 @@ from app.core.exceptions import (
     OptimisticLockError,
     TenantError,
 )
+from app.models.establishment import Establishment
 from app.models.order import Order, OrderItem, OrderItemStatus, OrderStatus
 from app.models.payment import PaymentStatus
 from app.models.table import Table, TableStatus
@@ -183,6 +184,10 @@ class OrderService(BaseService):
         order.subtotal = sum(
             item.subtotal for item in active_items
         ) or Decimal("0.00")
+        # Taxa de serviço = subtotal × percentual snapshot da comanda
+        order.service_fee = round(
+            order.subtotal * order.service_fee_percent / Decimal("100"), 2
+        )
         order.total = order.subtotal + order.service_fee - order.discount
 
     # ── Helper: busca comanda com itens e verifica tenant ─────────────────────
@@ -259,6 +264,10 @@ class OrderService(BaseService):
                     "Feche a comanda atual antes de abrir uma nova."
                 )
 
+        # Snapshot da taxa de serviço configurada no estabelecimento
+        establishment = await self.session.get(Establishment, establishment_id)
+        fee_percent = establishment.service_fee_percent if establishment else Decimal("0")
+
         # 3. Cria a comanda
         order = Order(
             establishment_id=establishment_id,
@@ -270,6 +279,7 @@ class OrderService(BaseService):
             notes=data.notes,
             subtotal=Decimal("0.00"),
             service_fee=Decimal("0.00"),
+            service_fee_percent=fee_percent,
             discount=Decimal("0.00"),
             total=Decimal("0.00"),
         )

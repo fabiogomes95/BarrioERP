@@ -63,6 +63,10 @@ class Order(Base, UUIDMixin, TimestampMixin, VersionMixin):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     subtotal: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=Decimal("0.00"))
     service_fee: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=Decimal("0.00"))
+    # Snapshot da taxa de serviço (%) no momento da abertura da comanda
+    service_fee_percent: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2), nullable=False, default=Decimal("0"), server_default="0",
+    )
     discount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=Decimal("0.00"))
     total: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=Decimal("0.00"))
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

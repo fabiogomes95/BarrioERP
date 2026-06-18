@@ -526,3 +526,35 @@ export async function fetchDailyReport(day?: string): Promise<DailyReport> {
 export async function fetchHistory(limit = 50): Promise<Order[]> {
   return request<Order[]>(`/reports/history?limit=${limit}`)
 }
+
+// ── Administração (configurações do bar) ─────────────────────────────────────────
+
+export interface BarSettings {
+  company_name: string
+  company_phone: string | null
+  establishment_name: string
+  address: string | null
+  service_fee_percent: string
+}
+
+export async function fetchSettings(): Promise<BarSettings> {
+  return request<BarSettings>('/admin/settings')
+}
+
+export async function updateSettings(data: {
+  company_name?: string
+  company_phone?: string | null
+  address?: string | null
+  service_fee_percent?: number
+}): Promise<BarSettings> {
+  return request<BarSettings>('/admin/settings', { method: 'PATCH', body: JSON.stringify(data) })
+}
+
+// Atualiza o nome do bar guardado localmente (reflete no topo após navegar)
+export function updateLocalCompanyName(name: string): void {
+  const user = getUser()
+  if (user) {
+    user.company_name = name
+    saveUser(user)
+  }
+}

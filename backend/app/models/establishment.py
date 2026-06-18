@@ -1,6 +1,7 @@
+from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import ForeignKey, Index, String, Text
+from sqlalchemy import ForeignKey, Index, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -28,6 +29,10 @@ class Establishment(Base, UUIDMixin, TimestampMixin, SoftDeleteMixin):
     state: Mapped[str | None] = mapped_column(String(2), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     timezone: Mapped[str] = mapped_column(String(50), nullable=False, default="America/Sao_Paulo")
+    # Taxa de serviço padrão (%) aplicada às comandas. 0 = sem taxa.
+    service_fee_percent: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2), nullable=False, default=Decimal("0"), server_default="0",
+    )
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False, index=True)
     settings: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON blob
 

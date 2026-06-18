@@ -8,6 +8,7 @@ import MesasPage from './pages/MesasPage'
 import PedidosPage from './pages/PedidosPage'
 import ComandaPage from './pages/ComandaPage'
 import CaixaPage from './pages/CaixaPage'
+import AdminPage from './pages/AdminPage'
 import CardapioPage from './pages/CardapioPage'
 import EquipePage from './pages/EquipePage'
 
@@ -38,6 +39,7 @@ export default function App() {
           <Route path="pedidos"  element={<PedidosPage />} />
           <Route path="comanda/:orderId" element={<ComandaPage />} />
           <Route path="caixa"    element={<CaixaPage />} />
+          <Route path="admin"    element={<AdminPage />} />
           <Route path="cardapio" element={<CardapioPage />} />
           <Route path="equipe"   element={<EquipePage />} />
         </Route>
