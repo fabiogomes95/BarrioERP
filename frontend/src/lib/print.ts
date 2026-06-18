@@ -27,7 +27,6 @@ export function printComanda(order: Order, table: Table | undefined, barName: st
       <span class="qtyname">${it.quantity}x ${esc(it.item_name)}</span>
       <span class="val">${brl(it.subtotal)}</span>
     </div>
-    ${it.notes ? `<div class="note">&nbsp;&nbsp;- ${esc(it.notes)}</div>` : ''}
   `).join('')
 
   const feeRow = Number(order.service_fee) > 0

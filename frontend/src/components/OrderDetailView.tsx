@@ -252,12 +252,21 @@ function AddItemModal({
     setAddError(null)
     setAdding(true)
     try {
-      const finalNotes = [comp, notes.trim()].filter(Boolean).join(' · ') || null
-      const updated = await addOrderItem(order.id, {
-        menu_item_id: picking.id,
-        quantity: Number(qty),
-        notes: finalNotes,
-      })
+      const hasComp = picking.complementos.length > 0
+      // Item com complemento → nome leva a opção colada ("Churrasco - Carne").
+      // A observação livre fica só na tela (não vai pra impressão).
+      const updated = hasComp
+        ? await addOrderItem(order.id, {
+            item_name: `${picking.name} - ${comp}`,
+            unit_price: Number(picking.price),
+            quantity: Number(qty),
+            notes: notes.trim() || null,
+          })
+        : await addOrderItem(order.id, {
+            menu_item_id: picking.id,
+            quantity: Number(qty),
+            notes: notes.trim() || null,
+          })
       onAdded(updated)
       setPicking(null); setQty('1'); setNotes(''); setComp('')
     } catch (err) {
