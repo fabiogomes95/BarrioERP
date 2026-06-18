@@ -181,6 +181,7 @@ class OnboardingService:
             "company_id": str(user.company_id),
             "role": user.role.value,   # "owner" (string, não o enum)
             "name": user.name,
+            "company_name": company.name,   # nome do bar (para exibir no topo)
         }
         access_token = create_access_token(subject=user.id, extra=token_extra)
 

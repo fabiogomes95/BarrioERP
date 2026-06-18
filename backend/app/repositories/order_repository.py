@@ -223,6 +223,52 @@ class OrderRepository(BaseRepository[Order]):
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def list_closed_between(
+        self,
+        establishment_id: UUID,
+        start,
+        end,
+    ) -> list[Order]:
+        """
+        Comandas FECHADAS (closed_at no intervalo [start, end)) com itens e
+        pagamentos carregados — base do relatório diário.
+        """
+        stmt = (
+            select(Order)
+            .where(
+                Order.establishment_id == establishment_id,
+                Order.closed_at.is_not(None),
+                Order.closed_at >= start,
+                Order.closed_at < end,
+            )
+            .options(selectinload(Order.items), selectinload(Order.payments))
+            .order_by(Order.closed_at.desc())
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_closed(
+        self,
+        establishment_id: UUID,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[Order]:
+        """Histórico: comandas fechadas mais recentes primeiro (com itens)."""
+        stmt = (
+            select(Order)
+            .where(
+                Order.establishment_id == establishment_id,
+                Order.closed_at.is_not(None),
+            )
+            .options(selectinload(Order.items))
+            .order_by(Order.closed_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
     async def count_open(self, establishment_id: UUID) -> int:
         """
         Conta comandas abertas para metadados de paginação.

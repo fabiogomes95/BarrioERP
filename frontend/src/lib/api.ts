@@ -22,6 +22,7 @@ export interface LocalUser {
   name: string
   role: string
   company_id: string
+  company_name: string | null
 }
 
 function saveUser(user: LocalUser): void {
@@ -40,6 +41,7 @@ function decodeToken(token: string): LocalUser {
     name: payload.name,
     role: payload.role,
     company_id: payload.company_id,
+    company_name: payload.company_name ?? null,
   }
 }
 
@@ -472,4 +474,36 @@ export async function resetUserPassword(
     method: 'PATCH',
     body: JSON.stringify({ new_password: newPassword, confirm_password: newPassword }),
   })
+}
+
+// ── Relatórios ──────────────────────────────────────────────────────────────────
+
+export interface PaymentMethodTotal {
+  method: PaymentMethod
+  total: string
+  count: number
+}
+
+export interface TopItem {
+  name: string
+  quantity: number
+  total: string
+}
+
+export interface DailyReport {
+  date: string
+  revenue_total: string
+  orders_count: number
+  average_ticket: string
+  by_payment_method: PaymentMethodTotal[]
+  top_items: TopItem[]
+}
+
+export async function fetchDailyReport(day?: string): Promise<DailyReport> {
+  const qs = day ? `?day=${day}` : ''
+  return request<DailyReport>(`/reports/daily${qs}`)
+}
+
+export async function fetchHistory(limit = 50): Promise<Order[]> {
+  return request<Order[]>(`/reports/history?limit=${limit}`)
 }

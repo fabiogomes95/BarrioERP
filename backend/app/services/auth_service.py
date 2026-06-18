@@ -31,6 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AuthenticationError
 from app.core.security import create_access_token, verify_password
+from app.models.company import Company
 from app.repositories.user_repository import UserRepository
 from app.schemas.auth import LoginRequest, TokenResponse
 
@@ -82,10 +83,13 @@ class AuthService:
 
         # extra payload: dados úteis incluídos no JWT para evitar
         # queries desnecessárias a cada requisição autenticada
+        company = await self.session.get(Company, user.company_id)
+
         token_extra = {
             "company_id": str(user.company_id),
             "role": user.role.value,       # ex: "manager", "waiter"
             "name": user.name,             # para exibir no frontend sem query extra
+            "company_name": company.name if company else None,  # nome do bar
         }
 
         access_token = create_access_token(subject=user.id, extra=token_extra)

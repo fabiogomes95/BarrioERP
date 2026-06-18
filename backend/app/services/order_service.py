@@ -87,9 +87,10 @@ Ambas as formas funcionam. A primeira (append) é mais "pythônica"
 porque expressa a intenção: "adicionar um item a esta comanda".
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm.exc import StaleDataError
 
@@ -100,9 +101,11 @@ from app.core.exceptions import (
     TenantError,
 )
 from app.models.order import Order, OrderItem, OrderItemStatus, OrderStatus
+from app.models.payment import PaymentStatus
 from app.models.table import Table, TableStatus
 from app.repositories.order_repository import OrderRepository
 from app.repositories.table_repository import TableRepository
+from app.schemas.report import DailyReport, PaymentMethodTotal, TopItem
 from app.schemas.order import (
     OrderClose,
     OrderCreate,
@@ -637,3 +640,74 @@ class OrderService(BaseService):
             raise OptimisticLockError("Order")
 
         return await self._get_or_raise(order.id, establishment_id)
+
+    # ── Relatórios / histórico ──────────────────────────────────────────────
+
+    async def list_history(self, *, limit: int = 50, offset: int = 0) -> list[OrderResponse]:
+        """Histórico de comandas fechadas (mais recentes primeiro)."""
+        establishment_id = self._require_establishment()
+        orders = await self._order_repo.list_closed(
+            establishment_id, limit=limit, offset=offset
+        )
+        return [OrderResponse.model_validate(o) for o in orders]
+
+    async def daily_report(self, day: date | None = None) -> DailyReport:
+        """
+        Resumo do dia: faturamento, nº de comandas, ticket médio,
+        faturamento por forma de pagamento e itens mais vendidos.
+
+        O "dia" é calculado no fuso America/Sao_Paulo (o bar opera em horário
+        local; closed_at é armazenado em UTC e comparado com o intervalo local).
+        """
+        establishment_id = self._require_establishment()
+        tz = ZoneInfo("America/Sao_Paulo")
+        target = day or datetime.now(tz).date()
+        start = datetime.combine(target, time.min, tzinfo=tz)
+        end = start + timedelta(days=1)
+
+        orders = await self._order_repo.list_closed_between(
+            establishment_id, start, end
+        )
+
+        revenue_total = Decimal("0.00")
+        method_totals: dict[str, Decimal] = {}
+        method_counts: dict[str, int] = {}
+        item_qty: dict[str, int] = {}
+        item_total: dict[str, Decimal] = {}
+
+        for order in orders:
+            revenue_total += order.total
+            for payment in order.payments:
+                if payment.status == PaymentStatus.CONFIRMED:
+                    key = payment.method.value
+                    method_totals[key] = method_totals.get(key, Decimal("0.00")) + payment.amount
+                    method_counts[key] = method_counts.get(key, 0) + 1
+            for it in order.items:
+                if it.status == OrderItemStatus.CANCELLED:
+                    continue
+                item_qty[it.item_name] = item_qty.get(it.item_name, 0) + it.quantity
+                item_total[it.item_name] = item_total.get(it.item_name, Decimal("0.00")) + it.subtotal
+
+        count = len(orders)
+        average = (revenue_total / count) if count else Decimal("0.00")
+
+        by_method = [
+            PaymentMethodTotal(method=m, total=method_totals[m], count=method_counts[m])
+            for m in method_totals
+        ]
+        by_method.sort(key=lambda x: x.total, reverse=True)
+
+        top_items = [
+            TopItem(name=name, quantity=item_qty[name], total=item_total[name])
+            for name in item_qty
+        ]
+        top_items.sort(key=lambda x: x.quantity, reverse=True)
+
+        return DailyReport(
+            date=target,
+            revenue_total=revenue_total,
+            orders_count=count,
+            average_ticket=round(average, 2),
+            by_payment_method=by_method,
+            top_items=top_items[:10],
+        )

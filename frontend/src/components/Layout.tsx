@@ -65,6 +65,15 @@ function IconUsers() {
   )
 }
 
+function IconCash() {
+  return (
+    <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round"
+        d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+    </svg>
+  )
+}
+
 function IconLogout() {
   return (
     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
@@ -81,6 +90,7 @@ const NAV = [
   { to: '/dashboard', label: 'Início',   Icon: IconHome },
   { to: '/mesas',     label: 'Mesas',    Icon: IconTable },
   { to: '/pedidos',   label: 'Pedidos',  Icon: IconClipboard },
+  { to: '/caixa',     label: 'Caixa',    Icon: IconCash },
   { to: '/cardapio',  label: 'Cardápio', Icon: IconBook },
   { to: '/equipe',    label: 'Equipe',   Icon: IconUsers },
 ]
@@ -131,7 +141,7 @@ function SideDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
             🍺
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-stone-100 text-sm font-semibold leading-tight truncate">BarrioERP</p>
+            <p className="text-stone-100 text-sm font-semibold leading-tight truncate">{user?.company_name ?? 'BarrioERP'}</p>
             <p className="text-stone-600 text-[11px] mt-0.5">Gestão do bar</p>
           </div>
           <button onClick={onClose}
@@ -206,6 +216,7 @@ const QUICK = [
 ]
 
 function TopBar({ onMenu }: { onMenu: () => void }) {
+  const barName = getUser()?.company_name ?? 'BarrioERP'
   return (
     <header
       className="flex items-center gap-2 sm:gap-3 px-2 sm:px-4 h-14 shrink-0 border-b border-stone-800/50"
@@ -220,10 +231,10 @@ function TopBar({ onMenu }: { onMenu: () => void }) {
         <IconMenu />
       </button>
 
-      {/* Marca (esconde o texto em telas bem pequenas para dar espaço aos atalhos) */}
-      <div className="flex items-center gap-2 shrink-0">
-        <span className="text-base">🍺</span>
-        <span className="hidden sm:inline text-stone-200 text-sm font-bold tracking-tight">BarrioERP</span>
+      {/* Nome do bar (vem do cadastro; esconde texto em telas bem pequenas) */}
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="text-base shrink-0">🍺</span>
+        <span className="hidden sm:inline text-stone-200 text-sm font-bold tracking-tight truncate">{barName}</span>
       </div>
 
       {/* Atalhos: Mesas e Pedidos */}
