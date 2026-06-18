@@ -1,4 +1,5 @@
 from app.models.audit_log import AuditLog
+from app.models.cash import CashMovement, CashMovementKind, CashSession, CashSessionStatus
 from app.models.company import Company
 from app.models.establishment import Establishment
 from app.models.menu import MenuCategory, MenuItem
@@ -28,4 +29,8 @@ __all__ = [
     "PrintJobType",
     "PrintJobStatus",
     "AuditLog",
+    "CashSession",
+    "CashSessionStatus",
+    "CashMovement",
+    "CashMovementKind",
 ]

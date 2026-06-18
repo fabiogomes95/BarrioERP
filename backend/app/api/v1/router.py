@@ -20,7 +20,7 @@ CONCEITO — tags:
 
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import admin, auth, menu, onboarding, orders, payments, reports, tables, users
+from app.api.v1.endpoints import admin, auth, cash, menu, onboarding, orders, payments, reports, tables, users
 
 api_router = APIRouter()
 
@@ -76,4 +76,10 @@ api_router.include_router(
     admin.router,
     prefix="/admin",
     tags=["admin"],
+)
+
+api_router.include_router(
+    cash.router,
+    prefix="/cash",
+    tags=["cash"],
 )
