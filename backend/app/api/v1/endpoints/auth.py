@@ -28,6 +28,7 @@ CONCEITO — APIRouter:
 from fastapi import APIRouter
 
 from app.api.deps import CurrentUser, DBSession
+from app.models.company import Company
 from app.schemas.auth import LoginRequest, TokenResponse, UserMeResponse
 from app.services.auth_service import AuthService
 
@@ -79,6 +80,7 @@ async def login(
 )
 async def me(
     current_user: CurrentUser,  # FastAPI injeta via get_current_user (decodifica JWT + query no banco)
+    session: DBSession,
 ) -> UserMeResponse:
     """
     Retorna os dados do usuário atualmente autenticado.
@@ -99,4 +101,7 @@ async def me(
         200 → {"id": "...", "email": "...", "role": "...", ...}
         401 → Token ausente, inválido ou expirado
     """
-    return UserMeResponse.model_validate(current_user)
+    company = await session.get(Company, current_user.company_id)
+    return UserMeResponse.model_validate(current_user).model_copy(
+        update={"company_name": company.name if company else None}
+    )

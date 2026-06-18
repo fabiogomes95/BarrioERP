@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { clearToken, getUser } from '../lib/api'
+import { clearToken, getUser, refreshCompanyName } from '../lib/api'
 
 // ── Ícones ────────────────────────────────────────────────────────────────────
 
@@ -215,11 +215,10 @@ const QUICK = [
   { to: '/pedidos', label: 'Pedidos', Icon: IconClipboard },
 ]
 
-function TopBar({ onMenu }: { onMenu: () => void }) {
-  const barName = getUser()?.company_name ?? 'BarrioERP'
+function TopBar({ onMenu, barName }: { onMenu: () => void; barName: string }) {
   return (
     <header
-      className="flex items-center gap-2 sm:gap-3 px-2 sm:px-4 h-14 shrink-0 border-b border-stone-800/50"
+      className="relative flex items-center gap-2 sm:gap-3 px-2 sm:px-4 h-14 shrink-0 border-b border-stone-800/50"
       style={{ background: '#161210' }}
     >
       <button
@@ -231,10 +230,11 @@ function TopBar({ onMenu }: { onMenu: () => void }) {
         <IconMenu />
       </button>
 
-      {/* Nome do bar (vem do cadastro; esconde texto em telas bem pequenas) */}
-      <div className="flex items-center gap-2 min-w-0">
+      {/* Nome do bar — centralizado de verdade (posição absoluta) */}
+      <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2
+                      pointer-events-none max-w-[50%]">
         <span className="text-base shrink-0">🍺</span>
-        <span className="hidden sm:inline text-stone-200 text-sm font-bold tracking-tight truncate">{barName}</span>
+        <span className="text-stone-100 text-sm font-bold tracking-tight truncate">{barName}</span>
       </div>
 
       {/* Atalhos: Mesas e Pedidos */}
@@ -265,11 +265,17 @@ function TopBar({ onMenu }: { onMenu: () => void }) {
 
 export default function Layout() {
   const [open, setOpen] = useState(false)
+  const [barName, setBarName] = useState(getUser()?.company_name ?? 'BarrioERP')
+
+  // Busca o nome do bar do backend (funciona mesmo com token antigo sem o nome)
+  useEffect(() => {
+    refreshCompanyName().then(name => { if (name) setBarName(name) }).catch(() => {})
+  }, [])
 
   return (
     <div className="flex flex-col h-screen" style={{ background: '#0d0b08' }}>
       {/* Barra superior com o menu hambúrguer */}
-      <TopBar onMenu={() => setOpen(true)} />
+      <TopBar onMenu={() => setOpen(true)} barName={barName} />
 
       {/* Drawer lateral recolhível */}
       <SideDrawer open={open} onClose={() => setOpen(false)} />

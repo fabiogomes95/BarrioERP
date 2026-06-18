@@ -100,6 +100,18 @@ export async function login(email: string, password: string): Promise<LoginResul
   return { user }
 }
 
+// Busca o nome do bar (e demais dados) do backend e atualiza o usuário local.
+// Usado para mostrar o nome sem exigir novo login após a mudança.
+export async function refreshCompanyName(): Promise<string | null> {
+  const me = await request<{ company_name: string | null }>('/auth/me')
+  const user = getUser()
+  if (user) {
+    user.company_name = me.company_name ?? null
+    saveUser(user)
+  }
+  return me.company_name ?? null
+}
+
 // ── Onboarding (primeiro acesso) ────────────────────────────────────────────────
 
 // Segredo do onboarding — em rede local, embutir no frontend é aceitável.

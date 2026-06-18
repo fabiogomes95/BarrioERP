@@ -78,5 +78,6 @@ class UserMeResponse(UUIDSchema, TimestampSchema):
     email: str
     role: UserRole
     company_id: UUID
+    company_name: str | None = None       # nome do bar (para exibir no topo)
     establishment_id: UUID | None = None  # None = usuário não vinculado a uma filial
     is_active: bool
