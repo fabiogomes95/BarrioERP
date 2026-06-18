@@ -144,6 +144,7 @@ export async function createTable(data: {
 
 export interface OrderItem {
   id: string
+  order_id: string
   item_name: string
   unit_price: string
   quantity: number
@@ -234,6 +235,48 @@ export async function updateTableStatus(
   return request<Table>(`/tables/${tableId}`, {
     method: 'PATCH',
     body: JSON.stringify({ status, version }),
+  })
+}
+
+// ── Pagamentos ────────────────────────────────────────────────────────────────
+
+export type PaymentMethod = 'cash' | 'credit_card' | 'debit_card' | 'pix' | 'voucher' | 'other'
+
+export interface Payment {
+  id: string
+  order_id: string
+  cashier_id: string | null
+  method: PaymentMethod
+  status: string
+  amount: string
+  amount_tendered: string | null
+  change_given: string | null
+  reference: string | null
+  created_at: string
+  updated_at: string
+}
+
+export async function fetchOrderPayments(orderId: string): Promise<Payment[]> {
+  // Rota sem trailing slash (router de payments sem prefix)
+  return request<Payment[]>(`/orders/${orderId}/payments`)
+}
+
+export async function registerPayment(data: {
+  order_id: string
+  method: PaymentMethod
+  // Dinheiro = strings para preservar precisão decimal (regra: API → strings, nunca float)
+  amount: string
+  amount_tendered?: string | null
+  reference?: string | null
+}): Promise<Payment> {
+  return request<Payment>('/payments', { method: 'POST', body: JSON.stringify(data) })
+}
+
+export async function finishOrder(orderId: string, version: number): Promise<Order> {
+  // Fecha a comanda APENAS se o total pago cobrir o total da conta
+  return request<Order>(`/orders/${orderId}/finish`, {
+    method: 'PATCH',
+    body: JSON.stringify({ version }),
   })
 }
 

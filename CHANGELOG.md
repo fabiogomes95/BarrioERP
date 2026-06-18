@@ -5,6 +5,71 @@
 
 ---
 
+## [v0.4.0] — Equipe, Pagamentos (Caixa) e Dashboard
+
+### Frontend — Página de Equipe (EquipePage.tsx)
+
+**Arquivo:** `frontend/src/pages/EquipePage.tsx` — commit `ceb01f9`
+
+CRUD completo de membros da equipe consumindo o módulo de Usuários do backend:
+
+- Listagem de membros com `fetchUsers`, avatar com iniciais e badge de cargo
+- Criar membro (nome, e-mail, senha, telefone, cargo)
+- Editar membro (PATCH parcial), ativar/desativar (soft delete)
+- Resetar senha de um membro (`resetUserPassword`)
+- RBAC no frontend: ações de gestão visíveis conforme o cargo do usuário logado
+
+---
+
+### Frontend — Pagamentos / Caixa (PaymentModal na PedidosPage)
+
+**Arquivos modificados:**
+- `frontend/src/lib/api.ts` — funções e tipos de pagamento
+- `frontend/src/pages/PedidosPage.tsx` — `PaymentModal` + integração no `OrderDetail`
+
+**Camada de API adicionada (`api.ts`):**
+
+| Função | Endpoint | Descrição |
+|--------|----------|-----------|
+| `fetchOrderPayments(orderId)` | `GET /orders/{id}/payments` | Lista pagamentos da comanda |
+| `registerPayment(data)` | `POST /payments` | Registra um pagamento |
+| `finishOrder(orderId, version)` | `PATCH /orders/{id}/finish` | Finaliza com cheque financeiro |
+
+- Tipos `Payment` e `PaymentMethod` (`cash`, `credit_card`, `debit_card`, `pix`, `voucher`, `other`)
+- **Valores enviados como string** (`amount.toFixed(2)`) — preserva precisão decimal, seguindo a regra "API → strings, nunca float" do schema do backend
+
+**Fluxo do `PaymentModal`:**
+1. Ao abrir, busca pagamentos já registrados e calcula `total`, `pago`, `falta`
+2. Seletor de forma de pagamento (5 métodos com ícone)
+3. Valor pré-preenchido com o saldo devedor; suporta **pagamento dividido** (vários pagamentos parciais)
+4. Para dinheiro: campo "Recebido" com cálculo de **troco** ao vivo
+5. Para cartão/Pix: campo de referência (NSU/txid) opcional
+6. Quando `falta = 0` → botão **"Finalizar comanda e liberar mesa"** (`finishOrder`)
+
+**Integração no `OrderDetail`:**
+- Botão primário **"Receber R$ X"** abre o modal
+- "Fechar sem pagamento (override)" mantido como ação discreta do gerente (`closeOrder`, sem cheque financeiro)
+- Correção de tipo: `OrderItem` ganhou o campo `order_id` (o backend já o retornava; o tipo estava incompleto e quebrava o `tsc`)
+
+---
+
+### Frontend — Dashboard / Início (DashboardPage.tsx)
+
+**Arquivos:**
+- `frontend/src/pages/DashboardPage.tsx` (novo)
+- `frontend/src/App.tsx` — rota `/dashboard` + index passa a redirecionar para ela
+- `frontend/src/components/Layout.tsx` — item de nav "Início" (`IconHome`) no topo
+
+Visão **ao vivo** da operação, calculada no cliente a partir de `fetchOpenOrders` + `fetchTables` (sem novos endpoints):
+
+- **Cards de métrica:** total em aberto, ticket médio, contas pedidas, ocupação (%)
+- **Comandas abertas há mais tempo:** top 5 por antiguidade, com atalho para Pedidos
+- Saudação por horário, atalhos de navegação nos cards, skeleton de carregamento
+
+> Observação: métricas de faturamento histórico (fechamento de caixa diário) dependem de endpoints de relatório no backend ainda não existentes — ficam como próximo passo.
+
+---
+
 ## [v0.3.0] — Frontend SaaS completo (Mesas, Pedidos, Cardápio)
 
 ### Frontend — Layout SaaS (Layout.tsx reescrito)
@@ -333,10 +398,11 @@ frontend/
 | Página | Rota | Status |
 |--------|------|--------|
 | Login | `/login` | ✅ Funcional |
+| Dashboard | `/dashboard` | ✅ Visão ao vivo (métricas + comandas) |
 | Mesas | `/mesas` | ✅ Completa (CRUD + modais) |
-| Pedidos | `/pedidos` | ✅ Completa (split-pane + AddItem + close) |
+| Pedidos | `/pedidos` | ✅ Completa (split-pane + AddItem + pagamento + finish) |
 | Cardápio | `/cardapio` | ✅ Completa (CRUD categorias + itens, RBAC) |
-| Equipe | `/equipe` | 🔲 Placeholder |
+| Equipe | `/equipe` | ✅ Completa (CRUD membros + reset senha, RBAC) |
 
 ---
 

@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { getToken } from './lib/api'
 import Layout from './components/Layout'
 import LoginPage from './pages/LoginPage'
+import DashboardPage from './pages/DashboardPage'
 import MesasPage from './pages/MesasPage'
 import PedidosPage from './pages/PedidosPage'
 import CardapioPage from './pages/CardapioPage'
@@ -26,8 +27,9 @@ export default function App() {
             </ProtectedRoute>
           }
         >
-          {/* Página inicial → Mesas */}
-          <Route index element={<Navigate to="/mesas" replace />} />
+          {/* Página inicial → Dashboard */}
+          <Route index element={<Navigate to="/dashboard" replace />} />
+          <Route path="dashboard" element={<DashboardPage />} />
           <Route path="mesas"    element={<MesasPage />} />
           <Route path="pedidos"  element={<PedidosPage />} />
           <Route path="cardapio" element={<CardapioPage />} />
