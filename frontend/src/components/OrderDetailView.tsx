@@ -176,6 +176,7 @@ function AddItemModal({
   const [picking, setPicking] = useState<MenuItem | null>(null)
   const [qty, setQty] = useState('1')
   const [notes, setNotes] = useState('')
+  const [comp, setComp] = useState('')   // complemento escolhido (corte/sabor)
   const [adding, setAdding] = useState(false)
   const [addError, setAddError] = useState<string | null>(null)
 
@@ -208,16 +209,22 @@ function AddItemModal({
 
   async function addFromMenu() {
     if (!picking) return
+    // Complemento obrigatório quando o item tem opções cadastradas
+    if (picking.complementos.length > 0 && !comp) {
+      setAddError('Escolha uma opção para este item')
+      return
+    }
     setAddError(null)
     setAdding(true)
     try {
+      const finalNotes = [comp, notes.trim()].filter(Boolean).join(' · ') || null
       const updated = await addOrderItem(order.id, {
         menu_item_id: picking.id,
         quantity: Number(qty),
-        notes: notes.trim() || null,
+        notes: finalNotes,
       })
       onAdded(updated)
-      setPicking(null); setQty('1'); setNotes('')
+      setPicking(null); setQty('1'); setNotes(''); setComp('')
     } catch (err) {
       setAddError(err instanceof Error ? err.message : 'Erro ao adicionar')
     } finally {
@@ -327,6 +334,24 @@ function AddItemModal({
                   </svg>
                 </button>
               </div>
+              {/* Complemento obrigatório (corte do churrasco, sabor do suco, etc.) */}
+              {picking.complementos.length > 0 && (
+                <Field label="Escolha uma opção (obrigatório)">
+                  <div className="flex flex-wrap gap-1.5">
+                    {picking.complementos.map(opt => (
+                      <button key={opt} type="button" onClick={() => setComp(opt)}
+                        className={[
+                          'px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border',
+                          comp === opt
+                            ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                            : 'text-stone-400 border-stone-800/60 hover:text-stone-200',
+                        ].join(' ')}>
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                </Field>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Quantidade">
                   <input type="number" min={1} max={99} value={qty}
@@ -398,7 +423,7 @@ function AddItemModal({
                 {visible.length === 0 ? (
                   <p className="text-stone-600 text-xs text-center py-4">Nenhum item encontrado</p>
                 ) : visible.map(item => (
-                  <button key={item.id} onClick={() => { setPicking(item); setQty('1'); setNotes('') }}
+                  <button key={item.id} onClick={() => { setPicking(item); setQty('1'); setNotes(''); setComp('') }}
                     className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl
                                text-left hover:bg-stone-800/50 transition-colors group">
                     <div className="min-w-0">

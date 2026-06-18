@@ -155,6 +155,7 @@ function ItemModal({ editing, defaultCategoryId, categories, onClose, onSaved }:
   const [description, setDescription] = useState(editing?.description ?? '')
   const [price, setPrice] = useState(editing ? toCurrencyInput(editing.price) : '')
   const [sortOrder, setSortOrder] = useState(String(editing?.sort_order ?? 0))
+  const [complementos, setComplementos] = useState((editing?.complementos ?? []).join('\n'))
   const [isAvailable, setIsAvailable] = useState(editing?.is_available ?? true)
   const [isActive, setIsActive] = useState(editing?.is_active ?? true)
   const [loading, setLoading] = useState(false)
@@ -173,6 +174,7 @@ function ItemModal({ editing, defaultCategoryId, categories, onClose, onSaved }:
         price: priceNum,
         sort_order: Number(sortOrder),
         is_available: isAvailable,
+        complementos: complementos.split('\n').map(s => s.trim()).filter(Boolean),
       }
       const saved = editing
         ? await updateMenuItem(editing.id, { ...data, is_active: isActive })
@@ -215,6 +217,15 @@ function ItemModal({ editing, defaultCategoryId, categories, onClose, onSaved }:
               className={inputCls} style={{ background: '#0d0b08' }} />
           </Field>
         </div>
+        <Field label="Complementos (opcional)">
+          <textarea value={complementos} onChange={e => setComplementos(e.target.value)}
+            rows={3} placeholder={'Uma opção por linha. Ex:\nPicanha\nMaminha\nFrango'}
+            className={inputCls + ' resize-none'} style={{ background: '#0d0b08' }} />
+          <p className="text-stone-700 text-[10px] mt-1">
+            Se preenchido, o garçom será obrigado a escolher uma opção ao lançar o item
+            (ex: corte do churrasco, sabor do suco).
+          </p>
+        </Field>
         <div className="space-y-3 pt-1">
           <Toggle label="Disponível agora" hint="Desative quando o item acabar" value={isAvailable} onChange={setIsAvailable} />
           {editing && <Toggle label="Item ativo no cardápio" hint="Inativo não aparece para clientes" value={isActive} onChange={setIsActive} />}

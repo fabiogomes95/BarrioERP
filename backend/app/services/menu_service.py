@@ -337,6 +337,7 @@ class MenuService(BaseService):
             sort_order=data.sort_order,
             is_active=True,
             is_available=True,  # novo item começa disponível por padrão
+            complementos=data.complementos,
         )
         item = await self._item_repo.add(item)
         return MenuItemResponse.model_validate(item)

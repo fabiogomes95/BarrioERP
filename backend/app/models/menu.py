@@ -2,6 +2,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import ForeignKey, Index, Integer, Numeric, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -57,6 +58,11 @@ class MenuItem(Base, UUIDMixin, TimestampMixin, SoftDeleteMixin):
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False, index=True)
     is_available: Mapped[bool] = mapped_column(default=True, nullable=False, index=True)
+    # Opções obrigatórias na hora do pedido (ex: cortes do churrasco, sabores de suco).
+    # Lista de strings. Vazia = item sem complemento.
+    complementos: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default="[]",
+    )
 
     category: Mapped[MenuCategory] = relationship(back_populates="items")
     order_items: Mapped[list["OrderItem"]] = relationship(back_populates="menu_item")  # noqa: F821

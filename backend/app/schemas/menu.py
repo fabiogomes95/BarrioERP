@@ -214,11 +214,31 @@ class MenuItemCreate(BaseSchema):
         le=9999,
         description="Posição dentro da categoria. Menor número = aparece primeiro.",
     )
+    complementos: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Opções obrigatórias na hora do pedido (ex: cortes do churrasco, "
+            "sabores de suco). Vazio = item sem complemento."
+        ),
+    )
 
     @field_validator("name")
     @classmethod
     def name_strip(cls, v: str) -> str:
         return v.strip()
+
+    @field_validator("complementos")
+    @classmethod
+    def clean_complementos(cls, v: list[str]) -> list[str]:
+        # Remove espaços e descarta vazios/duplicados preservando a ordem
+        seen: set[str] = set()
+        out: list[str] = []
+        for raw in v:
+            s = raw.strip()
+            if s and s.lower() not in seen:
+                seen.add(s.lower())
+                out.append(s)
+        return out
 
     @field_validator("price")
     @classmethod
@@ -267,6 +287,24 @@ class MenuItemUpdate(BaseSchema):
     sort_order: int | None = Field(default=None, ge=0, le=9999)
     is_active: bool | None = None
     is_available: bool | None = None
+    complementos: list[str] | None = Field(
+        default=None,
+        description="Substitui a lista de complementos. Envie [] para remover todos.",
+    )
+
+    @field_validator("complementos")
+    @classmethod
+    def clean_complementos(cls, v: list[str] | None) -> list[str] | None:
+        if v is None:
+            return None
+        seen: set[str] = set()
+        out: list[str] = []
+        for raw in v:
+            s = raw.strip()
+            if s and s.lower() not in seen:
+                seen.add(s.lower())
+                out.append(s)
+        return out
 
 
 class MenuItemResponse(UUIDSchema, TimestampSchema):
@@ -286,3 +324,4 @@ class MenuItemResponse(UUIDSchema, TimestampSchema):
     sort_order: int
     is_active: bool
     is_available: bool
+    complementos: list[str] = []

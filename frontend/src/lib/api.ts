@@ -340,6 +340,7 @@ export interface MenuItem {
   sort_order: number
   is_active: boolean
   is_available: boolean
+  complementos: string[]
 }
 
 export async function fetchCategories(): Promise<Category[]> {
@@ -378,6 +379,7 @@ export async function createMenuItem(data: {
   description?: string | null
   price: number
   sort_order?: number
+  complementos?: string[]
 }): Promise<MenuItem> {
   return request<MenuItem>('/menu/items', { method: 'POST', body: JSON.stringify(data) })
 }
@@ -392,6 +394,7 @@ export async function updateMenuItem(
     is_active?: boolean
     is_available?: boolean
     category_id?: string
+    complementos?: string[]
   },
 ): Promise<MenuItem> {
   return request<MenuItem>(`/menu/items/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
