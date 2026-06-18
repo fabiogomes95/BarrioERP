@@ -6,6 +6,7 @@ import {
   createCategory, updateCategory, deleteCategory,
   createMenuItem, updateMenuItem,
 } from '../lib/api'
+import { maskCurrency, parseCurrency, toCurrencyInput } from '../lib/format'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -152,7 +153,7 @@ function ItemModal({ editing, defaultCategoryId, categories, onClose, onSaved }:
   const [categoryId, setCategoryId] = useState(editing?.category_id ?? defaultCategoryId)
   const [name, setName] = useState(editing?.name ?? '')
   const [description, setDescription] = useState(editing?.description ?? '')
-  const [price, setPrice] = useState(editing ? String(Number(editing.price).toFixed(2)).replace('.', ',') : '')
+  const [price, setPrice] = useState(editing ? toCurrencyInput(editing.price) : '')
   const [sortOrder, setSortOrder] = useState(String(editing?.sort_order ?? 0))
   const [isAvailable, setIsAvailable] = useState(editing?.is_available ?? true)
   const [isActive, setIsActive] = useState(editing?.is_active ?? true)
@@ -161,7 +162,7 @@ function ItemModal({ editing, defaultCategoryId, categories, onClose, onSaved }:
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault(); setError(null)
-    const priceNum = parseFloat(price.replace(',', '.'))
+    const priceNum = parseCurrency(price)
     if (isNaN(priceNum) || priceNum <= 0) { setError('Preço inválido'); return }
     setLoading(true)
     try {
@@ -204,7 +205,8 @@ function ItemModal({ editing, defaultCategoryId, categories, onClose, onSaved }:
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Preço (R$)">
-            <input type="text" required value={price} onChange={e => setPrice(e.target.value)}
+            <input type="text" inputMode="numeric" required value={price}
+              onChange={e => setPrice(maskCurrency(e.target.value))}
               placeholder="0,00" className={inputCls} style={{ background: '#0d0b08' }} />
           </Field>
           <Field label="Posição">

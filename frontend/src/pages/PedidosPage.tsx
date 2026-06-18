@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   type Order, type OrderItem, type Table, type Category, type MenuItem,
   type Payment, type PaymentMethod,
@@ -6,6 +7,7 @@ import {
   createOrder, addOrderItem, cancelOrderItem, closeOrder, updateTableStatus,
   fetchOrderPayments, registerPayment, finishOrder,
 } from '../lib/api'
+import { maskCurrency, parseCurrency, toCurrencyInput } from '../lib/format'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -230,7 +232,7 @@ function AddItemModal({
   const [loadingMenu, setLoadingMenu] = useState(true)
   const [selectedCat, setSelectedCat] = useState<string>('all')
   const [search, setSearch] = useState('')
-  const [tab, setTab] = useState<'menu' | 'manual'>('menu')
+  const [tab, setTab] = useState<'menu' | 'half' | 'manual'>('menu')
 
   // Estado do item selecionado do cardápio
   const [picking, setPicking] = useState<MenuItem | null>(null)
@@ -244,6 +246,13 @@ function AddItemModal({
   const [manPrice, setManPrice] = useState('')
   const [manQty, setManQty] = useState('1')
   const [manNotes, setManNotes] = useState('')
+
+  // Estado da pizza meia a meia
+  const [halfCat, setHalfCat] = useState<string>('all')
+  const [half1, setHalf1] = useState('')
+  const [half2, setHalf2] = useState('')
+  const [halfQty, setHalfQty] = useState('1')
+  const [halfNotes, setHalfNotes] = useState('')
 
   useEffect(() => {
     Promise.all([fetchCategories(), fetchMenuItems()])
@@ -286,7 +295,7 @@ function AddItemModal({
     try {
       const updated = await addOrderItem(order.id, {
         item_name: manName.trim(),
-        unit_price: parseFloat(manPrice.replace(',', '.')),
+        unit_price: parseCurrency(manPrice),
         quantity: Number(manQty),
         notes: manNotes.trim() || null,
       })
@@ -298,6 +307,37 @@ function AddItemModal({
       setAdding(false)
     }
   }
+
+  // Pizza meia a meia: nome composto + preço da metade mais cara
+  const halfItem1 = items.find(i => i.id === half1)
+  const halfItem2 = items.find(i => i.id === half2)
+  const halfPrice =
+    halfItem1 && halfItem2
+      ? Math.max(Number(halfItem1.price), Number(halfItem2.price))
+      : 0
+
+  async function addHalf(e: React.FormEvent) {
+    e.preventDefault()
+    if (!halfItem1 || !halfItem2) { setAddError('Escolha os dois sabores'); return }
+    setAddError(null)
+    setAdding(true)
+    try {
+      const updated = await addOrderItem(order.id, {
+        item_name: `½ ${halfItem1.name} / ½ ${halfItem2.name}`,
+        unit_price: halfPrice,
+        quantity: Number(halfQty),
+        notes: halfNotes.trim() || null,
+      })
+      onAdded(updated)
+      setHalf1(''); setHalf2(''); setHalfQty('1'); setHalfNotes('')
+    } catch (err) {
+      setAddError(err instanceof Error ? err.message : 'Erro ao adicionar')
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  const halfOptions = items.filter(i => halfCat === 'all' || i.category_id === halfCat)
 
   return (
     <ModalOverlay onClose={onClose}>
@@ -312,13 +352,13 @@ function AddItemModal({
 
       {/* Abas */}
       <div className="flex gap-1 p-1 rounded-xl mb-4" style={{ background: '#0d0b08' }}>
-        {(['menu', 'manual'] as const).map(t => (
+        {(['menu', 'half', 'manual'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={[
               'flex-1 py-2 rounded-lg text-xs font-semibold transition-all',
               tab === t ? 'bg-amber-500/15 text-amber-400' : 'text-stone-500 hover:text-stone-300',
             ].join(' ')}>
-            {t === 'menu' ? 'Do cardápio' : 'Manual'}
+            {t === 'menu' ? 'Do cardápio' : t === 'half' ? '½ Meia' : 'Manual'}
           </button>
         ))}
       </div>
@@ -433,6 +473,72 @@ function AddItemModal({
             </>
           )}
         </div>
+      ) : tab === 'half' ? (
+        /* Tab meia a meia */
+        loadingMenu ? (
+          <div className="text-center py-8 text-stone-600 text-sm">Carregando cardápio…</div>
+        ) : items.length === 0 ? (
+          <div className="text-center py-8">
+            <p className="text-stone-500 text-sm">Cardápio vazio</p>
+            <p className="text-stone-700 text-xs mt-1">Cadastre as pizzas na aba Cardápio</p>
+          </div>
+        ) : (
+          <form onSubmit={addHalf} className="space-y-3">
+            {categories.length > 0 && (
+              <Field label="Categoria">
+                <select value={halfCat} onChange={e => { setHalfCat(e.target.value); setHalf1(''); setHalf2('') }}
+                  className={inputCls + ' appearance-none'} style={{ background: '#0d0b08' }}>
+                  <option value="all">Todas as categorias</option>
+                  {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </Field>
+            )}
+            <Field label="Primeira metade (½)">
+              <select value={half1} onChange={e => setHalf1(e.target.value)}
+                className={inputCls + ' appearance-none'} style={{ background: '#0d0b08' }}>
+                <option value="">Escolha o sabor…</option>
+                {halfOptions.map(i => (
+                  <option key={i.id} value={i.id}>{i.name} — {brl(i.price)}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Segunda metade (½)">
+              <select value={half2} onChange={e => setHalf2(e.target.value)}
+                className={inputCls + ' appearance-none'} style={{ background: '#0d0b08' }}>
+                <option value="">Escolha o sabor…</option>
+                {halfOptions.map(i => (
+                  <option key={i.id} value={i.id}>{i.name} — {brl(i.price)}</option>
+                ))}
+              </select>
+            </Field>
+
+            {/* Preço calculado = metade mais cara */}
+            {halfItem1 && halfItem2 && (
+              <div className="flex items-center justify-between rounded-xl px-3.5 py-2.5"
+                   style={{ background: '#0d0b08' }}>
+                <span className="text-stone-500 text-xs">Preço (metade mais cara)</span>
+                <span className="text-amber-400 text-sm font-bold">{brl(halfPrice)}</span>
+              </div>
+            )}
+
+            <Field label="Quantidade">
+              <input type="number" min={1} max={99} value={halfQty}
+                onChange={e => setHalfQty(e.target.value)}
+                className={inputCls} style={{ background: '#0d0b08' }} />
+            </Field>
+            <Field label="Observações (opcional)">
+              <input type="text" value={halfNotes} onChange={e => setHalfNotes(e.target.value)}
+                placeholder="ex: borda recheada, sem cebola"
+                className={inputCls} style={{ background: '#0d0b08' }} />
+            </Field>
+            <button type="submit" disabled={adding || !halfItem1 || !halfItem2}
+              className="w-full py-2.5 rounded-xl text-sm font-semibold
+                         bg-amber-500 hover:bg-amber-400 text-stone-900
+                         disabled:opacity-40 transition-colors mt-1">
+              {adding ? 'Adicionando…' : 'Adicionar meia a meia'}
+            </button>
+          </form>
+        )
       ) : (
         /* Tab manual */
         <form onSubmit={addManual} className="space-y-3">
@@ -442,7 +548,8 @@ function AddItemModal({
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Preço (R$)">
-              <input type="text" required value={manPrice} onChange={e => setManPrice(e.target.value)}
+              <input type="text" inputMode="numeric" required value={manPrice}
+                onChange={e => setManPrice(maskCurrency(e.target.value))}
                 placeholder="0,00" className={inputCls} style={{ background: '#0d0b08' }} />
             </Field>
             <Field label="Quantidade">
@@ -610,8 +717,8 @@ function PaymentModal({
   const fullyPaid = remaining <= 0
 
   // Troco previsto para dinheiro
-  const tenderedNum = parseFloat(tendered.replace(',', '.'))
-  const amountNum = parseFloat(amount.replace(',', '.'))
+  const tenderedNum = parseCurrency(tendered)
+  const amountNum = parseCurrency(amount)
   const change =
     method === 'cash' && !isNaN(tenderedNum) && !isNaN(amountNum) && tenderedNum > amountNum
       ? tenderedNum - amountNum
@@ -629,13 +736,13 @@ function PaymentModal({
 
   // Ao mudar o saldo devedor, pré-preenche o valor com o restante
   useEffect(() => {
-    if (!loading) setAmount(remaining > 0 ? remaining.toFixed(2) : '')
+    if (!loading) setAmount(remaining > 0 ? toCurrencyInput(remaining) : '')
   }, [remaining, loading])
 
   async function handleAddPayment(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
-    const value = parseFloat(amount.replace(',', '.'))
+    const value = parseCurrency(amount)
     if (isNaN(value) || value <= 0) { setError('Informe um valor válido'); return }
 
     setSaving(true)
@@ -745,12 +852,14 @@ function PaymentModal({
 
           <div className={method === 'cash' ? 'grid grid-cols-2 gap-3' : ''}>
             <Field label="Valor (R$)">
-              <input type="text" value={amount} onChange={e => setAmount(e.target.value)}
+              <input type="text" inputMode="numeric" value={amount}
+                onChange={e => setAmount(maskCurrency(e.target.value))}
                 placeholder="0,00" className={inputCls} style={{ background: '#0d0b08' }} />
             </Field>
             {method === 'cash' && (
               <Field label="Recebido (R$)">
-                <input type="text" value={tendered} onChange={e => setTendered(e.target.value)}
+                <input type="text" inputMode="numeric" value={tendered}
+                  onChange={e => setTendered(maskCurrency(e.target.value))}
                   placeholder="0,00" className={inputCls} style={{ background: '#0d0b08' }} />
               </Field>
             )}
@@ -1031,6 +1140,8 @@ export default function PedidosPage() {
   const [search, setSearch] = useState('')
   const [showNewOrder, setShowNewOrder] = useState(false)
   const [mobileDetail, setMobileDetail] = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tableParam = searchParams.get('table')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -1052,6 +1163,17 @@ export default function PedidosPage() {
   }, [selected])
 
   useEffect(() => { load() }, []) // eslint-disable-line
+
+  // Veio de Mesas com ?table=<id> → abre direto a comanda dessa mesa
+  useEffect(() => {
+    if (!tableParam || orders.length === 0) return
+    const match = orders.find(o => o.table_id === tableParam)
+    if (match) {
+      setSelected(match)
+      setMobileDetail(true)
+    }
+    setSearchParams({}, { replace: true })
+  }, [tableParam, orders, setSearchParams])
 
   function handleSelect(order: Order) {
     setSelected(order)

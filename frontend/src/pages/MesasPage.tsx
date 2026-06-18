@@ -261,48 +261,6 @@ function OpenOrderModal({ table, onClose, onOpened }: OpenOrderModalProps) {
   )
 }
 
-// ── Modal: Mesa ocupada ───────────────────────────────────────────────────────
-
-interface OccupiedModalProps {
-  table: Table
-  onClose: () => void
-  onViewOrder: () => void
-}
-
-function OccupiedModal({ table, onClose, onViewOrder }: OccupiedModalProps) {
-  const cfg = STATUS[table.status]
-  return (
-    <ModalOverlay onClose={onClose}>
-      <div className="flex items-center gap-3 mb-5">
-        <div className="w-10 h-10 rounded-xl bg-stone-800 border border-stone-700/60
-                        flex items-center justify-center">
-          <span className="text-lg font-black text-stone-200">{table.number}</span>
-        </div>
-        <div>
-          <h2 className="text-stone-100 text-base font-bold leading-tight">{table.label}</h2>
-          <span className={['text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border', cfg.color, cfg.bg, cfg.border].join(' ')}>
-            {cfg.label}
-          </span>
-        </div>
-      </div>
-      <p className="text-stone-400 text-sm mb-5">Esta mesa tem uma comanda aberta.</p>
-      <div className="flex gap-2">
-        <button onClick={onClose}
-          className="flex-1 py-2.5 rounded-xl text-sm font-semibold
-                     text-stone-400 border border-stone-700/60 hover:bg-stone-800/50
-                     transition-colors">
-          Fechar
-        </button>
-        <button onClick={onViewOrder}
-          className="flex-1 py-2.5 rounded-xl text-sm font-semibold
-                     bg-amber-500 hover:bg-amber-400 text-stone-900 transition-colors">
-          Ver comanda →
-        </button>
-      </div>
-    </ModalOverlay>
-  )
-}
-
 // ── Overlay genérico ──────────────────────────────────────────────────────────
 
 function ModalOverlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
@@ -349,7 +307,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 type Modal =
   | { type: 'new-table' }
   | { type: 'open-order'; table: Table }
-  | { type: 'occupied'; table: Table }
 
 export default function MesasPage() {
   const navigate = useNavigate()
@@ -378,7 +335,8 @@ export default function MesasPage() {
     if (table.status === 'free' || table.status === 'reserved') {
       setModal({ type: 'open-order', table })
     } else {
-      setModal({ type: 'occupied', table })
+      // Ocupada / conta → abre direto a comanda dessa mesa em Pedidos
+      navigate(`/pedidos?table=${table.id}`)
     }
   }
 
@@ -553,17 +511,6 @@ export default function MesasPage() {
           table={modal.table}
           onClose={() => setModal(null)}
           onOpened={() => { setModal(null); load() }}
-        />
-      )}
-
-      {modal?.type === 'occupied' && (
-        <OccupiedModal
-          table={modal.table}
-          onClose={() => setModal(null)}
-          onViewOrder={() => {
-            setModal(null)
-            navigate('/pedidos')
-          }}
         />
       )}
     </div>
