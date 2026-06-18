@@ -98,6 +98,43 @@ export async function login(email: string, password: string): Promise<LoginResul
   return { user }
 }
 
+// ── Onboarding (primeiro acesso) ────────────────────────────────────────────────
+
+// Segredo do onboarding — em rede local, embutir no frontend é aceitável.
+// Configurável via frontend/.env (VITE_ONBOARDING_SECRET); fallback = valor de dev.
+const ONBOARDING_SECRET =
+  import.meta.env.VITE_ONBOARDING_SECRET ?? 'dev-onboarding-secret-altere-em-producao'
+
+export async function register(data: {
+  bar_name: string
+  owner_name: string
+  email: string
+  password: string
+  phone?: string | null
+  address?: string | null
+}): Promise<LoginResult> {
+  const res = await fetch(`${BASE}/onboarding/register`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Onboarding-Secret': ONBOARDING_SECRET,
+    },
+    body: JSON.stringify(data),
+  })
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    const msg = body.detail ?? body.message ?? `Erro ${res.status}`
+    throw new Error(Array.isArray(msg) ? msg.map((e: { msg: string }) => e.msg).join(', ') : msg)
+  }
+
+  const { access_token } = await res.json()
+  const user = decodeToken(access_token)
+  saveToken(access_token)
+  saveUser(user)
+  return { user }
+}
+
 // ── Mesas ─────────────────────────────────────────────────────────────────────
 
 export type TableStatus = 'free' | 'occupied' | 'bill_requested' | 'reserved' | 'blocked'

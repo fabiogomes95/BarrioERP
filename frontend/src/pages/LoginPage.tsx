@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { login } from '../lib/api'
 
 export default function LoginPage() {
@@ -129,9 +129,12 @@ export default function LoginPage() {
           </form>
         </div>
 
-        {/* Footer */}
-        <p className="text-center text-stone-700 text-[11px] mt-5">
-          BarrioERP · gestão simplificada
+        {/* Criar conta */}
+        <p className="text-center text-stone-600 text-xs mt-5">
+          Ainda não tem um bar cadastrado?{' '}
+          <Link to="/register" className="text-amber-500/80 hover:text-amber-400 font-semibold transition-colors">
+            Criar agora
+          </Link>
         </p>
       </div>
     </div>
