@@ -6,6 +6,7 @@ import RegisterPage from './pages/RegisterPage'
 import DashboardPage from './pages/DashboardPage'
 import MesasPage from './pages/MesasPage'
 import PedidosPage from './pages/PedidosPage'
+import ComandaPage from './pages/ComandaPage'
 import CardapioPage from './pages/CardapioPage'
 import EquipePage from './pages/EquipePage'
 
@@ -34,6 +35,7 @@ export default function App() {
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="mesas"    element={<MesasPage />} />
           <Route path="pedidos"  element={<PedidosPage />} />
+          <Route path="comanda/:orderId" element={<ComandaPage />} />
           <Route path="cardapio" element={<CardapioPage />} />
           <Route path="equipe"   element={<EquipePage />} />
         </Route>

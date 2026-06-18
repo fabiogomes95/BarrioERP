@@ -202,7 +202,10 @@ class OrderCreate(BaseSchema):
         - version → começa em 1
     """
 
-    table_id: UUID = Field(description="Mesa que será atendida.")
+    table_id: UUID | None = Field(
+        default=None,
+        description="Mesa que será atendida. Opcional — comanda de balcão/avulsa não tem mesa.",
+    )
     guest_count: int = Field(
         default=1,
         ge=1,

@@ -217,7 +217,7 @@ export async function fetchOpenOrders(tableId?: string): Promise<Order[]> {
 }
 
 export async function createOrder(data: {
-  table_id: string
+  table_id?: string | null
   guest_count?: number
   customer_name?: string | null
   notes?: string | null
@@ -226,6 +226,10 @@ export async function createOrder(data: {
     method: 'POST',
     body: JSON.stringify(data),
   })
+}
+
+export async function fetchOrder(orderId: string): Promise<Order> {
+  return request<Order>(`/orders/${orderId}`)
 }
 
 export async function addOrderItem(

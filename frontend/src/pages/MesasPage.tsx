@@ -6,6 +6,7 @@ import {
   fetchTables,
   createTable,
   createOrder,
+  fetchOpenOrders,
 } from '../lib/api'
 
 // ── Config de status ──────────────────────────────────────────────────────────
@@ -184,7 +185,7 @@ function NewTableModal({ onClose, onCreated }: NewTableModalProps) {
 interface OpenOrderModalProps {
   table: Table
   onClose: () => void
-  onOpened: () => void
+  onOpened: (orderId: string) => void
 }
 
 function OpenOrderModal({ table, onClose, onOpened }: OpenOrderModalProps) {
@@ -198,12 +199,12 @@ function OpenOrderModal({ table, onClose, onOpened }: OpenOrderModalProps) {
     setError(null)
     setLoading(true)
     try {
-      await createOrder({
+      const order = await createOrder({
         table_id: table.id,
         guest_count: Number(guestCount),
         customer_name: customerName.trim() || null,
       })
-      onOpened()
+      onOpened(order.id)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao abrir comanda')
     } finally {
@@ -331,12 +332,22 @@ export default function MesasPage() {
 
   useEffect(() => { load() }, [load])
 
-  function handleTableClick(table: Table) {
+  async function handleTableClick(table: Table) {
     if (table.status === 'free' || table.status === 'reserved') {
       setModal({ type: 'open-order', table })
-    } else {
-      // Ocupada / conta → abre direto a comanda dessa mesa em Pedidos
-      navigate(`/pedidos?table=${table.id}`)
+      return
+    }
+    // Ocupada / conta → abre direto a comanda dessa mesa em tela cheia
+    try {
+      const open = await fetchOpenOrders(table.id)
+      if (open.length > 0) {
+        navigate(`/comanda/${open[0].id}`)
+      } else {
+        // Sem comanda aberta (estado inconsistente) → permite abrir uma nova
+        setModal({ type: 'open-order', table })
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao abrir a comanda da mesa')
     }
   }
 
@@ -510,7 +521,7 @@ export default function MesasPage() {
         <OpenOrderModal
           table={modal.table}
           onClose={() => setModal(null)}
-          onOpened={() => { setModal(null); load() }}
+          onOpened={orderId => { setModal(null); navigate(`/comanda/${orderId}`) }}
         />
       )}
     </div>

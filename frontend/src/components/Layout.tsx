@@ -199,24 +199,53 @@ function SideDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
 
 // ── Top bar (hambúrguer) ────────────────────────────────────────────────────────
 
+// Atalhos rápidos sempre visíveis no topo (as telas mais usadas no bar)
+const QUICK = [
+  { to: '/mesas',   label: 'Mesas',   Icon: IconTable },
+  { to: '/pedidos', label: 'Pedidos', Icon: IconClipboard },
+]
+
 function TopBar({ onMenu }: { onMenu: () => void }) {
   return (
     <header
-      className="flex items-center gap-3 px-3 sm:px-4 h-14 shrink-0 border-b border-stone-800/50"
+      className="flex items-center gap-2 sm:gap-3 px-2 sm:px-4 h-14 shrink-0 border-b border-stone-800/50"
       style={{ background: '#161210' }}
     >
       <button
         onClick={onMenu}
         className="flex items-center justify-center w-9 h-9 rounded-xl text-stone-300
-                   hover:text-amber-400 hover:bg-stone-800/60 active:scale-95 transition-all"
+                   hover:text-amber-400 hover:bg-stone-800/60 active:scale-95 transition-all shrink-0"
         title="Menu"
       >
         <IconMenu />
       </button>
-      <div className="flex items-center gap-2.5">
+
+      {/* Marca (esconde o texto em telas bem pequenas para dar espaço aos atalhos) */}
+      <div className="flex items-center gap-2 shrink-0">
         <span className="text-base">🍺</span>
-        <span className="text-stone-200 text-sm font-bold tracking-tight">BarrioERP</span>
+        <span className="hidden sm:inline text-stone-200 text-sm font-bold tracking-tight">BarrioERP</span>
       </div>
+
+      {/* Atalhos: Mesas e Pedidos */}
+      <nav className="ml-auto flex items-center gap-1.5">
+        {QUICK.map(({ to, label, Icon }) => (
+          <NavLink
+            key={to}
+            to={to}
+            className={({ isActive }) =>
+              [
+                'flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl text-sm font-semibold transition-all',
+                isActive
+                  ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                  : 'text-stone-400 border border-stone-800/60 hover:text-stone-200 hover:border-stone-700/60',
+              ].join(' ')
+            }
+          >
+            <Icon />
+            {label}
+          </NavLink>
+        ))}
+      </nav>
     </header>
   )
 }

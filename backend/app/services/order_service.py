@@ -233,25 +233,28 @@ class OrderService(BaseService):
         """
         establishment_id = self._require_establishment()
 
-        # 1. Busca e valida a mesa
-        table = await self._table_repo.get_by_establishment(
-            data.table_id, establishment_id
-        )
-        if table is None:
-            raise NotFoundError("Table", data.table_id)
-
-        if not table.is_active:
-            raise BusinessRuleError(
-                f"A mesa '{table.label}' está desativada e não pode receber comandas."
+        # Comanda de balcão/avulsa: sem mesa. Pula toda a validação de mesa.
+        table = None
+        if data.table_id is not None:
+            # 1. Busca e valida a mesa
+            table = await self._table_repo.get_by_establishment(
+                data.table_id, establishment_id
             )
+            if table is None:
+                raise NotFoundError("Table", data.table_id)
 
-        # 2. Verifica se já tem comanda aberta nessa mesa
-        existing = await self._order_repo.get_open_by_table(data.table_id)
-        if existing is not None:
-            raise BusinessRuleError(
-                f"A mesa '{table.label}' já possui uma comanda aberta. "
-                "Feche a comanda atual antes de abrir uma nova."
-            )
+            if not table.is_active:
+                raise BusinessRuleError(
+                    f"A mesa '{table.label}' está desativada e não pode receber comandas."
+                )
+
+            # 2. Verifica se já tem comanda aberta nessa mesa
+            existing = await self._order_repo.get_open_by_table(data.table_id)
+            if existing is not None:
+                raise BusinessRuleError(
+                    f"A mesa '{table.label}' já possui uma comanda aberta. "
+                    "Feche a comanda atual antes de abrir uma nova."
+                )
 
         # 3. Cria a comanda
         order = Order(
@@ -269,8 +272,9 @@ class OrderService(BaseService):
         )
         order = await self._order_repo.add(order)
 
-        # 4. Atualiza a mesa para OCCUPIED — mesma transação
-        table.status = TableStatus.OCCUPIED
+        # 4. Atualiza a mesa para OCCUPIED — mesma transação (só se houver mesa)
+        if table is not None:
+            table.status = TableStatus.OCCUPIED
         await self.session.flush()
 
         # 5. Retorna a comanda recém-criada (com items — vazia por enquanto)
