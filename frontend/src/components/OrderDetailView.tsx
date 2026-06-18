@@ -3,7 +3,7 @@ import {
   type Order, type OrderItem, type Table, type Category, type MenuItem,
   type Payment, type PaymentMethod,
   fetchCategories, fetchMenuItems,
-  addOrderItem, cancelOrderItem, closeOrder, updateTableStatus,
+  addOrderItem, cancelOrderItem, setItemQuantity, closeOrder, updateTableStatus,
   fetchOrderPayments, registerPayment, finishOrder,
 } from '../lib/api'
 import { maskCurrency, parseCurrency, toCurrencyInput } from '../lib/format'
@@ -77,8 +77,22 @@ function OrderItemRow({
   const [cancelling, setCancelling] = useState(false)
   const [reason, setReason] = useState('')
   const [loading, setLoading] = useState(false)
+  const [qtyLoading, setQtyLoading] = useState(false)
 
   const isCancelled = item.status === 'cancelled'
+  const editable = canCancel && !isCancelled && item.status !== 'served'
+
+  async function changeQty(delta: number) {
+    const next = item.quantity + delta
+    if (next < 1 || qtyLoading) return
+    setQtyLoading(true)
+    try {
+      const updated = await setItemQuantity(item.order_id, item.id, next)
+      onCancelled(updated)
+    } finally {
+      setQtyLoading(false)
+    }
+  }
 
   async function confirmCancel() {
     setLoading(true)
@@ -96,8 +110,28 @@ function OrderItemRow({
     <div className={['px-4 py-3 border-b border-stone-800/30 transition-opacity', isCancelled ? 'opacity-40' : ''].join(' ')}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
-          <div className="flex items-baseline gap-2">
-            <span className="text-stone-500 text-xs font-bold">{item.quantity}×</span>
+          <div className="flex items-center gap-2">
+            {editable ? (
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button onClick={() => changeQty(-1)} disabled={qtyLoading || item.quantity <= 1}
+                  className="w-6 h-6 flex items-center justify-center rounded-lg border border-stone-700/60
+                             text-stone-300 hover:bg-stone-800/60 disabled:opacity-30 transition-colors">
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                    <path strokeLinecap="round" d="M5 12h14" />
+                  </svg>
+                </button>
+                <span className="text-stone-200 text-sm font-bold w-5 text-center tabular-nums">{item.quantity}</span>
+                <button onClick={() => changeQty(1)} disabled={qtyLoading || item.quantity >= 99}
+                  className="w-6 h-6 flex items-center justify-center rounded-lg border border-stone-700/60
+                             text-stone-300 hover:bg-stone-800/60 disabled:opacity-30 transition-colors">
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                    <path strokeLinecap="round" d="M12 5v14M5 12h14" />
+                  </svg>
+                </button>
+              </div>
+            ) : (
+              <span className="text-stone-500 text-xs font-bold">{item.quantity}×</span>
+            )}
             <span className={['text-stone-200 text-sm leading-tight', isCancelled ? 'line-through' : ''].join(' ')}>
               {item.item_name}
             </span>

@@ -59,6 +59,7 @@ from app.schemas.order import (
     OrderClose,
     OrderCreate,
     OrderItemAdd,
+    OrderItemQuantityUpdate,
     OrderResponse,
 )
 from app.services.order_service import OrderService
@@ -218,6 +219,31 @@ async def add_item(
     O campo `total` é recalculado automaticamente pelo servidor.
     """
     return await _service(session, current_user).add_item(order_id, data)
+
+
+# ── PATCH /orders/{order_id}/items/{item_id} — Alterar quantidade ─────────────
+
+
+@router.patch(
+    "/{order_id}/items/{item_id}",
+    response_model=OrderResponse,
+    summary="Alterar quantidade do item",
+    description=(
+        "Altera a quantidade de um item já lançado e recalcula o total. "
+        "Útil quando o cliente pede outra unidade do mesmo item."
+    ),
+)
+async def update_item_quantity(
+    order_id: UUID,
+    item_id: UUID,
+    data: OrderItemQuantityUpdate,
+    session: DBSession,
+    current_user: CurrentUser,
+) -> OrderResponse:
+    """Atualiza a quantidade de um item da comanda."""
+    return await _service(session, current_user).set_item_quantity(
+        order_id, item_id, quantity=data.quantity
+    )
 
 
 # ── DELETE /orders/{order_id}/items/{item_id} — Cancelar item ─────────────────

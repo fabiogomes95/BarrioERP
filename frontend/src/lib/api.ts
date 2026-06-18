@@ -248,6 +248,17 @@ export async function addOrderItem(
   })
 }
 
+export async function setItemQuantity(
+  orderId: string,
+  itemId: string,
+  quantity: number,
+): Promise<Order> {
+  return request<Order>(`/orders/${orderId}/items/${itemId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ quantity }),
+  })
+}
+
 export async function cancelOrderItem(
   orderId: string,
   itemId: string,

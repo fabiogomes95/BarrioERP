@@ -162,6 +162,25 @@ class OrderItemAdd(BaseSchema):
         return self
 
 
+class OrderItemQuantityUpdate(BaseSchema):
+    """
+    Dados para alterar a quantidade de um item já lançado.
+
+    Usado em: PATCH /api/v1/orders/{order_id}/items/{item_id}
+
+    Caso comum no bar: o cliente pede outra unidade do mesmo item.
+    Em vez de criar uma nova linha, ajusta-se a quantidade existente.
+    Para zerar, use o cancelamento do item (DELETE).
+    """
+
+    quantity: int = Field(
+        ...,
+        ge=1,
+        le=99,
+        description="Nova quantidade do item (1 a 99).",
+    )
+
+
 class OrderItemResponse(UUIDSchema, TimestampSchema):
     """
     Representação completa de um item da comanda.

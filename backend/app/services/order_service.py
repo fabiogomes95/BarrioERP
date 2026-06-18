@@ -587,3 +587,53 @@ class OrderService(BaseService):
             raise OptimisticLockError("Order")
 
         return await self._get_or_raise(order.id, establishment_id)
+
+    async def set_item_quantity(
+        self,
+        order_id: UUID,
+        item_id: UUID,
+        *,
+        quantity: int,
+    ) -> OrderResponse:
+        """
+        Altera a quantidade de um item da comanda e recalcula o total.
+
+        Útil para o caso comum no bar: o cliente pede outra cerveja igual.
+        Em vez de criar uma nova linha, incrementamos a quantidade do item.
+
+        REGRAS:
+            - Comanda deve estar OPEN ou BILL_REQUESTED
+            - Item deve existir e pertencer à comanda
+            - Item não pode estar CANCELLED nem SERVED
+            - quantity >= 1 (para zerar, use o cancelamento)
+        """
+        establishment_id = self._require_establishment()
+        order = await self._get_or_raise(order_id, establishment_id)
+
+        if order.status not in (OrderStatus.OPEN, OrderStatus.BILL_REQUESTED):
+            raise BusinessRuleError(
+                f"Não é possível alterar itens de uma comanda com status "
+                f"'{order.status.value}'."
+            )
+
+        item = await self._order_repo.get_item(item_id, order_id)
+        if item is None:
+            raise NotFoundError("OrderItem", item_id)
+
+        if item.status == OrderItemStatus.CANCELLED:
+            raise BusinessRuleError(f"O item '{item.item_name}' está cancelado.")
+        if item.status == OrderItemStatus.SERVED:
+            raise BusinessRuleError(
+                f"O item '{item.item_name}' já foi servido e não pode ser alterado."
+            )
+
+        item.quantity = quantity
+        item.subtotal = item.unit_price * quantity
+        self._recalculate_total(order)
+
+        try:
+            await self.session.flush()
+        except StaleDataError:
+            raise OptimisticLockError("Order")
+
+        return await self._get_or_raise(order.id, establishment_id)
