@@ -56,12 +56,14 @@ from fastapi import APIRouter, Query
 
 from app.api.deps import CurrentUser, DBSession
 from app.schemas.order import (
+    CustomerNameUpdate,
     OrderClose,
     OrderCreate,
     OrderDiscountUpdate,
     OrderItemAdd,
     OrderItemQuantityUpdate,
     OrderResponse,
+    OrderServiceFeeToggle,
 )
 from app.services.order_service import OrderService
 
@@ -265,6 +267,24 @@ async def set_discount(
     return await _service(session, current_user).set_discount(order_id, data.discount)
 
 
+# ── PATCH /orders/{order_id}/service-fee — Ativar/desativar taxa ──────────────
+
+
+@router.patch(
+    "/{order_id}/service-fee",
+    response_model=OrderResponse,
+    summary="Ativar ou desativar taxa de serviço",
+    description="Define se a taxa de serviço se aplica a esta comanda. apply=true restaura a taxa do estabelecimento; apply=false zera a taxa.",
+)
+async def toggle_service_fee(
+    order_id: UUID,
+    data: OrderServiceFeeToggle,
+    session: DBSession,
+    current_user: CurrentUser,
+) -> OrderResponse:
+    return await _service(session, current_user).set_service_fee(order_id, data.apply)
+
+
 # ── DELETE /orders/{order_id}/items/{item_id} — Cancelar item ─────────────────
 
 
@@ -328,6 +348,41 @@ async def cancel_item(
     return await _service(session, current_user).cancel_item(
         order_id, item_id, reason=reason
     )
+
+
+# ── PATCH /orders/{order_id}/customer — Editar nome do cliente ────────────────
+
+
+@router.patch(
+    "/{order_id}/customer",
+    response_model=OrderResponse,
+    summary="Editar nome do cliente",
+    description="Atualiza o nome do cliente de uma comanda.",
+)
+async def update_customer_name(
+    order_id: UUID,
+    data: CustomerNameUpdate,
+    session: DBSession,
+    current_user: CurrentUser,
+) -> OrderResponse:
+    return await _service(session, current_user).update_customer_name(order_id, data.customer_name)
+
+
+# ── DELETE /orders/{order_id} — Cancelar/apagar comanda ──────────────────────
+
+
+@router.delete(
+    "/{order_id}",
+    status_code=204,
+    summary="Apagar comanda",
+    description="Cancela a comanda e libera a mesa. Irreversível.",
+)
+async def cancel_order(
+    order_id: UUID,
+    session: DBSession,
+    current_user: CurrentUser,
+) -> None:
+    await _service(session, current_user).cancel_order(order_id)
 
 
 # ── PATCH /orders/{order_id}/close — Fechar comanda ───────────────────────────

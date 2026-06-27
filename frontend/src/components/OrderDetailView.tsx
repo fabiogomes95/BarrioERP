@@ -3,11 +3,11 @@ import {
   type Order, type OrderItem, type Table, type Category, type MenuItem,
   type Payment, type PaymentMethod,
   fetchCategories, fetchMenuItems,
-  addOrderItem, cancelOrderItem, setItemQuantity, setOrderDiscount, closeOrder, updateTableStatus,
-  fetchOrderPayments, registerPayment, finishOrder, getUser,
+  addOrderItem, cancelOrderItem, cancelOrder, setItemQuantity, setOrderDiscount, setOrderServiceFee, closeOrder, updateTableStatus,
+  fetchOrderPayments, registerPayment, finishOrder, updateOrderCustomerName, getUser,
 } from '../lib/api'
 import { maskCurrency, parseCurrency, toCurrencyInput } from '../lib/format'
-import { printComanda } from '../lib/print'
+import { printComanda, printCozinha, type KitchenItem } from '../lib/print'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -69,11 +69,14 @@ function ModalOverlay({ children, onClose }: { children: React.ReactNode; onClos
 // ── Linha de item da comanda ──────────────────────────────────────────────────
 
 function OrderItemRow({
-  item, canCancel, onCancelled,
+  item, canCancel, onCancelled, kitchenMode, kitchenSelected, onKitchenToggle,
 }: {
   item: OrderItem
   canCancel: boolean
   onCancelled: (updated: Order) => void
+  kitchenMode?: boolean
+  kitchenSelected?: boolean
+  onKitchenToggle?: () => void
 }) {
   const [cancelling, setCancelling] = useState(false)
   const [reason, setReason] = useState('')
@@ -144,20 +147,32 @@ function OrderItemRow({
             <p className="text-stone-700 text-xs mt-0.5 pl-5">Motivo: {item.cancelled_reason}</p>
           )}
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0">
           <span className={['text-sm font-semibold', isCancelled ? 'text-stone-600' : 'text-stone-300'].join(' ')}>
             {brl(item.subtotal)}
           </span>
-          {canCancel && !isCancelled && item.status !== 'served' && (
-            <button
-              onClick={() => setCancelling(v => !v)}
-              className="w-6 h-6 flex items-center justify-center rounded-lg
-                         text-stone-700 hover:text-red-400 hover:bg-red-500/10 transition-all"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          {kitchenMode && !isCancelled ? (
+            <button onClick={onKitchenToggle}
+              className={[
+                'w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all',
+                kitchenSelected
+                  ? 'bg-amber-500 border-amber-500 text-stone-900'
+                  : 'border-stone-600 text-transparent hover:border-amber-500/60',
+              ].join(' ')}>
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
             </button>
+          ) : (
+            canCancel && !isCancelled && item.status !== 'served' && (
+              <button onClick={() => setCancelling(v => !v)}
+                className="w-6 h-6 flex items-center justify-center rounded-lg
+                           text-stone-700 hover:text-red-400 hover:bg-red-500/10 transition-all">
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )
           )}
         </div>
       </div>
@@ -194,12 +209,14 @@ function OrderItemRow({
 // ── Modal: Adicionar item ─────────────────────────────────────────────────────
 
 function AddItemModal({
-  order, onClose, onAdded,
+  order, table, onClose, onAdded,
 }: {
   order: Order
+  table: Table | undefined
   onClose: () => void
   onAdded: (updated: Order) => void
 }) {
+  const where = table ? `Mesa ${table.number}` : 'Balcão'
   const [categories, setCategories] = useState<Category[]>([])
   const [items, setItems] = useState<MenuItem[]>([])
   const [loadingMenu, setLoadingMenu] = useState(true)
@@ -242,9 +259,8 @@ function AddItemModal({
     return true
   })
 
-  async function addFromMenu() {
+  async function addFromMenu(andPrint = false) {
     if (!picking) return
-    // Complemento obrigatório quando o item tem opções cadastradas
     if (picking.complementos.length > 0 && !comp) {
       setAddError('Escolha uma opção para este item')
       return
@@ -253,11 +269,10 @@ function AddItemModal({
     setAdding(true)
     try {
       const hasComp = picking.complementos.length > 0
-      // Item com complemento → nome leva a opção colada ("Churrasco - Carne").
-      // A observação livre fica só na tela (não vai pra impressão).
+      const effectiveName = hasComp ? `${picking.name} - ${comp}` : picking.name
       const updated = hasComp
         ? await addOrderItem(order.id, {
-            item_name: `${picking.name} - ${comp}`,
+            item_name: effectiveName,
             unit_price: Number(picking.price),
             quantity: Number(qty),
             notes: notes.trim() || null,
@@ -267,6 +282,7 @@ function AddItemModal({
             quantity: Number(qty),
             notes: notes.trim() || null,
           })
+      if (andPrint) printCozinha([{ name: effectiveName, qty: Number(qty), notes: notes.trim() || null }], where)
       onAdded(updated)
       setPicking(null); setQty('1'); setNotes(''); setComp('')
     } catch (err) {
@@ -276,17 +292,19 @@ function AddItemModal({
     }
   }
 
-  async function addManual(e: React.FormEvent) {
-    e.preventDefault()
+  async function addManual(andPrint = false) {
+    const name = manName.trim()
+    if (!name || !manPrice) { setAddError('Preencha nome e preço'); return }
     setAddError(null)
     setAdding(true)
     try {
       const updated = await addOrderItem(order.id, {
-        item_name: manName.trim(),
+        item_name: name,
         unit_price: parseCurrency(manPrice),
         quantity: Number(manQty),
         notes: manNotes.trim() || null,
       })
+      if (andPrint) printCozinha([{ name, qty: Number(manQty), notes: manNotes.trim() || null }], where)
       onAdded(updated)
       setManName(''); setManPrice(''); setManQty('1'); setManNotes('')
     } catch (err) {
@@ -304,18 +322,22 @@ function AddItemModal({
       ? Math.max(Number(halfItem1.price), Number(halfItem2.price))
       : 0
 
-  async function addHalf(e: React.FormEvent) {
-    e.preventDefault()
+  async function addHalf(andPrint = false) {
     if (!halfItem1 || !halfItem2) { setAddError('Escolha os dois sabores'); return }
     setAddError(null)
     setAdding(true)
+    const words1 = halfItem1.name.split(' ')
+    const words2 = halfItem2.name.split(' ')
+    const short2 = words1[0] === words2[0] ? words2.slice(1).join(' ') : halfItem2.name
+    const name = `${halfItem1.name} / ${short2}`
     try {
       const updated = await addOrderItem(order.id, {
-        item_name: `½ ${halfItem1.name} / ½ ${halfItem2.name}`,
+        item_name: name,
         unit_price: halfPrice,
         quantity: Number(halfQty),
         notes: halfNotes.trim() || null,
       })
+      if (andPrint) printCozinha([{ name, qty: Number(halfQty), notes: halfNotes.trim() || null }], where)
       onAdded(updated)
       setHalf1(''); setHalf2(''); setHalfQty('1'); setHalfNotes('')
     } catch (err) {
@@ -411,15 +433,24 @@ function AddItemModal({
               </Field>
               <div className="flex gap-2">
                 <button onClick={() => setPicking(null)}
-                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold
+                  className="px-3 py-2.5 rounded-xl text-sm font-semibold
                              text-stone-400 border border-stone-700/60 hover:bg-stone-800/50 transition-colors">
                   Voltar
                 </button>
-                <button onClick={addFromMenu} disabled={adding}
+                <button onClick={() => addFromMenu()} disabled={adding}
                   className="flex-1 py-2.5 rounded-xl text-sm font-semibold
                              bg-amber-500 hover:bg-amber-400 text-stone-900
                              disabled:opacity-40 transition-colors">
                   {adding ? 'Adicionando…' : 'Adicionar'}
+                </button>
+                <button onClick={() => addFromMenu(true)} disabled={adding}
+                  title="Adicionar e imprimir na cozinha"
+                  className="px-3 py-2.5 rounded-xl border border-stone-700/60 text-stone-400
+                             hover:text-amber-400 hover:border-stone-700/80 disabled:opacity-40 transition-all">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                    <path strokeLinecap="round" strokeLinejoin="round"
+                      d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a1 1 0 001-1v-4a1 1 0 00-1-1H9a1 1 0 00-1 1v4a1 1 0 001 1zm8-12V5a2 2 0 00-2-2H7a2 2 0 00-2 2v4h14z" />
+                  </svg>
                 </button>
               </div>
             </div>
@@ -495,7 +526,7 @@ function AddItemModal({
             </p>
           </div>
         ) : (
-          <form onSubmit={addHalf} className="space-y-3">
+          <form onSubmit={e => { e.preventDefault(); addHalf() }} className="space-y-3">
             <Field label="Primeira metade (½)">
               <select value={half1} onChange={e => setHalf1(e.target.value)}
                 className={inputCls + ' appearance-none'} style={{ background: '#0d0b08' }}>
@@ -534,17 +565,28 @@ function AddItemModal({
                 placeholder="ex: borda recheada, sem cebola"
                 className={inputCls} style={{ background: '#0d0b08' }} />
             </Field>
-            <button type="submit" disabled={adding || !halfItem1 || !halfItem2}
-              className="w-full py-2.5 rounded-xl text-sm font-semibold
-                         bg-amber-500 hover:bg-amber-400 text-stone-900
-                         disabled:opacity-40 transition-colors mt-1">
-              {adding ? 'Adicionando…' : 'Adicionar meia a meia'}
-            </button>
+            <div className="flex gap-2 mt-1">
+              <button type="submit" disabled={adding || !halfItem1 || !halfItem2}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold
+                           bg-amber-500 hover:bg-amber-400 text-stone-900
+                           disabled:opacity-40 transition-colors">
+                {adding ? 'Adicionando…' : 'Adicionar meia a meia'}
+              </button>
+              <button type="button" onClick={() => addHalf(true)} disabled={adding || !halfItem1 || !halfItem2}
+                title="Adicionar e imprimir na cozinha"
+                className="px-3 py-2.5 rounded-xl border border-stone-700/60 text-stone-400
+                           hover:text-amber-400 hover:border-stone-700/80 disabled:opacity-40 transition-all">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                  <path strokeLinecap="round" strokeLinejoin="round"
+                    d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a1 1 0 001-1v-4a1 1 0 00-1-1H9a1 1 0 00-1 1v4a1 1 0 001 1zm8-12V5a2 2 0 00-2-2H7a2 2 0 00-2 2v4h14z" />
+                </svg>
+              </button>
+            </div>
           </form>
         )
       ) : (
         /* Tab manual */
-        <form onSubmit={addManual} className="space-y-3">
+        <form onSubmit={e => { e.preventDefault(); addManual() }} className="space-y-3">
           <Field label="Nome do item">
             <input type="text" required value={manName} onChange={e => setManName(e.target.value)}
               placeholder="ex: Cerveja especial" className={inputCls} style={{ background: '#0d0b08' }} />
@@ -565,12 +607,23 @@ function AddItemModal({
             <input type="text" value={manNotes} onChange={e => setManNotes(e.target.value)}
               placeholder="ex: sem gelo" className={inputCls} style={{ background: '#0d0b08' }} />
           </Field>
-          <button type="submit" disabled={adding}
-            className="w-full py-2.5 rounded-xl text-sm font-semibold
-                       bg-amber-500 hover:bg-amber-400 text-stone-900
-                       disabled:opacity-40 transition-colors mt-1">
-            {adding ? 'Adicionando…' : 'Adicionar item'}
-          </button>
+          <div className="flex gap-2 mt-1">
+            <button type="submit" disabled={adding}
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold
+                         bg-amber-500 hover:bg-amber-400 text-stone-900
+                         disabled:opacity-40 transition-colors">
+              {adding ? 'Adicionando…' : 'Adicionar item'}
+            </button>
+            <button type="button" onClick={() => addManual(true)} disabled={adding}
+              title="Adicionar e imprimir na cozinha"
+              className="px-3 py-2.5 rounded-xl border border-stone-700/60 text-stone-400
+                         hover:text-amber-400 hover:border-stone-700/80 disabled:opacity-40 transition-all">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                <path strokeLinecap="round" strokeLinejoin="round"
+                  d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a1 1 0 001-1v-4a1 1 0 00-1-1H9a1 1 0 00-1 1v4a1 1 0 001 1zm8-12V5a2 2 0 00-2-2H7a2 2 0 00-2 2v4h14z" />
+              </svg>
+            </button>
+          </div>
         </form>
       )}
     </ModalOverlay>
@@ -592,11 +645,12 @@ const METHOD_LABEL: Record<string, string> = Object.fromEntries(
 )
 
 function PaymentModal({
-  order, onClose, onFinished,
+  order, onClose, onFinished, onPaidUpdate,
 }: {
   order: Order
   onClose: () => void
   onFinished: (orderId: string) => void
+  onPaidUpdate?: (paid: number) => void
 }) {
   const [payments, setPayments] = useState<Payment[]>([])
   const [loading, setLoading] = useState(true)
@@ -632,6 +686,11 @@ function PaymentModal({
   useEffect(() => {
     refreshPayments().finally(() => setLoading(false))
   }, [refreshPayments])
+
+  // Notifica o pai com o valor já pago sempre que a lista de pagamentos muda
+  useEffect(() => {
+    onPaidUpdate?.(paid)
+  }, [paid, onPaidUpdate])
 
   // Ao mudar o saldo devedor, pré-preenche o valor com o restante
   useEffect(() => {
@@ -909,9 +968,67 @@ export function OrderDetail({
   const [showAddItem, setShowAddItem] = useState(false)
   const [showPayment, setShowPayment] = useState(false)
   const [showDiscount, setShowDiscount] = useState(false)
+  const [togglingFee, setTogglingFee] = useState(false)
   const [closing, setClosing] = useState(false)
   const [requestingBill, setRequestingBill] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [editingName, setEditingName] = useState(false)
+  const [nameInput, setNameInput] = useState('')
+  const [savingName, setSavingName] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [kitchenMode, setKitchenMode] = useState(false)
+  const [kitchenSelected, setKitchenSelected] = useState<Set<string>>(new Set())
+  const [paidSoFar, setPaidSoFar] = useState(0)
+  const remaining = Math.max(0, Math.round((Number(order.total) - paidSoFar) * 100) / 100)
+
+  // Carrega pagamentos do servidor ao abrir ou trocar de comanda
+  useEffect(() => {
+    fetchOrderPayments(order.id)
+      .then(ps => {
+        const total = ps
+          .filter(p => p.status === 'confirmed')
+          .reduce((sum, p) => sum + Number(p.amount), 0)
+        setPaidSoFar(total)
+      })
+      .catch(() => setPaidSoFar(0))
+  }, [order.id])
+
+  const kitchenWhere = table
+    ? `Mesa ${table.number}`
+    : order.order_type === 'delivery'
+      ? `Delivery${order.customer_name ? ' - ' + order.customer_name : ''}`
+      : order.order_type === 'pickup'
+        ? `Retirada${order.customer_name ? ' - ' + order.customer_name : ''}`
+        : order.customer_name ?? 'Balcão'
+
+  function enterKitchenMode() {
+    const allIds = new Set(activeItems.filter(i => i.status !== 'served').map(i => i.id))
+    setKitchenSelected(allIds)
+    setKitchenMode(true)
+  }
+
+  function exitKitchenMode() {
+    setKitchenMode(false)
+    setKitchenSelected(new Set())
+  }
+
+  function toggleKitchenItem(id: string) {
+    setKitchenSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  function doKitchenPrint() {
+    const items: KitchenItem[] = activeItems
+      .filter(i => kitchenSelected.has(i.id))
+      .map(i => ({ name: i.item_name, qty: i.quantity, notes: i.notes }))
+    if (items.length === 0) return
+    printCozinha(items, kitchenWhere)
+    exitKitchenMode()
+  }
 
   const cfg = ORDER_STATUS[order.status] ?? ORDER_STATUS.open
   const canEdit = order.status === 'open' || order.status === 'bill_requested'
@@ -949,6 +1066,33 @@ export function OrderDetail({
     }
   }
 
+  async function handleSaveName() {
+    setSavingName(true)
+    try {
+      const updated = await updateOrderCustomerName(order.id, nameInput.trim() || null)
+      onUpdated(updated)
+      setEditingName(false)
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Erro ao salvar nome')
+    } finally {
+      setSavingName(false)
+    }
+  }
+
+  async function handleDelete() {
+    setActionError(null)
+    setDeleting(true)
+    try {
+      await cancelOrder(order.id)
+      onClosed(order.id)
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Erro ao apagar comanda')
+    } finally {
+      setDeleting(false)
+      setShowDeleteConfirm(false)
+    }
+  }
+
   return (
     <div className="flex flex-col h-full">
 
@@ -972,16 +1116,72 @@ export function OrderDetail({
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-stone-100 font-bold text-base leading-tight">
-                {order.customer_name ?? table?.label ?? 'Comanda avulsa'}
-              </h2>
+              {editingName ? (
+                <div className="flex items-center gap-1.5">
+                  <input
+                    autoFocus
+                    type="text"
+                    value={nameInput}
+                    onChange={e => setNameInput(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') handleSaveName()
+                      if (e.key === 'Escape') setEditingName(false)
+                    }}
+                    className="rounded-lg px-2 py-1 text-sm font-bold border border-amber-500/40
+                               text-stone-100 bg-stone-900 focus:outline-none focus:ring-1
+                               focus:ring-amber-500/30 w-36"
+                  />
+                  <button onClick={handleSaveName} disabled={savingName}
+                    className="text-[11px] font-bold text-amber-400 hover:text-amber-300
+                               disabled:opacity-40 transition-colors py-1 px-1.5">
+                    {savingName ? '…' : 'OK'}
+                  </button>
+                  <button onClick={() => setEditingName(false)}
+                    className="text-[11px] text-stone-600 hover:text-stone-400 transition-colors py-1 px-1">
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => { setNameInput(order.customer_name ?? ''); setEditingName(true) }}
+                  className="flex items-center gap-1.5 group"
+                  title="Editar nome">
+                  <h2 className="text-stone-100 font-bold text-base leading-tight group-hover:text-amber-400 transition-colors">
+                    {order.customer_name ?? table?.label ?? 'Comanda avulsa'}
+                  </h2>
+                  <svg className="w-3 h-3 text-stone-700 group-hover:text-amber-400 transition-colors shrink-0"
+                       fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round"
+                      d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
+                  </svg>
+                </button>
+              )}
               <span className={['text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border', cfg.color, cfg.bg, cfg.border].join(' ')}>
                 {cfg.label}
               </span>
+              {order.order_type === 'delivery' && (
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border
+                                 text-blue-400 bg-blue-500/10 border-blue-500/25">
+                  Delivery
+                </span>
+              )}
+              {order.order_type === 'pickup' && (
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border
+                                 text-purple-400 bg-purple-500/10 border-purple-500/25">
+                  Retirada
+                </span>
+              )}
             </div>
             <p className="text-stone-500 text-xs mt-0.5">
-              {table ? `Mesa ${table.number} · ` : 'Balcão · '}
-              {order.guest_count} {order.guest_count === 1 ? 'pessoa' : 'pessoas'} · aberta há {timeAgo(order.created_at)}
+              {table
+                ? `Mesa ${table.number}`
+                : order.order_type === 'delivery'
+                  ? 'Delivery'
+                  : order.order_type === 'pickup'
+                    ? 'Retirada'
+                    : 'Balcão'
+              }
+              {' · '}{order.guest_count} {order.guest_count === 1 ? 'pessoa' : 'pessoas'} · aberta há {timeAgo(order.created_at)}
             </p>
           </div>
 
@@ -1022,8 +1222,11 @@ export function OrderDetail({
               <OrderItemRow
                 key={item.id}
                 item={item}
-                canCancel={canEdit}
+                canCancel={canEdit && !kitchenMode}
                 onCancelled={onUpdated}
+                kitchenMode={kitchenMode}
+                kitchenSelected={kitchenSelected.has(item.id)}
+                onKitchenToggle={() => toggleKitchenItem(item.id)}
               />
             ))}
 
@@ -1072,49 +1275,125 @@ export function OrderDetail({
 
         {/* Botões de ação */}
         {canClose && (
-          <div className="space-y-2">
-            <div className="flex gap-2">
-              {canAddItem && (
-                <button onClick={() => setShowAddItem(true)}
-                  className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-semibold
-                             text-stone-300 border border-stone-700/60 hover:bg-stone-800/50 transition-colors">
-                  <span className="text-base leading-none">+</span>
-                  Item
+          kitchenMode ? (
+            <div className="space-y-2">
+              <p className="text-xs text-stone-500 text-center">
+                Selecione os itens para imprimir na cozinha
+              </p>
+              <div className="flex gap-2">
+                <button onClick={exitKitchenMode}
+                  className="px-4 py-2.5 rounded-xl text-sm font-semibold
+                             text-stone-400 border border-stone-700/60 hover:bg-stone-800/50 transition-colors">
+                  Cancelar
                 </button>
-              )}
-              {canRequestBill && (
-                <button onClick={handleRequestBill} disabled={requestingBill}
+                <button onClick={doKitchenPrint} disabled={kitchenSelected.size === 0}
                   className="flex-1 py-2.5 rounded-xl text-sm font-semibold
-                             text-orange-400 border border-orange-500/30 bg-orange-500/8
-                             hover:bg-orange-500/15 disabled:opacity-40 transition-colors">
-                  {requestingBill ? '…' : 'Solicitar conta'}
+                             bg-amber-500 hover:bg-amber-400 text-stone-900
+                             disabled:opacity-40 transition-colors">
+                  Imprimir {kitchenSelected.size} {kitchenSelected.size === 1 ? 'item' : 'itens'}
                 </button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                {canAddItem && (
+                  <button onClick={() => setShowAddItem(true)}
+                    className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-semibold
+                               text-stone-300 border border-stone-700/60 hover:bg-stone-800/50 transition-colors">
+                    <span className="text-base leading-none">+</span>
+                    Item
+                  </button>
+                )}
+                {activeItems.some(i => i.status !== 'served') && (
+                  <button onClick={enterKitchenMode}
+                    className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-semibold
+                               text-stone-300 border border-stone-700/60 hover:bg-stone-800/50 transition-colors">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                      <path strokeLinecap="round" strokeLinejoin="round"
+                        d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a1 1 0 001-1v-4a1 1 0 00-1-1H9a1 1 0 00-1 1v4a1 1 0 001 1zm8-12V5a2 2 0 00-2-2H7a2 2 0 00-2 2v4h14z" />
+                    </svg>
+                    Cozinha
+                  </button>
+                )}
+                {canRequestBill && (
+                  <button onClick={handleRequestBill} disabled={requestingBill}
+                    className="flex-1 py-2.5 rounded-xl text-sm font-semibold
+                               text-orange-400 border border-orange-500/30 bg-orange-500/8
+                               hover:bg-orange-500/15 disabled:opacity-40 transition-colors">
+                    {requestingBill ? '…' : 'Solicitar conta'}
+                  </button>
+                )}
+                <button onClick={() => setShowPayment(true)}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold
+                             bg-amber-500 hover:bg-amber-400 text-stone-900 transition-colors">
+                  Receber {brl(remaining > 0 ? remaining : order.total)}
+                </button>
+              </div>
+              {showDeleteConfirm ? (
+                <div className="flex items-center justify-between gap-2 pt-0.5
+                                rounded-xl px-3 py-2 border border-red-500/20 bg-red-500/5">
+                  <p className="text-xs text-red-400 font-medium">Apagar esta comanda?</p>
+                  <div className="flex gap-2">
+                    <button onClick={() => setShowDeleteConfirm(false)}
+                      className="text-[11px] text-stone-500 hover:text-stone-300 transition-colors py-1 px-2">
+                      Cancelar
+                    </button>
+                    <button onClick={handleDelete} disabled={deleting}
+                      className="text-[11px] font-bold text-red-400 hover:text-red-300
+                                 disabled:opacity-40 transition-colors py-1 px-2">
+                      {deleting ? 'Apagando…' : 'Sim, apagar'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between gap-3 pt-0.5">
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => setShowDiscount(true)}
+                      className="text-[11px] font-semibold text-stone-500 hover:text-amber-400 transition-colors py-1">
+                      {Number(order.discount) > 0 ? `Desconto: ${brl(order.discount)}` : '+ Desconto'}
+                    </button>
+                    {(Number(order.service_fee_percent) > 0 || Number(order.service_fee) > 0) && (
+                      <button
+                        onClick={async () => {
+                          setTogglingFee(true)
+                          try {
+                            const updated = await setOrderServiceFee(order.id, Number(order.service_fee_percent) === 0)
+                            onUpdated(updated)
+                          } catch (err) {
+                            setActionError(err instanceof Error ? err.message : 'Erro')
+                          } finally {
+                            setTogglingFee(false)
+                          }
+                        }}
+                        disabled={togglingFee}
+                        className="text-[11px] font-semibold text-stone-500 hover:text-amber-400 disabled:opacity-40 transition-colors py-1">
+                        {togglingFee ? '…' : Number(order.service_fee_percent) > 0 ? `− Taxa ${order.service_fee_percent}%` : '+ Taxa de serviço'}
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => setShowDeleteConfirm(true)}
+                      className="text-[11px] text-stone-700 hover:text-red-400 transition-colors py-1">
+                      Apagar
+                    </button>
+                    <button onClick={handleClose} disabled={closing}
+                      className="text-[11px] font-semibold text-stone-500 hover:text-amber-400
+                                 disabled:opacity-40 transition-colors py-1">
+                      {closing ? 'Salvando…' : 'Fiado'}
+                    </button>
+                  </div>
+                </div>
               )}
-              <button onClick={() => setShowPayment(true)}
-                className="flex-1 py-2.5 rounded-xl text-sm font-semibold
-                           bg-amber-500 hover:bg-amber-400 text-stone-900 transition-colors">
-                Receber {brl(order.total)}
-              </button>
             </div>
-            <div className="flex items-center justify-between gap-3 pt-0.5">
-              <button onClick={() => setShowDiscount(true)}
-                className="text-[11px] font-semibold text-stone-500 hover:text-amber-400 transition-colors py-1">
-                {Number(order.discount) > 0 ? `Desconto: ${brl(order.discount)}` : '+ Desconto'}
-              </button>
-              {/* Override do gerente: fechar sem checar pagamento */}
-              <button onClick={handleClose} disabled={closing}
-                className="text-[11px] text-stone-600 hover:text-stone-400
-                           disabled:opacity-40 transition-colors py-1">
-                {closing ? 'Fechando…' : 'Fechar sem pagamento'}
-              </button>
-            </div>
-          </div>
+          )
         )}
       </div>
 
       {showAddItem && (
         <AddItemModal
           order={order}
+          table={table}
           onClose={() => setShowAddItem(false)}
           onAdded={updated => { onUpdated(updated); setShowAddItem(false) }}
         />
@@ -1125,6 +1404,7 @@ export function OrderDetail({
           order={order}
           onClose={() => setShowPayment(false)}
           onFinished={id => { setShowPayment(false); onClosed(id) }}
+          onPaidUpdate={setPaidSoFar}
         />
       )}
 

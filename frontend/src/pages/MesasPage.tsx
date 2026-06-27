@@ -332,6 +332,14 @@ export default function MesasPage() {
 
   useEffect(() => { load() }, [load])
 
+  // Auto-refresh silencioso a cada 30s
+  useEffect(() => {
+    const id = setInterval(async () => {
+      try { setTables(await fetchTables()) } catch {}
+    }, 30_000)
+    return () => clearInterval(id)
+  }, [])
+
   async function handleTableClick(table: Table) {
     if (table.status === 'free' || table.status === 'reserved') {
       setModal({ type: 'open-order', table })

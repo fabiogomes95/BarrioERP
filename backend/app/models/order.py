@@ -17,6 +17,12 @@ class OrderStatus(str, enum.Enum):
     CANCELLED = "cancelled"
 
 
+class OrderType(str, enum.Enum):
+    COUNTER = "counter"    # balcão / avulso
+    DELIVERY = "delivery"  # delivery
+    PICKUP = "pickup"      # retirada
+
+
 class OrderItemStatus(str, enum.Enum):
     PENDING = "pending"          # aguardando envio à cozinha
     SENT = "sent"                # enviado à cozinha
@@ -57,6 +63,12 @@ class Order(Base, UUIDMixin, TimestampMixin, VersionMixin):
         nullable=False,
         default=OrderStatus.OPEN,
         index=True,
+    )
+    order_type: Mapped[OrderType] = mapped_column(
+        Enum(OrderType, name="order_type_enum", values_callable=lambda x: [e.value for e in x]),
+        nullable=False,
+        default=OrderType.COUNTER,
+        server_default="counter",
     )
     guest_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     customer_name: Mapped[str | None] = mapped_column(String(200), nullable=True)

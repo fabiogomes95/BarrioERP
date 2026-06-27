@@ -4,8 +4,9 @@ app/schemas/report.py
 Schemas de saída dos relatórios (fechamento de caixa / faturamento do dia).
 """
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
+from uuid import UUID
 
 from app.models.payment import PaymentMethod
 from app.schemas.common import BaseSchema
@@ -25,6 +26,19 @@ class TopItem(BaseSchema):
     name: str
     quantity: int
     total: Decimal
+
+
+class FiadoEntry(BaseSchema):
+    """Comanda com pagamento parcial (fiado)."""
+
+    order_id: UUID
+    customer_name: str | None
+    table_number: int | None
+    order_type: str
+    total: Decimal
+    paid: Decimal
+    remaining: Decimal
+    created_at: datetime
 
 
 class DailyReport(BaseSchema):

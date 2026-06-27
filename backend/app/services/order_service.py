@@ -101,12 +101,12 @@ from app.core.exceptions import (
     TenantError,
 )
 from app.models.establishment import Establishment
-from app.models.order import Order, OrderItem, OrderItemStatus, OrderStatus
+from app.models.order import Order, OrderItem, OrderItemStatus, OrderStatus, OrderType
 from app.models.payment import PaymentStatus
 from app.models.table import Table, TableStatus
 from app.repositories.order_repository import OrderRepository
 from app.repositories.table_repository import TableRepository
-from app.schemas.report import DailyReport, PaymentMethodTotal, TopItem
+from app.schemas.report import DailyReport, FiadoEntry, PaymentMethodTotal, TopItem
 from app.schemas.order import (
     OrderClose,
     OrderCreate,
@@ -142,6 +142,15 @@ class OrderService(BaseService):
         self._table_repo = TableRepository(session)
 
     # ── Helper: contexto de tenant ────────────────────────────────────────────
+
+    async def _next_order_number(self, establishment_id: UUID) -> str:
+        """Retorna o próximo número sequencial do dia para pedidos sem mesa."""
+        tz = ZoneInfo("America/Sao_Paulo")
+        today = datetime.now(tz).date()
+        start = datetime.combine(today, time.min, tzinfo=tz)
+        end = start + timedelta(days=1)
+        count = await self._order_repo.count_non_table_today(establishment_id, start, end)
+        return str(count + 1)
 
     def _require_establishment(self) -> UUID:
         """Exige que o usuário esteja vinculado a um estabelecimento."""
@@ -264,9 +273,17 @@ class OrderService(BaseService):
                     "Feche a comanda atual antes de abrir uma nova."
                 )
 
-        # Snapshot da taxa de serviço configurada no estabelecimento
+        # Auto-numera pedidos sem mesa e sem nome
+        customer_name = data.customer_name
+        if data.table_id is None and not customer_name:
+            customer_name = await self._next_order_number(establishment_id)
+
+        # Snapshot da taxa de serviço — delivery e retirada não pagam taxa
         establishment = await self.session.get(Establishment, establishment_id)
-        fee_percent = establishment.service_fee_percent if establishment else Decimal("0")
+        if data.order_type in (OrderType.DELIVERY, OrderType.PICKUP):
+            fee_percent = Decimal("0")
+        else:
+            fee_percent = establishment.service_fee_percent if establishment else Decimal("0")
 
         # 3. Cria a comanda
         order = Order(
@@ -274,8 +291,9 @@ class OrderService(BaseService):
             table_id=data.table_id,
             waiter_id=self.user_id,         # quem abriu (do JWT)
             status=OrderStatus.OPEN,
+            order_type=data.order_type,
             guest_count=data.guest_count,
-            customer_name=data.customer_name,
+            customer_name=customer_name,
             notes=data.notes,
             subtotal=Decimal("0.00"),
             service_fee=Decimal("0.00"),
@@ -676,15 +694,99 @@ class OrderService(BaseService):
 
         return await self._get_or_raise(order.id, establishment_id)
 
+    async def set_service_fee(self, order_id: UUID, apply: bool) -> OrderResponse:
+        """Ativa ou desativa a taxa de serviço nesta comanda."""
+        establishment_id = self._require_establishment()
+        order = await self._get_or_raise(order_id, establishment_id)
+
+        if order.status not in (OrderStatus.OPEN, OrderStatus.BILL_REQUESTED):
+            raise BusinessRuleError(
+                f"Não é possível alterar a taxa de serviço de uma comanda com status "
+                f"'{order.status.value}'."
+            )
+
+        if apply:
+            establishment = await self.session.get(Establishment, establishment_id)
+            order.service_fee_percent = establishment.service_fee_percent if establishment else Decimal("0")
+        else:
+            order.service_fee_percent = Decimal("0")
+
+        self._recalculate_total(order)
+
+        try:
+            await self.session.flush()
+        except StaleDataError:
+            raise OptimisticLockError("Order")
+
+        return await self._get_or_raise(order.id, establishment_id)
+
     # ── Relatórios / histórico ──────────────────────────────────────────────
 
-    async def list_history(self, *, limit: int = 50, offset: int = 0) -> list[OrderResponse]:
+    async def list_history(
+        self,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        day: date | None = None,
+    ) -> list[OrderResponse]:
         """Histórico de comandas fechadas (mais recentes primeiro)."""
         establishment_id = self._require_establishment()
+        start = end = None
+        if day is not None:
+            tz = ZoneInfo("America/Sao_Paulo")
+            start = datetime.combine(day, time.min, tzinfo=tz)
+            end = start + timedelta(days=1)
         orders = await self._order_repo.list_closed(
-            establishment_id, limit=limit, offset=offset
+            establishment_id, limit=limit, offset=offset, start=start, end=end
         )
         return [OrderResponse.model_validate(o) for o in orders]
+
+    async def update_customer_name(self, order_id: UUID, name: str | None) -> OrderResponse:
+        """Atualiza o nome do cliente de uma comanda."""
+        establishment_id = self._require_establishment()
+        order = await self._get_or_raise(order_id, establishment_id)
+        if order.status == OrderStatus.CANCELLED:
+            raise BusinessRuleError("Não é possível editar uma comanda cancelada.")
+        order.customer_name = name
+        await self.session.flush()
+        return await self._get_or_raise(order.id, establishment_id)
+
+    async def cancel_order(self, order_id: UUID) -> None:
+        """Cancela (apaga) uma comanda, liberando a mesa se houver."""
+        establishment_id = self._require_establishment()
+        order = await self._get_or_raise(order_id, establishment_id)
+
+        if order.status == OrderStatus.CANCELLED:
+            raise BusinessRuleError("Comanda já está cancelada.")
+
+        order.status = OrderStatus.CANCELLED
+
+        if order.table_id is not None:
+            table = await self._table_repo.get_by_establishment(
+                order.table_id, establishment_id
+            )
+            if table is not None:
+                table.status = TableStatus.FREE
+
+        await self.session.flush()
+
+    async def list_fiado(self) -> list[FiadoEntry]:
+        """Comandas com pagamento parcial (fiado)."""
+        establishment_id = self._require_establishment()
+        rows = await self._order_repo.list_fiado(establishment_id)
+        return [
+            FiadoEntry(
+                order_id=order.id,
+                customer_name=order.customer_name,
+                table_number=table_number,
+                order_type=order.order_type.value,
+                total=order.total,
+                paid=paid,
+                remaining=order.total - paid,
+                created_at=order.created_at,
+            )
+            for order, paid, table_number in rows
+        ]
 
     async def daily_report(self, day: date | None = None) -> DailyReport:
         """

@@ -10,7 +10,7 @@ from fastapi import APIRouter, Query
 
 from app.api.deps import CurrentUser, DBSession
 from app.schemas.order import OrderResponse
-from app.schemas.report import DailyReport
+from app.schemas.report import DailyReport, FiadoEntry
 from app.services.order_service import OrderService
 
 router = APIRouter()
@@ -23,6 +23,19 @@ def _service(session: DBSession, user: CurrentUser) -> OrderService:
         establishment_id=user.establishment_id,
         user_id=user.id,
     )
+
+
+@router.get(
+    "/fiado",
+    response_model=list[FiadoEntry],
+    summary="Contas em fiado",
+    description="Comandas abertas com pagamento parcial (paid < total).",
+)
+async def fiado_list(
+    session: DBSession,
+    current_user: CurrentUser,
+) -> list[FiadoEntry]:
+    return await _service(session, current_user).list_fiado()
 
 
 @router.get(
@@ -49,12 +62,13 @@ async def daily_report(
     "/history",
     response_model=list[OrderResponse],
     summary="Histórico de comandas fechadas",
-    description="Lista as comandas fechadas mais recentes (com itens).",
+    description="Lista as comandas fechadas mais recentes (com itens). Use `day` para filtrar por data.",
 )
 async def history(
     session: DBSession,
     current_user: CurrentUser,
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
+    day: date | None = Query(default=None, description="Filtrar por data (YYYY-MM-DD)."),
 ) -> list[OrderResponse]:
-    return await _service(session, current_user).list_history(limit=limit, offset=offset)
+    return await _service(session, current_user).list_history(limit=limit, offset=offset, day=day)

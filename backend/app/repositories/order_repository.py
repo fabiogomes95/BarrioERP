@@ -95,11 +95,13 @@ SEMPRE faça: inclua a verificação de tenant no WHERE da query.
 
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from app.models.menu import MenuCategory, MenuItem
 from app.models.order import Order, OrderItem, OrderStatus
+from app.models.payment import Payment, PaymentStatus
+from app.models.table import Table
 from app.repositories.base import BaseRepository
 
 
@@ -253,14 +255,21 @@ class OrderRepository(BaseRepository[Order]):
         *,
         limit: int = 50,
         offset: int = 0,
+        start=None,
+        end=None,
     ) -> list[Order]:
         """Histórico: comandas fechadas mais recentes primeiro (com itens)."""
+        filters = [
+            Order.establishment_id == establishment_id,
+            Order.closed_at.is_not(None),
+        ]
+        if start is not None:
+            filters.append(Order.closed_at >= start)
+        if end is not None:
+            filters.append(Order.closed_at < end)
         stmt = (
             select(Order)
-            .where(
-                Order.establishment_id == establishment_id,
-                Order.closed_at.is_not(None),
-            )
+            .where(*filters)
             .options(selectinload(Order.items))
             .order_by(Order.closed_at.desc())
             .limit(limit)
@@ -280,6 +289,52 @@ class OrderRepository(BaseRepository[Order]):
             Order.establishment_id == establishment_id,
             Order.closed_at.is_(None),
         )
+
+    async def count_non_table_today(self, establishment_id: UUID, start, end) -> int:
+        """Conta pedidos não-mesa criados hoje (para auto-numeração)."""
+        from sqlalchemy import func as sqlfunc
+        stmt = (
+            select(sqlfunc.count(Order.id))
+            .where(
+                Order.establishment_id == establishment_id,
+                Order.table_id.is_(None),
+                Order.created_at >= start,
+                Order.created_at < end,
+            )
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar() or 0
+
+    async def list_fiado(self, establishment_id: UUID) -> list:
+        """Comandas FECHADAS com saldo devedor (paid < total)."""
+        paid_subq = (
+            select(
+                Payment.order_id,
+                func.sum(Payment.amount).label("paid"),
+            )
+            .where(Payment.status == PaymentStatus.CONFIRMED)
+            .group_by(Payment.order_id)
+            .subquery()
+        )
+
+        stmt = (
+            select(
+                Order,
+                func.coalesce(paid_subq.c.paid, 0).label("paid"),
+                Table.number.label("table_number"),
+            )
+            .outerjoin(paid_subq, Order.id == paid_subq.c.order_id)
+            .outerjoin(Table, Order.table_id == Table.id)
+            .where(
+                Order.establishment_id == establishment_id,
+                Order.status == OrderStatus.CLOSED,
+                Order.total > 0,
+                func.coalesce(paid_subq.c.paid, 0) < Order.total,
+            )
+            .order_by(Order.closed_at.desc())
+        )
+        result = await self.session.execute(stmt)
+        return list(result.all())
 
     # ── Queries de MenuItem (para validação ao adicionar itens) ───────────────
 

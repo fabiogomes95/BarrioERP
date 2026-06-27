@@ -1,7 +1,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { type Order, type Table, fetchOpenOrders, fetchTables, createOrder } from '../lib/api'
+import { type Order, type Table, type OrderType, fetchOpenOrders, fetchTables, createOrder } from '../lib/api'
 import { brl, timeAgo, ORDER_STATUS } from '../components/OrderDetailView'
+
+const ORDER_TYPE_LABEL: Record<string, string> = {
+  counter: 'Balcão',
+  delivery: 'Delivery',
+  pickup: 'Retirada',
+}
 
 // ── Helpers de modal ──────────────────────────────────────────────────────────
 
@@ -69,7 +75,7 @@ function OrderCard({ order, table, onClick }: {
           <div className="min-w-0">
             <p className="text-stone-100 text-sm font-semibold leading-tight truncate">{title}</p>
             <p className="text-stone-600 text-xs mt-0.5">
-              {table ? `Mesa ${table.number}` : 'Balcão'} · {timeAgo(order.created_at)}
+              {table ? `Mesa ${table.number}` : (ORDER_TYPE_LABEL[order.order_type] ?? 'Balcão')} · {timeAgo(order.created_at)}
             </p>
           </div>
         </div>
@@ -92,13 +98,21 @@ function OrderCard({ order, table, onClick }: {
 
 // ── Modal: Novo pedido (mesa opcional) ────────────────────────────────────────
 
+const ORDER_TYPES: { value: OrderType | 'table'; label: string; icon: string; desc: string }[] = [
+  { value: 'table',    label: 'Mesa',     icon: '🪑', desc: 'Selecione a mesa' },
+  { value: 'counter',  label: 'Balcão',   icon: '🍺', desc: 'Pedido no balcão' },
+  { value: 'delivery', label: 'Delivery', icon: '🛵', desc: 'Entrega no endereço' },
+  { value: 'pickup',   label: 'Retirada', icon: '📦', desc: 'Cliente retira' },
+]
+
 function NewOrderModal({ onClose, onCreated }: {
   onClose: () => void
   onCreated: (o: Order) => void
 }) {
   const [tables, setTables] = useState<Table[]>([])
   const [loading, setLoading] = useState(true)
-  const [tableId, setTableId] = useState('')           // '' = sem mesa (balcão)
+  const [mode, setMode] = useState<'table' | OrderType>('counter')
+  const [tableId, setTableId] = useState('')
   const [guestCount, setGuestCount] = useState('1')
   const [customerName, setCustomerName] = useState('')
   const [creating, setCreating] = useState(false)
@@ -113,10 +127,12 @@ function NewOrderModal({ onClose, onCreated }: {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
+    if (mode === 'table' && !tableId) { setError('Selecione uma mesa'); return }
     setCreating(true)
     try {
       const order = await createOrder({
-        table_id: tableId || null,
+        table_id: mode === 'table' ? (tableId || null) : null,
+        order_type: mode === 'table' ? 'counter' : mode,
         guest_count: Number(guestCount),
         customer_name: customerName.trim() || null,
       })
@@ -130,7 +146,23 @@ function NewOrderModal({ onClose, onCreated }: {
 
   return (
     <ModalOverlay onClose={onClose}>
-      <h2 className="text-stone-100 text-base font-bold mb-5">Novo pedido</h2>
+      <h2 className="text-stone-100 text-base font-bold mb-4">Novo pedido</h2>
+
+      {/* Seletor de tipo */}
+      <div className="grid grid-cols-4 gap-1.5 mb-4">
+        {ORDER_TYPES.map(t => (
+          <button key={t.value} type="button" onClick={() => setMode(t.value)}
+            className={[
+              'flex flex-col items-center gap-1 py-2.5 rounded-xl text-[11px] font-semibold transition-all border',
+              mode === t.value
+                ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                : 'text-stone-500 border-stone-800/60 hover:text-stone-300',
+            ].join(' ')}>
+            <span className="text-lg leading-none">{t.icon}</span>
+            {t.label}
+          </button>
+        ))}
+      </div>
 
       {error && (
         <p className="text-red-400 text-xs bg-red-500/10 border border-red-500/20
@@ -141,28 +173,32 @@ function NewOrderModal({ onClose, onCreated }: {
         <div className="text-center py-6 text-stone-600 text-sm">Carregando…</div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-3.5">
-          <Field label="Mesa">
-            <select value={tableId} onChange={e => setTableId(e.target.value)}
-              className={inputCls + ' appearance-none'} style={{ background: '#0d0b08' }}>
-              <option value="">Sem mesa (balcão / avulso)</option>
-              {tables.map(t => (
-                <option key={t.id} value={t.id}>
-                  Mesa {t.number} — {t.label}{t.section ? ` (${t.section})` : ''}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Pessoas">
-              <input type="number" min={1} max={200} required value={guestCount}
-                onChange={e => setGuestCount(e.target.value)}
-                className={inputCls} style={{ background: '#0d0b08' }} />
+          {mode === 'table' && (
+            <Field label="Mesa">
+              <select value={tableId} onChange={e => setTableId(e.target.value)}
+                className={inputCls + ' appearance-none'} style={{ background: '#0d0b08' }}>
+                <option value="">Selecione a mesa…</option>
+                {tables.map(t => (
+                  <option key={t.id} value={t.id}>
+                    Mesa {t.number} — {t.label}{t.section ? ` (${t.section})` : ''}
+                  </option>
+                ))}
+              </select>
             </Field>
-            <div />
-          </div>
+          )}
+          {mode === 'table' && (
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Pessoas">
+                <input type="number" min={1} max={200} required value={guestCount}
+                  onChange={e => setGuestCount(e.target.value)}
+                  className={inputCls} style={{ background: '#0d0b08' }} />
+              </Field>
+              <div />
+            </div>
+          )}
           <Field label="Cliente (opcional)">
             <input type="text" value={customerName} onChange={e => setCustomerName(e.target.value)}
-              placeholder="ex: João Silva"
+              placeholder="Deixe vazio para numerar automaticamente"
               className={inputCls} style={{ background: '#0d0b08' }} />
           </Field>
           <div className="flex gap-2 pt-1">
@@ -210,6 +246,18 @@ export default function PedidosPage() {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  // Auto-refresh silencioso a cada 30s
+  useEffect(() => {
+    const id = setInterval(async () => {
+      try {
+        const [os, ts] = await Promise.all([fetchOpenOrders(), fetchTables()])
+        setOrders(os)
+        setTables(ts)
+      } catch {}
+    }, 30_000)
+    return () => clearInterval(id)
+  }, [])
 
   const visible = orders.filter(o => {
     if (!search) return true

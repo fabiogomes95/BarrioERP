@@ -89,6 +89,18 @@ export default function DashboardPage() {
 
   useEffect(() => { load() }, [load])
 
+  // Auto-refresh silencioso a cada 30s
+  useEffect(() => {
+    const id = setInterval(async () => {
+      try {
+        const [os, ts] = await Promise.all([fetchOpenOrders(), fetchTables()])
+        setOrders(os)
+        setTables(ts)
+      } catch {}
+    }, 30_000)
+    return () => clearInterval(id)
+  }, [])
+
   // Métricas derivadas dos dados ao vivo
   const openCount = orders.length
   const billRequested = orders.filter(o => o.status === 'bill_requested').length

@@ -35,11 +35,13 @@ CONCEITO — Exception Handlers:
 """
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncGenerator
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.v1.router import api_router
 from app.core.config import settings
@@ -139,9 +141,20 @@ async def generic_domain_handler(request: Request, exc: BarrioError) -> JSONResp
 
 @app.get("/health", tags=["health"])
 async def health() -> dict:
-    """
-    Endpoint de saúde — usado pelo Docker e load balancers para verificar
-    se o servidor está funcionando.
-    Não requer autenticação.
-    """
     return {"status": "ok", "version": settings.APP_VERSION, "env": settings.ENVIRONMENT}
+
+
+# ── Frontend estático ─────────────────────────────────────────────────────────
+# Serve o build do React. Deve vir DEPOIS das rotas da API.
+
+_FRONTEND = Path(__file__).parent.parent.parent / "frontend" / "dist"
+
+if _FRONTEND.exists():
+    app.mount("/assets", StaticFiles(directory=str(_FRONTEND / "assets")), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str) -> FileResponse:
+        return FileResponse(
+            str(_FRONTEND / "index.html"),
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+        )

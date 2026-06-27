@@ -84,6 +84,15 @@ function IconCog() {
   )
 }
 
+function IconFiado() {
+  return (
+    <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round"
+        d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2zM9 12h6M9 8h4" />
+    </svg>
+  )
+}
+
 function IconLogout() {
   return (
     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
@@ -97,12 +106,13 @@ function IconLogout() {
 // ── Itens de navegação ────────────────────────────────────────────────────────
 
 const NAV = [
-  { to: '/dashboard', label: 'Início',   Icon: IconHome },
-  { to: '/mesas',     label: 'Mesas',    Icon: IconTable },
-  { to: '/pedidos',   label: 'Pedidos',  Icon: IconClipboard },
-  { to: '/caixa',     label: 'Caixa',    Icon: IconCash },
-  { to: '/cardapio',  label: 'Cardápio', Icon: IconBook },
-  { to: '/equipe',    label: 'Equipe',   Icon: IconUsers },
+  { to: '/dashboard', label: 'Início',        Icon: IconHome },
+  { to: '/mesas',     label: 'Mesas',         Icon: IconTable },
+  { to: '/pedidos',   label: 'Pedidos',       Icon: IconClipboard },
+  { to: '/caixa',     label: 'Caixa',         Icon: IconCash },
+  { to: '/fiado',     label: 'Fiado',         Icon: IconFiado },
+  { to: '/cardapio',  label: 'Cardápio',      Icon: IconBook },
+  { to: '/equipe',    label: 'Equipe',        Icon: IconUsers },
   { to: '/admin',     label: 'Administração', Icon: IconCog },
 ]
 

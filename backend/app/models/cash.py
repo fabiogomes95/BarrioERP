@@ -38,7 +38,7 @@ class CashSession(Base, UUIDMixin, TimestampMixin):
         PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     status: Mapped[CashSessionStatus] = mapped_column(
-        Enum(CashSessionStatus, name="cash_session_status_enum"),
+        Enum(CashSessionStatus, name="cash_session_status_enum", values_callable=lambda x: [e.value for e in x]),
         nullable=False,
         default=CashSessionStatus.OPEN,
         index=True,
@@ -68,7 +68,7 @@ class CashMovement(Base, UUIDMixin, TimestampMixin):
         index=True,
     )
     kind: Mapped[CashMovementKind] = mapped_column(
-        Enum(CashMovementKind, name="cash_movement_kind_enum"), nullable=False
+        Enum(CashMovementKind, name="cash_movement_kind_enum", values_callable=lambda x: [e.value for e in x]), nullable=False
     )
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     reason: Mapped[str | None] = mapped_column(String(300), nullable=True)

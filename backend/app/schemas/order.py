@@ -83,7 +83,7 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
-from app.models.order import OrderItemStatus, OrderStatus
+from app.models.order import OrderItemStatus, OrderStatus, OrderType
 from app.schemas.common import BaseSchema, TimestampSchema, UUIDSchema
 
 
@@ -191,6 +191,12 @@ class OrderDiscountUpdate(BaseSchema):
     )
 
 
+class OrderServiceFeeToggle(BaseSchema):
+    """Ativa ou desativa a taxa de serviço nesta comanda."""
+
+    apply: bool = Field(..., description="true = aplica taxa do estabelecimento; false = zera para esta comanda.")
+
+
 class OrderItemResponse(UUIDSchema, TimestampSchema):
     """
     Representação completa de um item da comanda.
@@ -234,6 +240,10 @@ class OrderCreate(BaseSchema):
     table_id: UUID | None = Field(
         default=None,
         description="Mesa que será atendida. Opcional — comanda de balcão/avulsa não tem mesa.",
+    )
+    order_type: OrderType = Field(
+        default=OrderType.COUNTER,
+        description="Tipo do pedido: counter (balcão), delivery ou pickup (retirada).",
     )
     guest_count: int = Field(
         default=1,
@@ -283,6 +293,11 @@ class OrderClose(BaseSchema):
     )
 
 
+class CustomerNameUpdate(BaseSchema):
+    """Atualiza o nome do cliente de uma comanda."""
+    customer_name: str | None = Field(None, max_length=200)
+
+
 class OrderResponse(UUIDSchema, TimestampSchema):
     """
     Representação completa de uma comanda com seus itens.
@@ -310,11 +325,13 @@ class OrderResponse(UUIDSchema, TimestampSchema):
     table_id: UUID | None
     waiter_id: UUID | None
     status: OrderStatus
+    order_type: OrderType
     guest_count: int
     customer_name: str | None
     notes: str | None
     subtotal: Decimal
     service_fee: Decimal
+    service_fee_percent: Decimal
     discount: Decimal
     total: Decimal
     closed_at: datetime | None

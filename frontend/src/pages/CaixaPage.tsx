@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  type DailyReport, type Order, type Table,
-  fetchDailyReport, fetchHistory, fetchTables,
+  type DailyReport, type Order, type Table, type CashSession,
+  fetchDailyReport, fetchHistory, fetchTables, fetchCurrentCash,
+  openCash, addCashMovement, closeCash,
 } from '../lib/api'
 import { brl } from '../components/OrderDetailView'
+import { maskCurrency, parseCurrency } from '../lib/format'
 
 const METHOD_LABEL: Record<string, string> = {
   cash: 'Dinheiro', credit_card: 'Crédito', debit_card: 'Débito',
@@ -12,7 +14,6 @@ const METHOD_LABEL: Record<string, string> = {
 }
 
 function todayISO() {
-  // Data local (America/Sao_Paulo via offset do navegador)
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
@@ -23,9 +24,9 @@ function timeOf(iso: string | null) {
 }
 
 function StatCard({ label, value, hint, accent = 'amber' }: {
-  label: string; value: string; hint?: string; accent?: 'amber' | 'green' | 'stone'
+  label: string; value: string; hint?: string; accent?: 'amber' | 'green' | 'stone' | 'red'
 }) {
-  const c = { amber: 'text-amber-400', green: 'text-green-400', stone: 'text-stone-200' }[accent]
+  const c = { amber: 'text-amber-400', green: 'text-green-400', stone: 'text-stone-200', red: 'text-red-400' }[accent]
   return (
     <div className="rounded-2xl p-4 border border-stone-800/60" style={{ background: '#161210' }}>
       <p className="text-stone-500 text-[11px] font-semibold uppercase tracking-wider">{label}</p>
@@ -35,25 +36,358 @@ function StatCard({ label, value, hint, accent = 'amber' }: {
   )
 }
 
+const inputCls = `w-full rounded-xl px-3.5 py-2.5 text-sm border border-stone-800/80
+  text-stone-100 placeholder-stone-700 focus:outline-none transition-all
+  focus:border-amber-500/40 focus:ring-1 focus:ring-amber-500/20`.replace(/\s+/g, ' ')
+
+// ── Painel de Caixa ───────────────────────────────────────────────────────────
+
+function CashPanel({ session, onRefresh }: { session: CashSession | null; onRefresh: () => void }) {
+  const [mode, setMode] = useState<'idle' | 'open' | 'movement' | 'close'>('idle')
+  const [openingAmount, setOpeningAmount] = useState('')
+  const [openNotes, setOpenNotes] = useState('')
+  const [movKind, setMovKind] = useState<'sangria' | 'suprimento'>('sangria')
+  const [movAmount, setMovAmount] = useState('')
+  const [movReason, setMovReason] = useState('')
+  const [countedAmount, setCountedAmount] = useState('')
+  const [closeNotes, setCloseNotes] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  function reset() { setMode('idle'); setError(null) }
+
+  async function handleOpen(e: React.FormEvent) {
+    e.preventDefault(); setSaving(true); setError(null)
+    try {
+      await openCash({
+        opening_amount: parseCurrency(openingAmount) || 0,
+        notes: openNotes.trim() || null,
+      })
+      reset(); onRefresh()
+    } catch (err) { setError(err instanceof Error ? err.message : 'Erro') }
+    finally { setSaving(false) }
+  }
+
+  async function handleMovement(e: React.FormEvent) {
+    e.preventDefault(); setSaving(true); setError(null)
+    try {
+      await addCashMovement({
+        kind: movKind,
+        amount: parseCurrency(movAmount),
+        reason: movReason.trim() || null,
+      })
+      reset(); onRefresh()
+    } catch (err) { setError(err instanceof Error ? err.message : 'Erro') }
+    finally { setSaving(false) }
+  }
+
+  async function handleClose(e: React.FormEvent) {
+    e.preventDefault(); setSaving(true); setError(null)
+    try {
+      await closeCash({
+        counted_amount: parseCurrency(countedAmount),
+        notes: closeNotes.trim() || null,
+      })
+      reset(); onRefresh()
+    } catch (err) { setError(err instanceof Error ? err.message : 'Erro') }
+    finally { setSaving(false) }
+  }
+
+  const diff = session?.difference != null ? Number(session.difference) : null
+
+  return (
+    <div className="rounded-2xl border border-stone-800/60 overflow-hidden mb-5"
+         style={{ background: '#161210' }}>
+      {/* Header */}
+      <div className="px-4 py-3 border-b border-stone-800/50 flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className={[
+            'w-2 h-2 rounded-full',
+            session?.status === 'open' ? 'bg-green-400' : 'bg-stone-600',
+          ].join(' ')} />
+          <h2 className="text-stone-200 text-sm font-bold">Controle de Caixa</h2>
+          {session?.status === 'open' && (
+            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full
+                             bg-green-500/10 text-green-400 border border-green-500/25">Aberto</span>
+          )}
+          {(!session || session.status === 'closed') && (
+            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full
+                             bg-stone-800/60 text-stone-500 border border-stone-700/40">Fechado</span>
+          )}
+        </div>
+        {session?.status === 'open' && mode === 'idle' && (
+          <div className="flex gap-2">
+            <button onClick={() => setMode('movement')}
+              className="text-xs font-semibold text-stone-400 border border-stone-700/60 rounded-lg px-3 py-1.5
+                         hover:bg-stone-800/50 transition-colors">
+              Mov.
+            </button>
+            <button onClick={() => setMode('close')}
+              className="text-xs font-semibold text-red-400 border border-red-500/30 rounded-lg px-3 py-1.5
+                         hover:bg-red-500/10 transition-colors">
+              Fechar caixa
+            </button>
+          </div>
+        )}
+      </div>
+
+      {error && (
+        <p className="text-red-400 text-xs bg-red-500/10 border border-red-500/20 rounded-xl mx-4 mt-3 px-3 py-2">
+          {error}
+        </p>
+      )}
+
+      {/* Caixa fechado — abrir */}
+      {(!session || session.status === 'closed') && mode === 'idle' && (
+        <div className="px-4 py-4">
+          <p className="text-stone-600 text-xs mb-3">Nenhum caixa aberto hoje.</p>
+          <button onClick={() => setMode('open')}
+            className="px-4 py-2 rounded-xl text-sm font-semibold bg-amber-500 hover:bg-amber-400
+                       text-stone-900 transition-colors">
+            Abrir caixa
+          </button>
+        </div>
+      )}
+
+      {/* Form: abrir caixa */}
+      {mode === 'open' && (
+        <form onSubmit={handleOpen} className="px-4 py-4 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-semibold text-stone-500 uppercase tracking-wider mb-1.5">
+                Fundo de troco (R$)
+              </label>
+              <input type="text" inputMode="numeric" value={openingAmount}
+                onChange={e => setOpeningAmount(maskCurrency(e.target.value))}
+                placeholder="0,00" className={inputCls} style={{ background: '#0d0b08' }} />
+            </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-stone-500 uppercase tracking-wider mb-1.5">
+                Observação (opcional)
+              </label>
+              <input type="text" value={openNotes} onChange={e => setOpenNotes(e.target.value)}
+                placeholder="…" className={inputCls} style={{ background: '#0d0b08' }} />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button type="button" onClick={reset}
+              className="px-4 py-2 rounded-xl text-sm font-semibold text-stone-400 border border-stone-700/60
+                         hover:bg-stone-800/50 transition-colors">
+              Cancelar
+            </button>
+            <button type="submit" disabled={saving}
+              className="px-6 py-2 rounded-xl text-sm font-semibold bg-amber-500 hover:bg-amber-400
+                         text-stone-900 disabled:opacity-40 transition-colors">
+              {saving ? 'Abrindo…' : 'Confirmar abertura'}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* Caixa aberto — resumo */}
+      {session?.status === 'open' && mode === 'idle' && (
+        <div className="px-4 py-3 space-y-2">
+          <div className="grid grid-cols-4 gap-3">
+            <div>
+              <p className="text-stone-600 text-[10px] uppercase tracking-wider font-semibold">Fundo</p>
+              <p className="text-stone-300 text-sm font-bold mt-0.5">{brl(session.opening_amount)}</p>
+            </div>
+            <div>
+              <p className="text-stone-600 text-[10px] uppercase tracking-wider font-semibold">Vendas dinheiro</p>
+              <p className="text-stone-300 text-sm font-bold mt-0.5">{brl(session.cash_sales)}</p>
+            </div>
+            <div>
+              <p className="text-stone-600 text-[10px] uppercase tracking-wider font-semibold">Suprimentos</p>
+              <p className="text-green-400 text-sm font-bold mt-0.5">+{brl(session.suprimentos)}</p>
+            </div>
+            <div>
+              <p className="text-stone-600 text-[10px] uppercase tracking-wider font-semibold">Sangrias</p>
+              <p className="text-red-400 text-sm font-bold mt-0.5">−{brl(session.sangrias)}</p>
+            </div>
+          </div>
+          <div className="flex items-center justify-between pt-2 border-t border-stone-800/50">
+            <span className="text-stone-400 text-xs font-semibold">Esperado em caixa</span>
+            <span className="text-amber-400 text-sm font-bold">{brl(session.expected_so_far)}</span>
+          </div>
+          {session.movements.length > 0 && (
+            <div className="space-y-1 pt-1">
+              {session.movements.map(m => (
+                <div key={m.id} className="flex items-center justify-between text-xs px-3 py-1.5 rounded-lg"
+                     style={{ background: '#0d0b08' }}>
+                  <span className={m.kind === 'sangria' ? 'text-red-400' : 'text-green-400'}>
+                    {m.kind === 'sangria' ? '↓ Sangria' : '↑ Suprimento'}
+                    {m.reason && <span className="text-stone-600 ml-1.5">{m.reason}</span>}
+                  </span>
+                  <span className="text-stone-300 font-semibold">
+                    {m.kind === 'sangria' ? '−' : '+'}{brl(m.amount)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Form: sangria / suprimento */}
+      {mode === 'movement' && (
+        <form onSubmit={handleMovement} className="px-4 py-4 space-y-3">
+          <div className="flex gap-1 p-1 rounded-xl" style={{ background: '#0d0b08' }}>
+            {(['sangria', 'suprimento'] as const).map(k => (
+              <button key={k} type="button" onClick={() => setMovKind(k)}
+                className={[
+                  'flex-1 py-2 rounded-lg text-xs font-semibold transition-all',
+                  movKind === k
+                    ? k === 'sangria' ? 'bg-red-500/15 text-red-400' : 'bg-green-500/15 text-green-400'
+                    : 'text-stone-500 hover:text-stone-300',
+                ].join(' ')}>
+                {k === 'sangria' ? '↓ Sangria (retirada)' : '↑ Suprimento (reforço)'}
+              </button>
+            ))}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-semibold text-stone-500 uppercase tracking-wider mb-1.5">
+                Valor (R$)
+              </label>
+              <input type="text" inputMode="numeric" required value={movAmount}
+                onChange={e => setMovAmount(maskCurrency(e.target.value))}
+                placeholder="0,00" className={inputCls} style={{ background: '#0d0b08' }} />
+            </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-stone-500 uppercase tracking-wider mb-1.5">
+                Motivo (opcional)
+              </label>
+              <input type="text" value={movReason} onChange={e => setMovReason(e.target.value)}
+                placeholder="…" className={inputCls} style={{ background: '#0d0b08' }} />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button type="button" onClick={reset}
+              className="px-4 py-2 rounded-xl text-sm font-semibold text-stone-400 border border-stone-700/60
+                         hover:bg-stone-800/50 transition-colors">
+              Cancelar
+            </button>
+            <button type="submit" disabled={saving}
+              className="px-6 py-2 rounded-xl text-sm font-semibold bg-amber-500 hover:bg-amber-400
+                         text-stone-900 disabled:opacity-40 transition-colors">
+              {saving ? 'Salvando…' : 'Registrar'}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* Form: fechar caixa */}
+      {mode === 'close' && (
+        <form onSubmit={handleClose} className="px-4 py-4 space-y-3">
+          <div className="rounded-xl px-3.5 py-3 text-sm" style={{ background: '#0d0b08' }}>
+            <p className="text-stone-500 text-xs mb-1">Esperado em caixa (dinheiro)</p>
+            <p className="text-amber-400 text-xl font-black">{brl(session!.expected_so_far)}</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-semibold text-stone-500 uppercase tracking-wider mb-1.5">
+                Valor contado (R$)
+              </label>
+              <input type="text" inputMode="numeric" required value={countedAmount}
+                onChange={e => setCountedAmount(maskCurrency(e.target.value))}
+                placeholder="0,00" className={inputCls} style={{ background: '#0d0b08' }} autoFocus />
+            </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-stone-500 uppercase tracking-wider mb-1.5">
+                Observação (opcional)
+              </label>
+              <input type="text" value={closeNotes} onChange={e => setCloseNotes(e.target.value)}
+                placeholder="…" className={inputCls} style={{ background: '#0d0b08' }} />
+            </div>
+          </div>
+          {countedAmount && (
+            <div className="flex justify-between text-xs px-1">
+              <span className="text-stone-500">Diferença</span>
+              {(() => {
+                const diff = parseCurrency(countedAmount) - Number(session!.expected_so_far)
+                return (
+                  <span className={diff < 0 ? 'text-red-400 font-bold' : 'text-green-400 font-bold'}>
+                    {diff >= 0 ? '+' : ''}{brl(diff)}
+                  </span>
+                )
+              })()}
+            </div>
+          )}
+          <div className="flex gap-2">
+            <button type="button" onClick={reset}
+              className="px-4 py-2 rounded-xl text-sm font-semibold text-stone-400 border border-stone-700/60
+                         hover:bg-stone-800/50 transition-colors">
+              Cancelar
+            </button>
+            <button type="submit" disabled={saving}
+              className="px-6 py-2 rounded-xl text-sm font-semibold bg-red-500/80 hover:bg-red-500
+                         text-stone-100 disabled:opacity-40 transition-colors">
+              {saving ? 'Fechando…' : 'Fechar caixa'}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* Caixa fechado — mostrar resumo do último fechamento */}
+      {session?.status === 'closed' && mode === 'idle' && session.closed_at && (
+        <div className="px-4 py-3 space-y-1 text-xs">
+          <div className="flex justify-between">
+            <span className="text-stone-600">Fechado às</span>
+            <span className="text-stone-400">{timeOf(session.closed_at)}</span>
+          </div>
+          {session.expected_amount != null && (
+            <div className="flex justify-between">
+              <span className="text-stone-600">Esperado</span>
+              <span className="text-stone-400">{brl(session.expected_amount)}</span>
+            </div>
+          )}
+          {session.counted_amount != null && (
+            <div className="flex justify-between">
+              <span className="text-stone-600">Contado</span>
+              <span className="text-stone-400">{brl(session.counted_amount)}</span>
+            </div>
+          )}
+          {diff != null && (
+            <div className="flex justify-between font-bold">
+              <span className="text-stone-500">Diferença</span>
+              <span className={diff < 0 ? 'text-red-400' : diff > 0 ? 'text-green-400' : 'text-stone-400'}>
+                {diff >= 0 ? '+' : ''}{brl(diff)}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Página Caixa ──────────────────────────────────────────────────────────────
+
 export default function CaixaPage() {
   const navigate = useNavigate()
   const [day, setDay] = useState(todayISO())
   const [report, setReport] = useState<DailyReport | null>(null)
   const [history, setHistory] = useState<Order[]>([])
   const [tables, setTables] = useState<Table[]>([])
+  const [cashSession, setCashSession] = useState<CashSession | null | undefined>(undefined)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  const loadCash = useCallback(async () => {
+    try { setCashSession(await fetchCurrentCash()) } catch {}
+  }, [])
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const [rep, hist, ts] = await Promise.all([
-        fetchDailyReport(day), fetchHistory(50), fetchTables(),
+      const [rep, hist, ts, cash] = await Promise.all([
+        fetchDailyReport(day), fetchHistory(100, day), fetchTables(), fetchCurrentCash(),
       ])
       setReport(rep)
       setHistory(hist)
       setTables(ts)
+      setCashSession(cash)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar')
     } finally {
@@ -85,6 +419,11 @@ export default function CaixaPage() {
             {error}
             <button onClick={load} className="ml-auto text-xs underline underline-offset-2">Tentar</button>
           </div>
+        )}
+
+        {/* Painel de caixa (sempre visível, só carrega quando day === hoje) */}
+        {cashSession !== undefined && day === todayISO() && (
+          <CashPanel session={cashSession} onRefresh={loadCash} />
         )}
 
         {loading ? (
@@ -148,10 +487,12 @@ export default function CaixaPage() {
             <div className="rounded-2xl border border-stone-800/60 overflow-hidden"
                  style={{ background: '#161210' }}>
               <div className="px-4 py-3 border-b border-stone-800/50">
-                <h2 className="text-stone-200 text-sm font-bold">Últimas comandas fechadas</h2>
+                <h2 className="text-stone-200 text-sm font-bold">
+                  Comandas fechadas {day !== todayISO() ? `em ${new Date(day + 'T12:00:00').toLocaleDateString('pt-BR')}` : 'hoje'}
+                </h2>
               </div>
               {history.length === 0 ? (
-                <p className="text-stone-600 text-xs px-4 py-4">Nenhuma comanda fechada ainda</p>
+                <p className="text-stone-600 text-xs px-4 py-4">Nenhuma comanda fechada no período</p>
               ) : (
                 history.map(o => {
                   const table = tables.find(t => t.id === o.table_id)

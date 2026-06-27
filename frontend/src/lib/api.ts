@@ -206,17 +206,21 @@ export interface OrderItem {
   cancelled_reason: string | null
 }
 
+export type OrderType = 'counter' | 'delivery' | 'pickup'
+
 export interface Order {
   id: string
   table_id: string | null
   waiter_id: string | null
   status: string
+  order_type: OrderType
   guest_count: number
   customer_name: string | null
   notes: string | null
   total: string
   subtotal: string
   service_fee: string
+  service_fee_percent: string
   discount: string
   closed_at: string | null
   version: number
@@ -232,6 +236,7 @@ export async function fetchOpenOrders(tableId?: string): Promise<Order[]> {
 
 export async function createOrder(data: {
   table_id?: string | null
+  order_type?: OrderType
   guest_count?: number
   customer_name?: string | null
   notes?: string | null
@@ -280,6 +285,13 @@ export async function setOrderDiscount(orderId: string, discount: number): Promi
   })
 }
 
+export async function setOrderServiceFee(orderId: string, apply: boolean): Promise<Order> {
+  return request<Order>(`/orders/${orderId}/service-fee`, {
+    method: 'PATCH',
+    body: JSON.stringify({ apply }),
+  })
+}
+
 export async function cancelOrderItem(
   orderId: string,
   itemId: string,
@@ -297,6 +309,17 @@ export async function closeOrder(
   return request<Order>(`/orders/${orderId}/close`, {
     method: 'PATCH',
     body: JSON.stringify({ version, notes: notes ?? null }),
+  })
+}
+
+export async function cancelOrder(orderId: string): Promise<void> {
+  return request<void>(`/orders/${orderId}`, { method: 'DELETE' })
+}
+
+export async function updateOrderCustomerName(orderId: string, name: string | null): Promise<Order> {
+  return request<Order>(`/orders/${orderId}/customer`, {
+    method: 'PATCH',
+    body: JSON.stringify({ customer_name: name }),
   })
 }
 
@@ -523,8 +546,24 @@ export async function fetchDailyReport(day?: string): Promise<DailyReport> {
   return request<DailyReport>(`/reports/daily${qs}`)
 }
 
-export async function fetchHistory(limit = 50): Promise<Order[]> {
-  return request<Order[]>(`/reports/history?limit=${limit}`)
+export async function fetchHistory(limit = 50, day?: string): Promise<Order[]> {
+  const dayQs = day ? `&day=${day}` : ''
+  return request<Order[]>(`/reports/history?limit=${limit}${dayQs}`)
+}
+
+export interface FiadoEntry {
+  order_id: string
+  customer_name: string | null
+  table_number: number | null
+  order_type: OrderType
+  total: string
+  paid: string
+  remaining: string
+  created_at: string
+}
+
+export async function fetchFiado(): Promise<FiadoEntry[]> {
+  return request<FiadoEntry[]>('/reports/fiado')
 }
 
 // ── Administração (configurações do bar) ─────────────────────────────────────────
@@ -548,6 +587,62 @@ export async function updateSettings(data: {
   service_fee_percent?: number
 }): Promise<BarSettings> {
   return request<BarSettings>('/admin/settings', { method: 'PATCH', body: JSON.stringify(data) })
+}
+
+// ── Controle de Caixa ────────────────────────────────────────────────────────
+
+export type CashMovementKind = 'sangria' | 'suprimento'
+export type CashSessionStatus = 'open' | 'closed'
+
+export interface CashMovement {
+  id: string
+  kind: CashMovementKind
+  amount: string
+  reason: string | null
+  created_at: string
+}
+
+export interface CashSession {
+  id: string
+  status: CashSessionStatus
+  opening_amount: string
+  opened_at: string
+  closed_at: string | null
+  counted_amount: string | null
+  expected_amount: string | null
+  difference: string | null
+  notes: string | null
+  movements: CashMovement[]
+  cash_sales: string
+  suprimentos: string
+  sangrias: string
+  expected_so_far: string
+}
+
+export async function fetchCurrentCash(): Promise<CashSession | null> {
+  return request<CashSession | null>('/cash/current')
+}
+
+export async function openCash(data: {
+  opening_amount?: number
+  notes?: string | null
+}): Promise<CashSession> {
+  return request<CashSession>('/cash/open', { method: 'POST', body: JSON.stringify(data) })
+}
+
+export async function addCashMovement(data: {
+  kind: CashMovementKind
+  amount: number
+  reason?: string | null
+}): Promise<CashSession> {
+  return request<CashSession>('/cash/movement', { method: 'POST', body: JSON.stringify(data) })
+}
+
+export async function closeCash(data: {
+  counted_amount: number
+  notes?: string | null
+}): Promise<CashSession> {
+  return request<CashSession>('/cash/close', { method: 'POST', body: JSON.stringify(data) })
 }
 
 // Atualiza o nome do bar guardado localmente (reflete no topo após navegar)

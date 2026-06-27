@@ -237,11 +237,11 @@ class PaymentService(BaseService):
             raise NotFoundError("Order", data.order_id)
 
         # 2. Verifica status pagável
-        # CLOSED e CANCELLED: comanda encerrada, não aceita mais pagamentos
-        if order.status not in (OrderStatus.OPEN, OrderStatus.BILL_REQUESTED):
+        # CLOSED é permitido para quitação de fiado; CANCELLED não aceita pagamento
+        if order.status not in (OrderStatus.OPEN, OrderStatus.BILL_REQUESTED, OrderStatus.CLOSED):
             raise BusinessRuleError(
                 f"Não é possível registrar pagamento em comanda com status "
-                f"'{order.status.value}'. Apenas comandas ABERTAS aceitam pagamentos."
+                f"'{order.status.value}'."
             )
 
         # 3. Calcula saldo devedor (quanto ainda falta pagar)
