@@ -3,20 +3,7 @@ import {
   type BarSettings,
   fetchSettings, updateSettings, getUser, updateLocalCompanyName,
 } from '../lib/api'
-
-const inputCls = `w-full rounded-xl px-3.5 py-2.5 text-sm border border-stone-800/80
-  text-stone-100 placeholder-stone-700 focus:outline-none transition-all
-  focus:border-amber-500/40 focus:ring-1 focus:ring-amber-500/20`.replace(/\s+/g, ' ')
-
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="block text-[11px] font-semibold text-stone-500 uppercase tracking-wider mb-1.5">{label}</label>
-      {children}
-      {hint && <p className="text-stone-700 text-[10px] mt-1">{hint}</p>}
-    </div>
-  )
-}
+import { inputCls, Field } from '../components/ui'
 
 export default function AdminPage() {
   const role = getUser()?.role

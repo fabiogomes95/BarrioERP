@@ -10,7 +10,7 @@ from fastapi import APIRouter, Query
 
 from app.api.deps import CurrentUser, DBSession
 from app.schemas.order import OrderResponse
-from app.schemas.report import DailyReport, FiadoEntry
+from app.schemas.report import DailyReport, FiadoCustomerGroup, FiadoEntry
 from app.services.order_service import OrderService
 
 router = APIRouter()
@@ -36,6 +36,19 @@ async def fiado_list(
     current_user: CurrentUser,
 ) -> list[FiadoEntry]:
     return await _service(session, current_user).list_fiado()
+
+
+@router.get(
+    "/fiado/grouped",
+    response_model=list[FiadoCustomerGroup],
+    summary="Fiados agrupados por cliente",
+    description="Retorna os fiados agrupados por nome do cliente com total consolidado.",
+)
+async def fiado_grouped(
+    session: DBSession,
+    current_user: CurrentUser,
+) -> list[FiadoCustomerGroup]:
+    return await _service(session, current_user).list_fiado_grouped()
 
 
 @router.get(

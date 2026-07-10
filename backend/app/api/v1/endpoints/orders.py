@@ -368,6 +368,27 @@ async def update_customer_name(
     return await _service(session, current_user).update_customer_name(order_id, data.customer_name)
 
 
+# ── PATCH /orders/{order_id}/reopen — Reabrir comanda (fiado) ────────────────
+
+
+@router.patch(
+    "/{order_id}/reopen",
+    response_model=OrderResponse,
+    summary="Reabrir comanda",
+    description=(
+        "Reabre uma comanda fechada que possui fiado (pagamento parcial). "
+        "A comanda volta ao status OPEN para adicionar mais itens. "
+        "Os pagamentos já registrados permanecem como crédito."
+    ),
+)
+async def reopen_order(
+    order_id: UUID,
+    session: DBSession,
+    current_user: CurrentUser,
+) -> OrderResponse:
+    return await _service(session, current_user).reopen_order(order_id)
+
+
 # ── DELETE /orders/{order_id} — Cancelar/apagar comanda ──────────────────────
 
 

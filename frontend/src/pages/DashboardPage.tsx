@@ -93,10 +93,13 @@ export default function DashboardPage() {
   useEffect(() => {
     const id = setInterval(async () => {
       try {
+        setError(null)
         const [os, ts] = await Promise.all([fetchOpenOrders(), fetchTables()])
         setOrders(os)
         setTables(ts)
-      } catch {}
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Erro ao atualizar')
+      }
     }, 30_000)
     return () => clearInterval(id)
   }, [])

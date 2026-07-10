@@ -1,11 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { register } from '../lib/api'
-
-const inputCls = `w-full rounded-xl px-3.5 py-2.5 text-sm
-  border border-stone-800/80 text-stone-100 placeholder-stone-700
-  focus:outline-none focus:border-amber-500/40 focus:ring-1 focus:ring-amber-500/20
-  disabled:opacity-40 transition-all`.replace(/\s+/g, ' ')
+import { inputCls } from '../components/ui'
 
 function Label({ htmlFor, children }: { htmlFor: string; children: React.ReactNode }) {
   return (

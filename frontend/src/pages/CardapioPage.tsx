@@ -7,6 +7,7 @@ import {
   createMenuItem, updateMenuItem,
 } from '../lib/api'
 import { maskCurrency, parseCurrency, toCurrencyInput } from '../lib/format'
+import { inputCls, Field, ModalOverlay as BaseModal, ErrorBanner } from '../components/ui'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -14,19 +15,10 @@ function brl(v: string | number) {
   return Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
-const inputCls = `w-full rounded-xl px-3.5 py-2.5 text-sm border border-stone-800/80
-  text-stone-100 placeholder-stone-700 focus:outline-none transition-all
-  focus:border-amber-500/40 focus:ring-1 focus:ring-amber-500/20`.replace(/\s+/g, ' ')
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="block text-[11px] font-semibold text-stone-500 uppercase tracking-wider mb-1.5">
-        {label}
-      </label>
-      {children}
-    </div>
-  )
+function ModalOverlay({ title, onClose, children }: {
+  title: string; onClose: () => void; children: React.ReactNode
+}) {
+  return <BaseModal title={title} onClose={onClose}>{children}</BaseModal>
 }
 
 // ── Toggle reutilizável ───────────────────────────────────────────────────────
@@ -49,37 +41,7 @@ function Toggle({ label, hint, value, onChange }: {
   )
 }
 
-// ── Modal base ────────────────────────────────────────────────────────────────
-
-function ModalOverlay({ title, onClose, children }: {
-  title: string; onClose: () => void; children: React.ReactNode
-}) {
-  useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', h)
-    return () => document.removeEventListener('keydown', h)
-  }, [onClose])
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
-         style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)' }}
-         onClick={onClose}>
-      <div className="w-full max-w-md rounded-3xl border border-stone-800/70 p-5"
-           style={{ background: '#161210' }}
-           onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-stone-100 text-base font-bold">{title}</h2>
-          <button onClick={onClose} className="text-stone-600 hover:text-stone-400 transition-colors p-1">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
-  )
-}
+// ── Modal base (wrapper para compatibilidade) ──────────────────────────────
 
 // ── Modal de categoria ────────────────────────────────────────────────────────
 
@@ -324,6 +286,7 @@ export default function CardapioPage() {
   const [loading, setLoading] = useState(true)
   const [mobileItems, setMobileItems] = useState(false)
   const [search, setSearch] = useState('')
+  const [error, setError] = useState<string | null>(null)
 
   const [catModal, setCatModal] = useState<{ open: boolean; editing: Category | null }>({ open: false, editing: null })
   const [itemModal, setItemModal] = useState<{ open: boolean; editing: MenuItem | null }>({ open: false, editing: null })
@@ -380,13 +343,17 @@ export default function CardapioPage() {
       await deleteCategory(cat.id)
       setCategories(prev => prev.filter(c => c.id !== cat.id))
       if (selectedCat?.id === cat.id) setSelectedCat(categories.find(c => c.id !== cat.id) ?? null)
-    } catch { /* ignore */ }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao excluir categoria')
+    }
   }
 
   const { active: activeItems, inactive: inactiveItems } = visibleItems(selectedCat)
 
   return (
-    <div className="h-full flex">
+    <div className="h-full flex flex-col">
+      {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
+      <div className="h-full flex">
 
       {/* ── Coluna de categorias ─────────────────────────────────── */}
       <div className={['flex flex-col shrink-0 border-r border-stone-800/50 w-full md:w-64',
@@ -577,6 +544,7 @@ export default function CardapioPage() {
           onClose={() => setItemModal({ open: false, editing: null })}
           onSaved={handleItemSaved} />
       )}
+      </div>
     </div>
   )
 }

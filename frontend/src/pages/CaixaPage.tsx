@@ -7,6 +7,7 @@ import {
 } from '../lib/api'
 import { brl } from '../components/OrderDetailView'
 import { maskCurrency, parseCurrency } from '../lib/format'
+import { inputCls } from '../components/ui'
 
 const METHOD_LABEL: Record<string, string> = {
   cash: 'Dinheiro', credit_card: 'Crédito', debit_card: 'Débito',
@@ -35,10 +36,6 @@ function StatCard({ label, value, hint, accent = 'amber' }: {
     </div>
   )
 }
-
-const inputCls = `w-full rounded-xl px-3.5 py-2.5 text-sm border border-stone-800/80
-  text-stone-100 placeholder-stone-700 focus:outline-none transition-all
-  focus:border-amber-500/40 focus:ring-1 focus:ring-amber-500/20`.replace(/\s+/g, ' ')
 
 // ── Painel de Caixa ───────────────────────────────────────────────────────────
 
@@ -373,8 +370,12 @@ export default function CaixaPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const loadCash = useCallback(async () => {
-    try { setCashSession(await fetchCurrentCash()) } catch {}
+  const refreshCash = useCallback(async () => {
+    try {
+      setCashSession(await fetchCurrentCash())
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao recarregar caixa')
+    }
   }, [])
 
   const load = useCallback(async () => {
@@ -423,7 +424,7 @@ export default function CaixaPage() {
 
         {/* Painel de caixa (sempre visível, só carrega quando day === hoje) */}
         {cashSession !== undefined && day === todayISO() && (
-          <CashPanel session={cashSession} onRefresh={loadCash} />
+          <CashPanel session={cashSession} onRefresh={refreshCash} />
         )}
 
         {loading ? (

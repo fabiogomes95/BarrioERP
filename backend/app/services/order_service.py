@@ -94,6 +94,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm.exc import StaleDataError
 
+from app.core.config import settings
 from app.core.exceptions import (
     BusinessRuleError,
     NotFoundError,
@@ -106,7 +107,7 @@ from app.models.payment import PaymentStatus
 from app.models.table import Table, TableStatus
 from app.repositories.order_repository import OrderRepository
 from app.repositories.table_repository import TableRepository
-from app.schemas.report import DailyReport, FiadoEntry, PaymentMethodTotal, TopItem
+from app.schemas.report import DailyReport, FiadoCustomerGroup, FiadoEntry, PaymentMethodTotal, TopItem
 from app.schemas.order import (
     OrderClose,
     OrderCreate,
@@ -145,7 +146,7 @@ class OrderService(BaseService):
 
     async def _next_order_number(self, establishment_id: UUID) -> str:
         """Retorna o próximo número sequencial do dia para pedidos sem mesa."""
-        tz = ZoneInfo("America/Sao_Paulo")
+        tz = ZoneInfo(settings.TIMEZONE)
         today = datetime.now(tz).date()
         start = datetime.combine(today, time.min, tzinfo=tz)
         end = start + timedelta(days=1)
@@ -308,7 +309,15 @@ class OrderService(BaseService):
             table.status = TableStatus.OCCUPIED
         await self.session.flush()
 
-        # 5. Retorna a comanda recém-criada (com items — vazia por enquanto)
+        # 5. Audit log
+        await self._log_audit(
+            action="order.open",
+            resource_type="order",
+            resource_id=str(order.id),
+            after=self._order_snapshot(order),
+        )
+
+        # 6. Retorna a comanda recém-criada (com items — vazia por enquanto)
         return await self._get_or_raise(order.id, establishment_id)
 
     async def list_open(
@@ -449,6 +458,18 @@ class OrderService(BaseService):
         # (após flush, os IDs e timestamps gerados pelo banco estão disponíveis)
         return await self._get_or_raise(order.id, establishment_id)
 
+    def _order_snapshot(self, order: Order) -> dict:
+        """Extrai um snapshot dos campos relevantes da order para audit log."""
+        return {
+            "status": order.status.value if order.status else None,
+            "subtotal": str(order.subtotal),
+            "discount": str(order.discount),
+            "service_fee": str(order.service_fee),
+            "total": str(order.total),
+            "customer_name": order.customer_name,
+            "guest_count": order.guest_count,
+        }
+
     async def close_order(self, order_id: UUID, data: OrderClose) -> OrderResponse:
         """
         Fecha uma comanda e libera a mesa.
@@ -522,6 +543,15 @@ class OrderService(BaseService):
             await self.session.flush()
         except StaleDataError:
             raise OptimisticLockError("Order")
+
+        # Audit log do fechamento
+        await self._log_audit(
+            action="order.close",
+            resource_type="order",
+            resource_id=str(order.id),
+            before={"status": "open"},
+            after={"status": "closed", "total": str(order.total)},
+        )
 
         # Retorna estado final da comanda
         return await self._get_or_raise(order.id, establishment_id)
@@ -600,6 +630,8 @@ class OrderService(BaseService):
                 "Para ajustes pós-serviço, utilize o processo de estorno manual."
             )
 
+        before_item = {"status": item.status.value, "quantity": item.quantity}
+
         # Cancela o item — campos de auditoria registram quando e por quê
         item.status = OrderItemStatus.CANCELLED
         item.cancelled_at = datetime.now(UTC)
@@ -609,6 +641,14 @@ class OrderService(BaseService):
         # _recalculate_total() itera sobre order.items já carregados em memória,
         # então o item recém-cancelado já reflete o novo status.
         self._recalculate_total(order)
+
+        await self._log_audit(
+            action="order_item.cancel",
+            resource_type="order_item",
+            resource_id=str(item.id),
+            before={"item": before_item, "order": self._order_snapshot(order)},
+            after={"item": {"status": "cancelled", "reason": reason}, "order": self._order_snapshot(order)},
+        )
 
         try:
             await self.session.flush()
@@ -733,7 +773,7 @@ class OrderService(BaseService):
         establishment_id = self._require_establishment()
         start = end = None
         if day is not None:
-            tz = ZoneInfo("America/Sao_Paulo")
+            tz = ZoneInfo(settings.TIMEZONE)
             start = datetime.combine(day, time.min, tzinfo=tz)
             end = start + timedelta(days=1)
         orders = await self._order_repo.list_closed(
@@ -749,6 +789,44 @@ class OrderService(BaseService):
             raise BusinessRuleError("Não é possível editar uma comanda cancelada.")
         order.customer_name = name
         await self.session.flush()
+        return await self._get_or_raise(order.id, establishment_id)
+
+    async def reopen_order(self, order_id: UUID) -> OrderResponse:
+        """
+        Reabre uma comanda fechada que possui fiado (pagamento parcial).
+
+        Útil quando o cliente volta para adicionar mais itens à conta.
+        A comanda volta ao status OPEN para receber novos itens/pagamentos.
+        Os pagamentos já registrados permanecem como crédito.
+        """
+        establishment_id = self._require_establishment()
+        order = await self._get_or_raise(order_id, establishment_id)
+
+        if order.status != OrderStatus.CLOSED:
+            raise BusinessRuleError(
+                "Apenas comandas FECHADAS podem ser reabertas."
+            )
+
+        # Verifica se já foi totalmente paga — se sim, não faz sentido reabrir
+        total_paid = await self._order_repo.sum_confirmed_payments(order_id)
+        if total_paid >= order.total:
+            raise BusinessRuleError(
+                "Esta comanda já foi totalmente paga. Não é possível reabrir."
+            )
+
+        order.status = OrderStatus.OPEN
+        order.closed_at = None
+
+        await self.session.flush()
+
+        await self._log_audit(
+            action="order.reopen",
+            resource_type="order",
+            resource_id=str(order.id),
+            before={"status": "closed"},
+            after={"status": "open"},
+        )
+
         return await self._get_or_raise(order.id, establishment_id)
 
     async def cancel_order(self, order_id: UUID) -> None:
@@ -770,6 +848,14 @@ class OrderService(BaseService):
 
         await self.session.flush()
 
+        await self._log_audit(
+            action="order.cancel",
+            resource_type="order",
+            resource_id=str(order.id),
+            before={"status": "open"},
+            after={"status": "cancelled"},
+        )
+
     async def list_fiado(self) -> list[FiadoEntry]:
         """Comandas com pagamento parcial (fiado)."""
         establishment_id = self._require_establishment()
@@ -784,8 +870,27 @@ class OrderService(BaseService):
                 paid=paid,
                 remaining=order.total - paid,
                 created_at=order.created_at,
+                version=order.version,
             )
             for order, paid, table_number in rows
+        ]
+
+    async def list_fiado_grouped(self) -> list[FiadoCustomerGroup]:
+        """Fiados agrupados por cliente, com total consolidado."""
+        entries = await self.list_fiado()
+        groups: dict[str, list[FiadoEntry]] = {}
+        for entry in entries:
+            name = entry.customer_name or "Avulso"
+            groups.setdefault(name, []).append(entry)
+
+        return [
+            FiadoCustomerGroup(
+                customer_name=name,
+                entries=sorted(e_list, key=lambda e: e.created_at, reverse=True),
+                total_remaining=sum(e.remaining for e in e_list),
+                total_debt=sum(e.total for e in e_list),
+            )
+            for name, e_list in sorted(groups.items())
         ]
 
     async def daily_report(self, day: date | None = None) -> DailyReport:
@@ -797,7 +902,7 @@ class OrderService(BaseService):
         local; closed_at é armazenado em UTC e comparado com o intervalo local).
         """
         establishment_id = self._require_establishment()
-        tz = ZoneInfo("America/Sao_Paulo")
+        tz = ZoneInfo(settings.TIMEZONE)
         target = day or datetime.now(tz).date()
         start = datetime.combine(target, time.min, tzinfo=tz)
         end = start + timedelta(days=1)

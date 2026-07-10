@@ -316,6 +316,10 @@ export async function cancelOrder(orderId: string): Promise<void> {
   return request<void>(`/orders/${orderId}`, { method: 'DELETE' })
 }
 
+export async function reopenOrder(orderId: string): Promise<Order> {
+  return request<Order>(`/orders/${orderId}/reopen`, { method: 'PATCH' })
+}
+
 export async function updateOrderCustomerName(orderId: string, name: string | null): Promise<Order> {
   return request<Order>(`/orders/${orderId}/customer`, {
     method: 'PATCH',
@@ -560,10 +564,22 @@ export interface FiadoEntry {
   paid: string
   remaining: string
   created_at: string
+  version: number
+}
+
+export interface FiadoCustomerGroup {
+  customer_name: string
+  entries: FiadoEntry[]
+  total_remaining: string
+  total_debt: string
 }
 
 export async function fetchFiado(): Promise<FiadoEntry[]> {
   return request<FiadoEntry[]>('/reports/fiado')
+}
+
+export async function fetchFiadoGrouped(): Promise<FiadoCustomerGroup[]> {
+  return request<FiadoCustomerGroup[]>('/reports/fiado/grouped')
 }
 
 // ── Administração (configurações do bar) ─────────────────────────────────────────

@@ -8,6 +8,7 @@ import {
 } from '../lib/api'
 import { maskCurrency, parseCurrency, toCurrencyInput } from '../lib/format'
 import { printComanda, printCozinha, type KitchenItem } from '../lib/print'
+import { inputCls, Field, ModalOverlay } from './ui'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -32,39 +33,7 @@ export const ORDER_STATUS = {
   finalized:       { label: 'Final.',  color: 'text-stone-500',  bg: 'bg-stone-800/40',  border: 'border-stone-700/40' },
 } as Record<string, { label: string; color: string; bg: string; border: string }>
 
-const inputCls = `w-full rounded-xl px-3.5 py-2.5 text-sm border border-stone-800/80
-  text-stone-100 placeholder-stone-700 focus:outline-none transition-all
-  focus:border-amber-500/40 focus:ring-1 focus:ring-amber-500/20`.replace(/\s+/g, ' ')
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="block text-[11px] font-semibold text-stone-500 uppercase tracking-wider mb-1.5">
-        {label}
-      </label>
-      {children}
-    </div>
-  )
-}
-
-function ModalOverlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
-  useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', h)
-    return () => document.removeEventListener('keydown', h)
-  }, [onClose])
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
-         style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)' }}
-         onClick={onClose}>
-      <div className="w-full max-w-md rounded-3xl border border-stone-800/70 p-5"
-           style={{ background: '#161210' }}
-           onClick={e => e.stopPropagation()}>
-        {children}
-      </div>
-    </div>
-  )
-}
 
 // ── Linha de item da comanda ──────────────────────────────────────────────────
 

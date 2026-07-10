@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     ENVIRONMENT: Literal["development", "staging", "production"] = "development"
     DEBUG: bool = False
     SECRET_KEY: str
-    ALLOWED_HOSTS: list[str] = ["*"]
+    ALLOWED_HOSTS: list[str] | None = None  # None → usa default por ambiente
 
     # Database
     POSTGRES_HOST: str = "localhost"
@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     DEFAULT_PAGE_SIZE: int = 20
     MAX_PAGE_SIZE: int = 100
 
+    # Timezone
+    TIMEZONE: str = "America/Sao_Paulo"
+
     @property
     def database_url(self) -> str:
         return (
@@ -62,6 +65,15 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.ENVIRONMENT == "production"
+
+    @property
+    def cors_origins(self) -> list[str]:
+        """Retorna origens permitidas para CORS, com default seguro por ambiente."""
+        if self.ALLOWED_HOSTS is not None:
+            return self.ALLOWED_HOSTS
+        if self.is_production:
+            return ["http://localhost:5173", "http://localhost:8000"]
+        return ["*"]
 
 
 @lru_cache

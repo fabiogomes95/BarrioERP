@@ -8,6 +8,7 @@ import {
   createOrder,
   fetchOpenOrders,
 } from '../lib/api'
+import { inputCls, Field, ModalOverlay } from '../components/ui'
 
 // ── Config de status ──────────────────────────────────────────────────────────
 
@@ -262,46 +263,7 @@ function OpenOrderModal({ table, onClose, onOpened }: OpenOrderModalProps) {
   )
 }
 
-// ── Overlay genérico ──────────────────────────────────────────────────────────
-
-function ModalOverlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
-  }, [onClose])
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
-         style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}>
-      <div
-        className="w-full max-w-sm rounded-3xl border border-stone-800/70 p-5"
-        style={{ background: '#161210' }}
-        onClick={e => e.stopPropagation()}
-      >
-        {children}
-      </div>
-    </div>
-  )
-}
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-const inputCls = `w-full rounded-xl px-3.5 py-2.5 text-sm border border-stone-800/80
-  text-stone-100 placeholder-stone-700 focus:outline-none
-  focus:border-amber-500/40 focus:ring-1 focus:ring-amber-500/20 transition-all`
-  .replace(/\s+/g, ' ')
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="block text-[11px] font-semibold text-stone-500 uppercase tracking-wider mb-1.5">
-        {label}
-      </label>
-      {children}
-    </div>
-  )
-}
 
 // ── Página ────────────────────────────────────────────────────────────────────
 
@@ -335,7 +297,12 @@ export default function MesasPage() {
   // Auto-refresh silencioso a cada 30s
   useEffect(() => {
     const id = setInterval(async () => {
-      try { setTables(await fetchTables()) } catch {}
+      try {
+        setError(null)
+        setTables(await fetchTables())
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Erro ao atualizar mesas')
+      }
     }, 30_000)
     return () => clearInterval(id)
   }, [])

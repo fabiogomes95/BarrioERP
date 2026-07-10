@@ -9,6 +9,7 @@ import {
   type UserRole,
   updateUser,
 } from '../lib/api'
+import { ModalOverlay, inputCls } from '../components/ui'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -37,25 +38,7 @@ function initials(name: string) {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
 
-// ── Modal overlay ─────────────────────────────────────────────────────────────
 
-function ModalOverlay({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [onClose])
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}
-      onClick={onClose}
-    >
-      <div onClick={e => e.stopPropagation()}>{children}</div>
-    </div>
-  )
-}
 
 // ── UserModal (criar / editar) ────────────────────────────────────────────────
 
@@ -112,9 +95,6 @@ function UserModal({
       setLoading(false)
     }
   }
-
-  const inputCls =
-    'w-full rounded-xl px-3.5 py-2.5 text-sm border border-stone-800/80 text-stone-100 placeholder-stone-700 focus:outline-none focus:border-amber-500/40 focus:ring-1 focus:ring-amber-500/20 disabled:opacity-40 transition-all'
 
   return (
     <ModalOverlay onClose={onClose}>

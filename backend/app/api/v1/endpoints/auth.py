@@ -25,9 +25,10 @@ CONCEITO — APIRouter:
     O router é registrado no router.py central.
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 
 from app.api.deps import CurrentUser, DBSession
+from app.core.rate_limit import limiter
 from app.models.company import Company
 from app.schemas.auth import LoginRequest, TokenResponse, UserMeResponse
 from app.services.auth_service import AuthService
@@ -43,7 +44,9 @@ router = APIRouter()
     summary="Login com e-mail e senha",
     # status_code padrão é 200 — explícito para clareza
 )
+@limiter.limit("10/minute")
 async def login(
+    request: Request,
     credentials: LoginRequest,  # Pydantic valida o JSON automaticamente
     session: DBSession,         # FastAPI injeta a sessão via get_db()
 ) -> TokenResponse:

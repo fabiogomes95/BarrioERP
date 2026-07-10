@@ -39,6 +39,16 @@ class FiadoEntry(BaseSchema):
     paid: Decimal
     remaining: Decimal
     created_at: datetime
+    version: int
+
+
+class FiadoCustomerGroup(BaseSchema):
+    """Agrupamento de fiados por cliente."""
+
+    customer_name: str
+    entries: list[FiadoEntry]
+    total_remaining: Decimal
+    total_debt: Decimal
 
 
 class DailyReport(BaseSchema):

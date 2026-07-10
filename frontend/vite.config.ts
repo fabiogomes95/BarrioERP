@@ -8,6 +8,7 @@ export default defineConfig({
     tailwindcss(),
   ],
   server: {
+    host: '0.0.0.0',
     port: 5173,
     // Proxy: redireciona /api para o backend FastAPI.
     // O frontend chama /api/v1/... e o Vite repassa para localhost:8000.

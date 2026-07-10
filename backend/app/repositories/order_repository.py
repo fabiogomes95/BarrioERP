@@ -93,6 +93,7 @@ NUNCA faça: get(order_id) e depois cheque order.establishment_id == establishme
 SEMPRE faça: inclua a verificação de tenant no WHERE da query.
 """
 
+from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -176,6 +177,20 @@ class OrderRepository(BaseRepository[Order]):
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def sum_confirmed_payments(self, order_id: UUID) -> Decimal:
+        """
+        Soma o total de pagamentos CONFIRMADOS de uma comanda.
+
+        Usado pelo OrderService.reopen_order() para verificar se a
+        comanda já foi totalmente paga.
+        """
+        stmt = select(func.coalesce(func.sum(Payment.amount), 0)).where(
+            Payment.order_id == order_id,
+            Payment.status == PaymentStatus.CONFIRMED,
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one()
+
     async def list_open(
         self,
         establishment_id: UUID,
@@ -208,6 +223,7 @@ class OrderRepository(BaseRepository[Order]):
         filters = [
             Order.establishment_id == establishment_id,
             Order.closed_at.is_(None),
+            Order.status != OrderStatus.CANCELLED,
         ]
 
         # Filtro opcional: se informado, restringe a uma mesa específica

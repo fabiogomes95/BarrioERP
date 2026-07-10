@@ -26,6 +26,8 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.audit_service import AuditService
+
 
 class BaseService:
     """
@@ -56,3 +58,25 @@ class BaseService:
         self.company_id = company_id
         self.establishment_id = establishment_id
         self.user_id = user_id  # quem está executando a ação (para audit logs)
+        self._audit = AuditService(session)
+
+    async def _log_audit(
+        self,
+        *,
+        action: str,
+        resource_type: str,
+        resource_id: str | None = None,
+        before: object | None = None,
+        after: object | None = None,
+    ) -> None:
+        """Atalho para registrar audit log com contexto do tenant atual."""
+        await self._audit.log(
+            company_id=self.company_id,
+            establishment_id=self.establishment_id,
+            user_id=self.user_id,
+            action=action,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            before=before,
+            after=after,
+        )

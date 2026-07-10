@@ -1,9 +1,12 @@
 import { useEffect, useState, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
-  fetchFiado, fetchOrderPayments, registerPayment,
-  type FiadoEntry, type Payment, type PaymentMethod,
+  type FiadoCustomerGroup,
+  fetchFiadoGrouped, fetchOrderPayments, registerPayment, reopenOrder,
+  type Payment, type PaymentMethod,
 } from '../lib/api'
 import { maskCurrency, parseCurrency, toCurrencyInput } from '../lib/format'
+import { inputCls, ErrorBanner, Spinner } from '../components/ui'
 
 function brl(v: string | number) {
   return Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -27,10 +30,6 @@ const METHOD_LABEL: Record<string, string> = Object.fromEntries(
   PAYMENT_METHODS.map(m => [m.value, m.label]),
 )
 
-const inputCls = `w-full rounded-xl px-3.5 py-2.5 text-sm border border-stone-800/80
-  text-stone-100 placeholder-stone-700 focus:outline-none transition-all
-  focus:border-amber-500/40 focus:ring-1 focus:ring-amber-500/20`.replace(/\s+/g, ' ')
-
 // ── Modal de pagamento do fiado ───────────────────────────────────────────────
 
 function FiadoPaymentModal({
@@ -38,7 +37,7 @@ function FiadoPaymentModal({
   onClose,
   onPaid,
 }: {
-  entry: FiadoEntry
+  entry: { order_id: string; total: string | number; paid: string | number; table_number?: number | null; customer_name?: string | null }
   onClose: () => void
   onPaid: () => void
 }) {
@@ -50,7 +49,6 @@ function FiadoPaymentModal({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // saldo em tempo real (pode mudar ao registrar pagamentos)
   const [livePaid, setLivePaid] = useState(Number(entry.paid))
   const total = Number(entry.total)
   const remaining = Math.max(0, Math.round((total - livePaid) * 100) / 100)
@@ -75,12 +73,10 @@ function FiadoPaymentModal({
     refresh().finally(() => setLoading(false))
   }, [refresh])
 
-  // pré-preenche com o saldo devedor
   useEffect(() => {
     if (!loading) setAmount(remaining > 0 ? toCurrencyInput(remaining) : '')
   }, [remaining, loading])
 
-  // fecha o modal via Escape
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', h)
@@ -103,10 +99,7 @@ function FiadoPaymentModal({
       })
       const newPaid = await refresh()
       setTendered('')
-      if (newPaid >= total) {
-        // fiado quitado — fecha modal e atualiza lista
-        onPaid()
-      }
+      if (newPaid >= total) onPaid()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao registrar pagamento')
     } finally {
@@ -115,17 +108,12 @@ function FiadoPaymentModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
-      style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)' }}
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-md rounded-3xl border border-stone-800/70 p-5"
-        style={{ background: '#161210' }}
-        onClick={e => e.stopPropagation()}
-      >
-        {/* Cabeçalho */}
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
+         style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)' }}
+         onClick={onClose}>
+      <div className="w-full max-w-md rounded-3xl border border-stone-800/70 p-5"
+           style={{ background: '#161210' }}
+           onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-stone-100 text-base font-bold">Receber fiado</h2>
@@ -140,7 +128,6 @@ function FiadoPaymentModal({
           </button>
         </div>
 
-        {/* Resumo */}
         <div className="rounded-2xl p-4 mb-4 space-y-1.5" style={{ background: '#0d0b08' }}>
           <div className="flex justify-between text-sm">
             <span className="text-stone-500">Total da conta</span>
@@ -164,7 +151,6 @@ function FiadoPaymentModal({
           </p>
         )}
 
-        {/* Pagamentos já registrados */}
         {payments.length > 0 && (
           <div className="space-y-1 mb-4">
             {payments.map(p => (
@@ -190,7 +176,6 @@ function FiadoPaymentModal({
           </div>
         ) : (
           <form onSubmit={handlePay} className="space-y-3">
-            {/* Forma de pagamento */}
             <div className="grid grid-cols-5 gap-1.5">
               {PAYMENT_METHODS.map(m => (
                 <button key={m.value} type="button" onClick={() => setMethod(m.value)}
@@ -247,18 +232,144 @@ function FiadoPaymentModal({
   )
 }
 
+// ── Card de entrada de fiado individual ────────────────────────────────────────
+
+function FiadoEntryCard({
+  entry,
+  onReceive,
+  onReopen,
+  reopening,
+}: {
+  entry: FiadoCustomerGroup['entries'][number]
+  onReceive: () => void
+  onReopen: () => void
+  reopening?: boolean
+}) {
+  const total = Number(entry.total)
+  const paid = Number(entry.paid)
+  const remaining = Number(entry.remaining)
+
+  return (
+    <div className="rounded-xl border border-stone-800/60 p-4"
+         style={{ background: '#161210' }}>
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-stone-400 text-xs">
+              {new Date(entry.created_at).toLocaleDateString('pt-BR')}
+              {' · '}
+              {ORDER_TYPE_LABEL[entry.order_type] ?? entry.order_type}
+            </span>
+          </div>
+          <div className="mt-2 flex items-center gap-4 text-xs">
+            <span className="text-stone-500">
+              Total: <span className="text-stone-300 font-medium">{brl(total)}</span>
+            </span>
+            <span className="text-green-600">
+              Pago: <span className="text-green-500 font-medium">{brl(paid)}</span>
+            </span>
+          </div>
+        </div>
+        <div className="text-right shrink-0">
+          <p className="text-amber-400 text-2xl font-bold leading-none">{brl(remaining)}</p>
+        </div>
+      </div>
+
+      <div className="mt-3 flex gap-2">
+        <button onClick={onReceive}
+          className="flex-1 py-2 rounded-xl text-sm font-semibold
+                     bg-amber-500 hover:bg-amber-400 text-stone-900 transition-colors">
+          Receber {brl(remaining)}
+        </button>
+        <button onClick={onReopen} disabled={reopening}
+          className="py-2 px-4 rounded-xl text-sm font-semibold
+                     border border-stone-700 text-stone-300 hover:bg-stone-700/50
+                     disabled:opacity-40 transition-colors">
+          {reopening ? 'Abrindo…' : 'Reabrir'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Grupo de cliente ──────────────────────────────────────────────────────────
+
+function CustomerGroup({
+  group,
+  onReceive,
+  onReopen,
+  reopeningId,
+}: {
+  group: FiadoCustomerGroup
+  onReceive: (entry: FiadoCustomerGroup['entries'][number]) => void
+  onReopen: (entry: FiadoCustomerGroup['entries'][number]) => void
+  reopeningId?: string | null
+}) {
+  const [collapsed, setCollapsed] = useState(false)
+
+  return (
+    <div className="rounded-2xl border border-stone-800/60 overflow-hidden"
+         style={{ background: '#0f0d0a' }}>
+      {/* Header do grupo */}
+      <button onClick={() => setCollapsed(!collapsed)}
+        className="w-full flex items-center justify-between px-5 py-4 hover:bg-stone-800/30 transition-colors text-left">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-stone-800 flex items-center justify-center text-sm font-bold text-amber-400">
+            {group.customer_name.charAt(0).toUpperCase()}
+          </div>
+          <div>
+            <h2 className="text-stone-100 font-bold">{group.customer_name}</h2>
+            <p className="text-stone-500 text-xs">
+              {group.entries.length} {group.entries.length === 1 ? 'comanda' : 'comandas'}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="text-right">
+            <p className="text-[10px] text-stone-600 uppercase tracking-wider">Débito total</p>
+            <p className="text-amber-400 font-black text-lg">{brl(group.total_remaining)}</p>
+          </div>
+          <svg className={['w-5 h-5 text-stone-500 transition-transform', collapsed ? '' : 'rotate-180'].join(' ')}
+               fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+      </button>
+
+      {/* Lista de entradas */}
+      {!collapsed && (
+        <div className="px-4 pb-4 space-y-2">
+          {group.entries.map(entry => (
+            <FiadoEntryCard
+              key={entry.order_id}
+              entry={entry}
+              onReceive={() => onReceive(entry)}
+              onReopen={() => onReopen(entry)}
+              reopening={reopeningId === entry.order_id}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Página Fiado ───────────────────────────────────────────────────────────────
 
 export default function FiadoPage() {
-  const [entries, setEntries] = useState<FiadoEntry[]>([])
+  const navigate = useNavigate()
+  const [groups, setGroups] = useState<FiadoCustomerGroup[]>([])
   const [loading, setLoading] = useState(true)
-  const [payingEntry, setPayingEntry] = useState<FiadoEntry | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [payingEntry, setPayingEntry] = useState<FiadoCustomerGroup['entries'][number] | null>(null)
+  const [reopening, setReopening] = useState<string | null>(null)
 
   function load() {
     setLoading(true)
-    fetchFiado()
-      .then(setEntries)
-      .catch(() => {})
+    setError(null)
+    fetchFiadoGrouped()
+      .then(setGroups)
+      .catch(err => setError(err instanceof Error ? err.message : 'Erro ao carregar fiado'))
       .finally(() => setLoading(false))
   }
 
@@ -267,6 +378,18 @@ export default function FiadoPage() {
   function handlePaid() {
     setPayingEntry(null)
     load()
+  }
+
+  async function handleReopen(entry: FiadoCustomerGroup['entries'][number]) {
+    setReopening(entry.order_id)
+    setError(null)
+    try {
+      await reopenOrder(entry.order_id)
+      navigate(`/comanda/${entry.order_id}`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao reabrir comanda')
+      setReopening(null)
+    }
   }
 
   return (
@@ -286,9 +409,11 @@ export default function FiadoPage() {
         </button>
       </div>
 
+      {error && <ErrorBanner message={error} onRetry={load} />}
+
       {loading ? (
-        <div className="text-center py-16 text-stone-600 text-sm">Carregando...</div>
-      ) : entries.length === 0 ? (
+        <Spinner text="Carregando fiados..." />
+      ) : groups.length === 0 ? (
         <div className="text-center py-16">
           <div className="text-5xl mb-4">✅</div>
           <p className="text-stone-300 font-semibold">Nenhuma conta em fiado</p>
@@ -296,48 +421,14 @@ export default function FiadoPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {entries.map(entry => (
-            <div
-              key={entry.order_id}
-              className="rounded-xl border border-stone-800/60 p-4"
-              style={{ background: '#161210' }}
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0 flex-1">
-                  <p className="text-stone-100 font-semibold truncate">
-                    {entry.table_number
-                      ? `Mesa ${entry.table_number}`
-                      : entry.customer_name ?? '—'}
-                  </p>
-                  <p className="text-stone-500 text-xs mt-0.5">
-                    {ORDER_TYPE_LABEL[entry.order_type] ?? entry.order_type}
-                    {' · '}
-                    {new Date(entry.created_at).toLocaleDateString('pt-BR')}
-                  </p>
-                  <div className="mt-2.5 flex items-center gap-4 text-xs">
-                    <span className="text-stone-500">
-                      Total: <span className="text-stone-300 font-medium">{brl(entry.total)}</span>
-                    </span>
-                    <span className="text-green-600">
-                      Pago: <span className="text-green-500 font-medium">{brl(entry.paid)}</span>
-                    </span>
-                  </div>
-                </div>
-                <div className="text-right shrink-0">
-                  <p className="text-[10px] text-stone-600 uppercase tracking-wider mb-1">Falta</p>
-                  <p className="text-amber-400 text-2xl font-bold leading-none">{brl(entry.remaining)}</p>
-                </div>
-              </div>
-
-              {/* Botão receber */}
-              <button
-                onClick={() => setPayingEntry(entry)}
-                className="mt-3 w-full py-2 rounded-xl text-sm font-semibold
-                           bg-amber-500 hover:bg-amber-400 text-stone-900 transition-colors"
-              >
-                Receber {brl(entry.remaining)}
-              </button>
-            </div>
+          {groups.map(group => (
+            <CustomerGroup
+              key={group.customer_name}
+              group={group}
+              onReceive={entry => setPayingEntry(entry)}
+              onReopen={handleReopen}
+              reopeningId={reopening}
+            />
           ))}
         </div>
       )}
