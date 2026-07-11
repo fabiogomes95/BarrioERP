@@ -9,7 +9,7 @@ import {
   type UserRole,
   updateUser,
 } from '../lib/api'
-import { ModalOverlay, inputCls } from '../components/ui'
+import { ModalOverlay, inputCls, AdminTabs } from '../components/ui'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -499,6 +499,7 @@ export default function EquipePage() {
     <div className="h-full flex flex-col" style={{ background: '#0d0b08' }}>
       {/* Header */}
       <div className="shrink-0 border-b border-stone-800/50 px-4 py-3" style={{ background: '#0f0d0a' }}>
+        <AdminTabs />
         <div className="flex items-center justify-between gap-3">
           <div>
             <h1 className="text-stone-100 font-semibold text-base">Equipe</h1>

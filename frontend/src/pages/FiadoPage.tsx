@@ -1,12 +1,12 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  type FiadoCustomerGroup,
-  fetchFiadoGrouped, fetchOrderPayments, registerPayment, reopenOrder,
+  type FiadoCustomerGroup, type Order,
+  fetchFiadoGrouped, fetchOrderPayments, registerPayment, reopenOrder, fetchOrder,
   type Payment, type PaymentMethod,
 } from '../lib/api'
 import { maskCurrency, parseCurrency, toCurrencyInput } from '../lib/format'
-import { inputCls, ErrorBanner, Spinner } from '../components/ui'
+import { inputCls, ErrorBanner, Spinner, ModalOverlay } from '../components/ui'
 
 function brl(v: string | number) {
   return Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -232,17 +232,80 @@ function FiadoPaymentModal({
   )
 }
 
+// ── Modal: ver itens da comanda (somente leitura, sem reabrir) ────────────────
+
+function FiadoItemsModal({
+  orderId, tableNumber, orderType, customerName, onClose,
+}: {
+  orderId: string
+  tableNumber?: number | null
+  orderType?: string
+  customerName?: string | null
+  onClose: () => void
+}) {
+  const [order, setOrder] = useState<Order | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetchOrder(orderId)
+      .then(setOrder)
+      .catch(err => setError(err instanceof Error ? err.message : 'Erro ao carregar itens'))
+      .finally(() => setLoading(false))
+  }, [orderId])
+
+  const active = order?.items.filter(i => i.status !== 'cancelled') ?? []
+
+  return (
+    <ModalOverlay title="Itens da comanda" onClose={onClose}>
+      {loading ? (
+        <div className="text-center py-6 text-stone-600 text-sm">Carregando…</div>
+      ) : error ? (
+        <ErrorBanner message={error} />
+      ) : (
+        <>
+          <p className="text-stone-500 text-xs mb-3">
+            {tableNumber ? `Mesa ${tableNumber}` : ORDER_TYPE_LABEL[orderType ?? 'counter']}
+            {customerName ? ` — ${customerName}` : ''}
+          </p>
+          {active.length === 0 ? (
+            <p className="text-stone-600 text-sm text-center py-4">Nenhum item ativo</p>
+          ) : (
+            <div className="space-y-1 mb-3">
+              {active.map(item => (
+                <div key={item.id} className="flex items-center justify-between text-sm py-1.5
+                                               border-b border-stone-800/30 last:border-0">
+                  <span className="text-stone-300">{item.quantity}x {item.item_name}</span>
+                  <span className="text-stone-400 font-medium">{brl(item.subtotal)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {order && (
+            <div className="flex items-center justify-between pt-2 border-t border-stone-800/60">
+              <span className="text-stone-300 text-sm font-bold">Total</span>
+              <span className="text-amber-400 text-base font-black">{brl(order.total)}</span>
+            </div>
+          )}
+        </>
+      )}
+    </ModalOverlay>
+  )
+}
+
 // ── Card de entrada de fiado individual ────────────────────────────────────────
 
 function FiadoEntryCard({
   entry,
   onReceive,
   onReopen,
+  onViewItems,
   reopening,
 }: {
   entry: FiadoCustomerGroup['entries'][number]
   onReceive: () => void
   onReopen: () => void
+  onViewItems: () => void
   reopening?: boolean
 }) {
   const total = Number(entry.total)
@@ -250,7 +313,7 @@ function FiadoEntryCard({
   const remaining = Number(entry.remaining)
 
   return (
-    <div className="rounded-xl border border-stone-800/60 p-4"
+    <div className="rounded-xl border border-stone-800/60 p-4 h-full flex flex-col"
          style={{ background: '#161210' }}>
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
@@ -275,14 +338,19 @@ function FiadoEntryCard({
         </div>
       </div>
 
-      <div className="mt-3 flex gap-2">
+      <div className="mt-3 flex gap-2 flex-wrap flex-1 items-end">
         <button onClick={onReceive}
-          className="flex-1 py-2 rounded-xl text-sm font-semibold
+          className="flex-1 py-2 rounded-xl text-sm font-semibold min-w-[110px]
                      bg-amber-500 hover:bg-amber-400 text-stone-900 transition-colors">
           Receber {brl(remaining)}
         </button>
+        <button onClick={onViewItems}
+          className="py-2 px-3 rounded-xl text-sm font-semibold
+                     border border-stone-700 text-stone-300 hover:bg-stone-700/50 transition-colors">
+          Ver itens
+        </button>
         <button onClick={onReopen} disabled={reopening}
-          className="py-2 px-4 rounded-xl text-sm font-semibold
+          className="py-2 px-3 rounded-xl text-sm font-semibold
                      border border-stone-700 text-stone-300 hover:bg-stone-700/50
                      disabled:opacity-40 transition-colors">
           {reopening ? 'Abrindo…' : 'Reabrir'}
@@ -298,14 +366,17 @@ function CustomerGroup({
   group,
   onReceive,
   onReopen,
+  onViewItems,
   reopeningId,
 }: {
   group: FiadoCustomerGroup
   onReceive: (entry: FiadoCustomerGroup['entries'][number]) => void
   onReopen: (entry: FiadoCustomerGroup['entries'][number]) => void
+  onViewItems: (entry: FiadoCustomerGroup['entries'][number]) => void
   reopeningId?: string | null
 }) {
-  const [collapsed, setCollapsed] = useState(false)
+  const [collapsed, setCollapsed] = useState(true)
+  const count = group.entries.length
 
   return (
     <div className="rounded-2xl border border-stone-800/60 overflow-hidden"
@@ -317,11 +388,12 @@ function CustomerGroup({
           <div className="w-9 h-9 rounded-xl bg-stone-800 flex items-center justify-center text-sm font-bold text-amber-400">
             {group.customer_name.charAt(0).toUpperCase()}
           </div>
-          <div>
+          <div className="flex items-center gap-2">
             <h2 className="text-stone-100 font-bold">{group.customer_name}</h2>
-            <p className="text-stone-500 text-xs">
-              {group.entries.length} {group.entries.length === 1 ? 'comanda' : 'comandas'}
-            </p>
+            <span className="shrink-0 flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-full
+                             text-[11px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30">
+              {count}
+            </span>
           </div>
         </div>
         <div className="flex items-center gap-4">
@@ -336,15 +408,16 @@ function CustomerGroup({
         </div>
       </button>
 
-      {/* Lista de entradas */}
+      {/* Lista de entradas — lado a lado quando o cliente tem mais de uma comanda em fiado */}
       {!collapsed && (
-        <div className="px-4 pb-4 space-y-2">
+        <div className="px-4 pb-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
           {group.entries.map(entry => (
             <FiadoEntryCard
               key={entry.order_id}
               entry={entry}
               onReceive={() => onReceive(entry)}
               onReopen={() => onReopen(entry)}
+              onViewItems={() => onViewItems(entry)}
               reopening={reopeningId === entry.order_id}
             />
           ))}
@@ -362,7 +435,16 @@ export default function FiadoPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [payingEntry, setPayingEntry] = useState<FiadoCustomerGroup['entries'][number] | null>(null)
+  const [viewingEntry, setViewingEntry] = useState<FiadoCustomerGroup['entries'][number] | null>(null)
   const [reopening, setReopening] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+
+  const filteredGroups = search.trim()
+    ? groups.filter(g => g.customer_name.toLowerCase().includes(search.trim().toLowerCase()))
+    : groups
+
+  const totalRemaining = groups.reduce((sum, g) => sum + Number(g.total_remaining), 0)
+  const totalEntries = groups.reduce((sum, g) => sum + g.entries.length, 0)
 
   function load() {
     setLoading(true)
@@ -393,8 +475,8 @@ export default function FiadoPage() {
   }
 
   return (
-    <div className="p-4 sm:p-6 max-w-xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-4 sm:p-6 max-w-3xl mx-auto">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-stone-100 text-xl font-bold">Fiado</h1>
           <p className="text-stone-500 text-sm mt-0.5">Contas com pagamento pendente</p>
@@ -409,6 +491,39 @@ export default function FiadoPage() {
         </button>
       </div>
 
+      {groups.length > 0 && (
+        <div className="grid grid-cols-3 gap-3 mb-5">
+          <div className="rounded-2xl p-4 border border-stone-800/60" style={{ background: '#161210' }}>
+            <p className="text-stone-500 text-[11px] font-semibold uppercase tracking-wider">Total em fiado</p>
+            <p className="text-amber-400 text-2xl font-black mt-1.5 leading-none">{brl(totalRemaining)}</p>
+          </div>
+          <div className="rounded-2xl p-4 border border-stone-800/60" style={{ background: '#161210' }}>
+            <p className="text-stone-500 text-[11px] font-semibold uppercase tracking-wider">Clientes</p>
+            <p className="text-stone-200 text-2xl font-black mt-1.5 leading-none">{groups.length}</p>
+          </div>
+          <div className="rounded-2xl p-4 border border-stone-800/60" style={{ background: '#161210' }}>
+            <p className="text-stone-500 text-[11px] font-semibold uppercase tracking-wider">Comandas</p>
+            <p className="text-stone-200 text-2xl font-black mt-1.5 leading-none">{totalEntries}</p>
+          </div>
+        </div>
+      )}
+
+      {groups.length > 0 && (
+        <div className="relative mb-5">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-600 pointer-events-none"
+               fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <circle cx="11" cy="11" r="8" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35" />
+          </svg>
+          <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar cliente…"
+            className="w-full pl-9 pr-3.5 py-2.5 rounded-xl text-sm border border-stone-800/80
+                       text-stone-200 placeholder-stone-700 focus:outline-none
+                       focus:border-amber-500/40 focus:ring-1 focus:ring-amber-500/20 transition-all"
+            style={{ background: '#161210' }} />
+        </div>
+      )}
+
       {error && <ErrorBanner message={error} onRetry={load} />}
 
       {loading ? (
@@ -419,14 +534,19 @@ export default function FiadoPage() {
           <p className="text-stone-300 font-semibold">Nenhuma conta em fiado</p>
           <p className="text-stone-600 text-sm mt-1">Todos os pedidos estão quitados.</p>
         </div>
+      ) : filteredGroups.length === 0 ? (
+        <div className="text-center py-16">
+          <p className="text-stone-500 text-sm">Nenhum cliente encontrado para "{search}"</p>
+        </div>
       ) : (
         <div className="space-y-3">
-          {groups.map(group => (
+          {filteredGroups.map(group => (
             <CustomerGroup
               key={group.customer_name}
               group={group}
               onReceive={entry => setPayingEntry(entry)}
               onReopen={handleReopen}
+              onViewItems={entry => setViewingEntry(entry)}
               reopeningId={reopening}
             />
           ))}
@@ -438,6 +558,16 @@ export default function FiadoPage() {
           entry={payingEntry}
           onClose={() => setPayingEntry(null)}
           onPaid={handlePaid}
+        />
+      )}
+
+      {viewingEntry && (
+        <FiadoItemsModal
+          orderId={viewingEntry.order_id}
+          tableNumber={viewingEntry.table_number}
+          orderType={viewingEntry.order_type}
+          customerName={viewingEntry.customer_name}
+          onClose={() => setViewingEntry(null)}
         />
       )}
     </div>

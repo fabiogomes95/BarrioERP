@@ -1,9 +1,71 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   type BarSettings,
-  fetchSettings, updateSettings, getUser, updateLocalCompanyName,
+  fetchSettings, updateSettings, getUser, updateLocalCompanyName, changeMyPassword,
 } from '../lib/api'
-import { inputCls, Field } from '../components/ui'
+import { inputCls, Field, AdminTabs } from '../components/ui'
+
+function ChangePasswordCard() {
+  const [current, setCurrent] = useState('')
+  const [next, setNext] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [ok, setOk] = useState(false)
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null); setOk(false)
+    if (next.length < 6) { setError('A nova senha precisa ter pelo menos 6 caracteres'); return }
+    if (next !== confirm) { setError('A confirmação não bate com a nova senha'); return }
+    setSaving(true)
+    try {
+      await changeMyPassword(current, next)
+      setCurrent(''); setNext(''); setConfirm('')
+      setOk(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao trocar senha')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4 rounded-2xl border border-stone-800/60 p-5 mt-5"
+          style={{ background: '#161210' }}>
+      <h2 className="text-stone-200 text-sm font-bold">Minha senha</h2>
+
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-sm rounded-xl px-3 py-2">{error}</div>
+      )}
+      {ok && (
+        <div className="bg-green-500/10 border border-green-500/20 text-green-400 text-sm rounded-xl px-3 py-2">
+          Senha alterada ✓
+        </div>
+      )}
+
+      <Field label="Senha atual">
+        <input type="password" required value={current} autoComplete="current-password"
+          onChange={e => setCurrent(e.target.value)} className={inputCls} style={{ background: '#0d0b08' }} />
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Nova senha">
+          <input type="password" required value={next} autoComplete="new-password"
+            onChange={e => setNext(e.target.value)} className={inputCls} style={{ background: '#0d0b08' }} />
+        </Field>
+        <Field label="Confirmar nova senha">
+          <input type="password" required value={confirm} autoComplete="new-password"
+            onChange={e => setConfirm(e.target.value)} className={inputCls} style={{ background: '#0d0b08' }} />
+        </Field>
+      </div>
+      <button type="submit" disabled={saving}
+        className="w-full py-2.5 rounded-xl text-sm font-semibold text-stone-300 border border-stone-700/60
+                   hover:bg-stone-800/50 disabled:opacity-40 transition-colors">
+        {saving ? 'Salvando…' : 'Trocar senha'}
+      </button>
+    </form>
+  )
+}
 
 export default function AdminPage() {
   const role = getUser()?.role
@@ -56,10 +118,12 @@ export default function AdminPage() {
   return (
     <div className="h-full overflow-y-auto">
       <div className="max-w-xl mx-auto px-4 sm:px-6 py-6">
-        <div className="mb-6">
+        <div className="mb-4">
           <h1 className="text-stone-100 text-xl font-bold leading-tight">Administração</h1>
-          <p className="text-stone-500 text-sm mt-1">Dados do bar e taxa de serviço</p>
+          <p className="text-stone-500 text-sm mt-1">Dados do bar, taxa de serviço e equipe</p>
         </div>
+
+        <AdminTabs />
 
         {error && (
           <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-sm rounded-2xl px-4 py-3 mb-4">{error}</div>
@@ -113,6 +177,8 @@ export default function AdminPage() {
           A taxa de serviço só vale para comandas <b>abertas após</b> a alteração — comandas já abertas
           mantêm a taxa do momento em que foram criadas.
         </p>
+
+        <ChangePasswordCard />
       </div>
     </div>
   )

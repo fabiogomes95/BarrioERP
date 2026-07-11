@@ -3,11 +3,12 @@ import { useNavigate } from 'react-router-dom'
 import {
   type DailyReport, type Order, type Table, type CashSession,
   fetchDailyReport, fetchHistory, fetchTables, fetchCurrentCash,
-  openCash, addCashMovement, closeCash,
+  openCash, addCashMovement, closeCash, getUser,
 } from '../lib/api'
 import { brl } from '../components/OrderDetailView'
 import { maskCurrency, parseCurrency } from '../lib/format'
 import { inputCls } from '../components/ui'
+import { exportDailyReportCSV, printDailyReport } from '../lib/reportExport'
 
 const METHOD_LABEL: Record<string, string> = {
   cash: 'Dinheiro', credit_card: 'Crédito', debit_card: 'Débito',
@@ -408,10 +409,30 @@ export default function CaixaPage() {
             <h1 className="text-stone-100 text-xl font-bold leading-tight">Caixa</h1>
             <p className="text-stone-500 text-sm mt-1">Faturamento e histórico de comandas</p>
           </div>
-          <input type="date" value={day} max={todayISO()} onChange={e => setDay(e.target.value)}
-            className="rounded-xl px-3 py-2 text-sm border border-stone-800/60 text-stone-200
-                       focus:outline-none focus:border-amber-500/40 transition-all"
-            style={{ background: '#161210' }} />
+          <div className="flex items-center gap-2 flex-wrap">
+            <input type="date" value={day} max={todayISO()} onChange={e => setDay(e.target.value)}
+              className="rounded-xl px-3 py-2 text-sm border border-stone-800/60 text-stone-200
+                         focus:outline-none focus:border-amber-500/40 transition-all"
+              style={{ background: '#161210' }} />
+            {report && (
+              <>
+                <button
+                  onClick={() => exportDailyReportCSV(report, history, tables, day)}
+                  title="Exportar CSV"
+                  className="px-3 py-2 rounded-xl text-xs font-semibold border transition-colors
+                             text-stone-300 border-stone-700/60 hover:bg-stone-800/50 hover:border-stone-600">
+                  CSV
+                </button>
+                <button
+                  onClick={() => printDailyReport(report, history, tables, day, getUser()?.company_name ?? 'BarrioERP')}
+                  title="Exportar PDF (imprimir e salvar como PDF)"
+                  className="px-3 py-2 rounded-xl text-xs font-semibold border transition-colors
+                             text-stone-300 border-stone-700/60 hover:bg-stone-800/50 hover:border-stone-600">
+                  PDF
+                </button>
+              </>
+            )}
+          </div>
         </div>
 
         {error && (
@@ -503,15 +524,25 @@ export default function CaixaPage() {
                       className="w-full flex items-center justify-between gap-3 px-4 py-3
                                  border-b border-stone-800/30 last:border-0 hover:bg-stone-800/30 transition-colors text-left">
                       <div className="min-w-0">
-                        <p className="text-stone-200 text-sm font-medium truncate">
-                          {o.customer_name ?? table?.label ?? 'Comanda avulsa'}
-                        </p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-stone-200 text-sm font-medium truncate">
+                            {o.customer_name ?? table?.label ?? 'Comanda avulsa'}
+                          </p>
+                          {o.is_fiado && (
+                            <span className="shrink-0 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full
+                                             text-amber-400 bg-amber-500/15 border border-amber-500/30">
+                              Fiado
+                            </span>
+                          )}
+                        </div>
                         <p className="text-stone-600 text-xs mt-0.5">
                           {table ? `Mesa ${table.number}` : 'Balcão'} · {items} {items === 1 ? 'item' : 'itens'}
                           {o.closed_at ? ` · ${timeOf(o.closed_at)}` : ''}
                         </p>
                       </div>
-                      <span className="text-stone-300 text-sm font-bold shrink-0">{brl(o.total)}</span>
+                      <span className={['text-sm font-bold shrink-0', o.is_fiado ? 'text-amber-400' : 'text-stone-300'].join(' ')}>
+                        {brl(o.total)}
+                      </span>
                     </button>
                   )
                 })

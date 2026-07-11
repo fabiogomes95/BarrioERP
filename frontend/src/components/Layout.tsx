@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { clearToken, getUser, refreshCompanyName } from '../lib/api'
 
 // ── Ícones ────────────────────────────────────────────────────────────────────
@@ -53,18 +53,6 @@ function IconBook() {
   )
 }
 
-function IconUsers() {
-  return (
-    <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-      <path strokeLinecap="round" strokeLinejoin="round"
-        d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10
-           0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3
-           0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857
-           m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-    </svg>
-  )
-}
-
 function IconCash() {
   return (
     <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
@@ -103,17 +91,26 @@ function IconLogout() {
   )
 }
 
+function IconHistory() {
+  return (
+    <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round"
+        d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8M3 3v5h5M12 7v5l3 3" />
+    </svg>
+  )
+}
+
 // ── Itens de navegação ────────────────────────────────────────────────────────
 
 const NAV = [
-  { to: '/dashboard', label: 'Início',        Icon: IconHome },
-  { to: '/mesas',     label: 'Mesas',         Icon: IconTable },
-  { to: '/pedidos',   label: 'Pedidos',       Icon: IconClipboard },
-  { to: '/caixa',     label: 'Caixa',         Icon: IconCash },
-  { to: '/fiado',     label: 'Fiado',         Icon: IconFiado },
-  { to: '/cardapio',  label: 'Cardápio',      Icon: IconBook },
-  { to: '/equipe',    label: 'Equipe',        Icon: IconUsers },
-  { to: '/admin',     label: 'Administração', Icon: IconCog },
+  { to: '/dashboard',  label: 'Início',        Icon: IconHome },
+  { to: '/mesas',      label: 'Mesas',         Icon: IconTable },
+  { to: '/pedidos',    label: 'Pedidos',       Icon: IconClipboard },
+  { to: '/caixa',      label: 'Caixa',         Icon: IconCash },
+  { to: '/fiado',      label: 'Fiado',         Icon: IconFiado },
+  { to: '/cardapio',   label: 'Cardápio',      Icon: IconBook },
+  { to: '/auditoria',  label: 'Auditoria',     Icon: IconHistory },
+  { to: '/admin',      label: 'Administração', Icon: IconCog },
 ]
 
 function userInitials(name?: string) {
@@ -126,6 +123,7 @@ function userInitials(name?: string) {
 function SideDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const user = getUser()
   const navigate = useNavigate()
+  const location = useLocation()
 
   // Fecha com Escape
   useEffect(() => {
@@ -157,9 +155,8 @@ function SideDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
       >
         {/* Marca + fechar */}
         <div className="px-5 py-5 border-b border-stone-800/50 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20
-                          flex items-center justify-center shrink-0 text-base">
-            🍺
+          <div className="w-9 h-9 rounded-full overflow-hidden shrink-0 ring-1 ring-amber-500/20">
+            <img src="/icon-recanto.png" alt="" className="w-full h-full object-cover" />
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-stone-100 text-sm font-semibold leading-tight truncate">{user?.company_name ?? 'BarrioERP'}</p>
@@ -175,7 +172,9 @@ function SideDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
 
         {/* Navegação */}
         <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
-          {NAV.map(({ to, label, Icon }) => (
+          {NAV.map(({ to, label, Icon }) => {
+            const extraActive = to === '/admin' && location.pathname.startsWith('/equipe')
+            return (
             <NavLink
               key={to}
               to={to}
@@ -184,7 +183,7 @@ function SideDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
                 [
                   'group flex items-center gap-3 px-3 py-2.5 rounded-lg',
                   'text-sm font-medium transition-all duration-150',
-                  isActive
+                  isActive || extraActive
                     ? 'bg-amber-500/10 text-amber-400'
                     : 'text-stone-500 hover:text-stone-200 hover:bg-stone-800/50',
                 ].join(' ')
@@ -192,15 +191,15 @@ function SideDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
             >
               {({ isActive }) => (
                 <>
-                  <span className={isActive ? 'text-amber-400' : 'text-stone-600 group-hover:text-stone-400 transition-colors'}>
+                  <span className={isActive || extraActive ? 'text-amber-400' : 'text-stone-600 group-hover:text-stone-400 transition-colors'}>
                     <Icon />
                   </span>
                   {label}
-                  {isActive && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-amber-500" />}
+                  {(isActive || extraActive) && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-amber-500" />}
                 </>
               )}
             </NavLink>
-          ))}
+          )})}
         </nav>
 
         {/* Perfil + Sair */}
@@ -251,10 +250,13 @@ function TopBar({ onMenu, barName }: { onMenu: () => void; barName: string }) {
         <IconMenu />
       </button>
 
-      {/* Nome do bar — centralizado de verdade (posição absoluta) */}
-      <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2
-                      pointer-events-none max-w-[50%]">
-        <span className="text-base shrink-0">🍺</span>
+      {/* Marca: no mobile fica no fluxo normal (ícone só, ao lado do menu) pra nunca disputar espaço
+          com os atalhos da direita. A partir de sm sobra espaço e ela vira centralizada com o nome. */}
+      <img src="/icon-recanto.png" alt={barName}
+           className="sm:hidden w-8 h-8 rounded-full shrink-0 object-cover" />
+      <div className="hidden sm:flex absolute left-1/2 -translate-x-1/2 items-center gap-2
+                      pointer-events-none max-w-[55%]">
+        <img src="/icon-recanto.png" alt="" className="w-7 h-7 rounded-full shrink-0 object-cover" />
         <span className="text-stone-100 text-sm font-bold tracking-tight truncate">{barName}</span>
       </div>
 

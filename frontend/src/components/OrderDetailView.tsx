@@ -8,6 +8,7 @@ import {
 } from '../lib/api'
 import { maskCurrency, parseCurrency, toCurrencyInput } from '../lib/format'
 import { printComanda, printCozinha, type KitchenItem } from '../lib/print'
+import { shareReceiptWhatsApp } from '../lib/receiptImage'
 import { inputCls, Field, ModalOverlay } from './ui'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -825,6 +826,362 @@ function PaymentModal({
   )
 }
 
+// ── Modal: Dividir conta ──────────────────────────────────────────────────────
+
+/** Divide `total` (R$) em `count` partes exatas em centavos (sem perda de precisão). */
+function splitAmounts(total: number, count: number): number[] {
+  const totalCents = Math.round(total * 100)
+  const base = Math.floor(totalCents / count)
+  const remainder = totalCents - base * count
+  return Array.from({ length: count }, (_, i) => (base + (i < remainder ? 1 : 0)) / 100)
+}
+
+/** Distribui `total` (R$) proporcionalmente aos subtotais de cada pessoa, exato em centavos. */
+function splitByShares(total: number, shares: number[]): number[] {
+  const totalCents = Math.round(total * 100)
+  const shareSum = shares.reduce((a, b) => a + b, 0)
+  if (shareSum <= 0) return shares.map(() => 0)
+
+  const raw = shares.map(s => (s / shareSum) * totalCents)
+  const cents = raw.map(v => Math.floor(v))
+  let remainder = totalCents - cents.reduce((a, b) => a + b, 0)
+
+  // Método dos maiores restos: sobra de centavos vai pra quem tem a maior fração perdida no floor.
+  const order = raw
+    .map((v, i) => ({ i, frac: v - Math.floor(v) }))
+    .sort((a, b) => b.frac - a.frac)
+  for (let k = 0; k < remainder; k++) cents[order[k % order.length].i] += 1
+
+  return cents.map(c => c / 100)
+}
+
+function SplitModal({
+  order, onClose, onFinished, onPaidUpdate,
+}: {
+  order: Order
+  onClose: () => void
+  onFinished: (orderId: string) => void
+  onPaidUpdate?: (paid: number) => void
+}) {
+  const [mode, setMode] = useState<'equal' | 'items'>('equal')
+  const [count, setCount] = useState(2)
+  const [assignments, setAssignments] = useState<Record<string, number>>({})
+  const [payments, setPayments] = useState<Payment[]>([])
+  const [loading, setLoading] = useState(true)
+  const [activeSlot, setActiveSlot] = useState<number | null>(null)
+  const [method, setMethod] = useState<PaymentMethod>('cash')
+  const [amount, setAmount] = useState('')
+  const [tendered, setTendered] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [finishing, setFinishing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const total = Number(order.total)
+  const paid = payments
+    .filter(p => p.status === 'confirmed')
+    .reduce((sum, p) => sum + Number(p.amount), 0)
+  const remaining = Math.max(0, Math.round((total - paid) * 100) / 100)
+  const fullyPaid = remaining <= 0
+
+  const activeItems = order.items.filter(i => i.status !== 'cancelled')
+  const unassignedItems = mode === 'items'
+    ? activeItems.filter(it => assignments[it.id] === undefined || assignments[it.id] >= count)
+    : []
+  const readyToPay = mode === 'equal' || unassignedItems.length === 0
+
+  const amounts = mode === 'equal'
+    ? splitAmounts(total, count)
+    : readyToPay
+      ? splitByShares(
+          total,
+          Array.from({ length: count }, (_, p) =>
+            activeItems.filter(it => assignments[it.id] === p)
+              .reduce((sum, it) => sum + Number(it.subtotal), 0)),
+        )
+      : Array(count).fill(0)
+
+  // Heurística: marca como pagas as primeiras N parcelas cujo valor acumulado já foi coberto.
+  let acc = 0
+  const slotPaid = amounts.map(a => { acc += a; return acc <= paid + 0.005 })
+
+  function assignItem(itemId: string, person: number) {
+    setAssignments(prev => {
+      const next = { ...prev }
+      if (next[itemId] === person) delete next[itemId]
+      else next[itemId] = person
+      return next
+    })
+  }
+
+  const tenderedNum = parseCurrency(tendered)
+  const amountNum = parseCurrency(amount)
+  const change =
+    method === 'cash' && !isNaN(tenderedNum) && !isNaN(amountNum) && tenderedNum > amountNum
+      ? tenderedNum - amountNum
+      : 0
+
+  const refreshPayments = useCallback(async () => {
+    const ps = await fetchOrderPayments(order.id)
+    setPayments(ps)
+    return ps
+  }, [order.id])
+
+  useEffect(() => {
+    refreshPayments().finally(() => setLoading(false))
+  }, [refreshPayments])
+
+  useEffect(() => {
+    onPaidUpdate?.(paid)
+  }, [paid, onPaidUpdate])
+
+  function openSlot(i: number) {
+    setError(null)
+    setActiveSlot(i)
+    setAmount(toCurrencyInput(Math.min(amounts[i], remaining)))
+    setTendered('')
+    setMethod('cash')
+  }
+
+  async function handlePaySlot(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    const value = parseCurrency(amount)
+    if (isNaN(value) || value <= 0) { setError('Informe um valor válido'); return }
+
+    setSaving(true)
+    try {
+      await registerPayment({
+        order_id: order.id,
+        method,
+        amount: value.toFixed(2),
+        amount_tendered:
+          method === 'cash' && !isNaN(tenderedNum) ? tenderedNum.toFixed(2) : null,
+        reference: null,
+      })
+      await refreshPayments()
+      setActiveSlot(null)
+      setTendered('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao registrar pagamento')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleFinish() {
+    setError(null)
+    setFinishing(true)
+    try {
+      await finishOrder(order.id, order.version)
+      onFinished(order.id)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao finalizar comanda')
+    } finally {
+      setFinishing(false)
+    }
+  }
+
+  return (
+    <ModalOverlay onClose={onClose}>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-stone-100 text-base font-bold">Dividir conta</h2>
+        <button onClick={onClose} className="text-stone-600 hover:text-stone-400 transition-colors">
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Modo de divisão */}
+      <div className="flex gap-1 p-1 rounded-xl mb-4" style={{ background: '#0d0b08' }}>
+        {([['equal', 'Igualmente'], ['items', 'Por item']] as const).map(([m, label]) => (
+          <button key={m} onClick={() => setMode(m)}
+            className={[
+              'flex-1 py-2 rounded-lg text-xs font-semibold transition-all',
+              mode === m ? 'bg-amber-500/15 text-amber-400' : 'text-stone-500 hover:text-stone-300',
+            ].join(' ')}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Stepper de pessoas */}
+      <div className="flex items-center justify-between rounded-2xl p-4 mb-4" style={{ background: '#0d0b08' }}>
+        <span className="text-stone-500 text-sm">Dividir entre</span>
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={() => setCount(c => Math.max(2, c - 1))} disabled={count <= 2}
+            className="w-8 h-8 flex items-center justify-center rounded-lg border border-stone-700/60
+                       text-stone-300 hover:bg-stone-800/60 disabled:opacity-30 transition-colors">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+              <path strokeLinecap="round" d="M5 12h14" />
+            </svg>
+          </button>
+          <span className="text-stone-100 text-base font-black w-16 text-center tabular-nums">
+            {count} {count === 1 ? 'pessoa' : 'pessoas'}
+          </span>
+          <button type="button" onClick={() => setCount(c => Math.min(20, c + 1))} disabled={count >= 20}
+            className="w-8 h-8 flex items-center justify-center rounded-lg border border-stone-700/60
+                       text-stone-300 hover:bg-stone-800/60 disabled:opacity-30 transition-colors">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+              <path strokeLinecap="round" d="M12 5v14M5 12h14" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Atribuição de itens por pessoa */}
+      {mode === 'items' && (
+        <div className="rounded-2xl p-3 mb-4 space-y-1" style={{ background: '#0d0b08' }}>
+          {activeItems.length === 0 ? (
+            <p className="text-stone-600 text-xs text-center py-2">Comanda sem itens</p>
+          ) : (
+            activeItems.map(item => (
+              <div key={item.id} className="flex items-center justify-between gap-2 py-1.5">
+                <div className="min-w-0 flex-1">
+                  <p className="text-stone-300 text-xs truncate">{item.quantity}x {item.item_name}</p>
+                  <p className="text-stone-600 text-[11px]">{brl(item.subtotal)}</p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  {Array.from({ length: count }, (_, p) => (
+                    <button key={p} type="button" onClick={() => assignItem(item.id, p)}
+                      title={`Pessoa ${p + 1}`}
+                      className={[
+                        'w-6 h-6 rounded-full text-[10px] font-bold transition-all border',
+                        assignments[item.id] === p
+                          ? 'bg-amber-500 text-stone-900 border-amber-500'
+                          : 'text-stone-500 border-stone-700/60 hover:border-stone-600',
+                      ].join(' ')}>
+                      {p + 1}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
+          {unassignedItems.length > 0 && (
+            <p className="text-amber-400 text-[11px] pt-1.5 border-t border-stone-800/60">
+              {unassignedItems.length} {unassignedItems.length === 1 ? 'item sem atribuir' : 'itens sem atribuir'} — toque no número da pessoa
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Resumo financeiro */}
+      <div className="rounded-2xl p-4 mb-4 space-y-1.5" style={{ background: '#0d0b08' }}>
+        <div className="flex justify-between text-sm">
+          <span className="text-stone-500">Total da conta</span>
+          <span className="text-stone-200 font-semibold">{brl(total)}</span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-stone-500">Pago</span>
+          <span className="text-green-400 font-semibold">{brl(paid)}</span>
+        </div>
+        <div className="flex justify-between pt-1.5 border-t border-stone-800/60">
+          <span className="text-stone-300 text-sm font-bold">{fullyPaid ? 'Quitada' : 'Falta'}</span>
+          <span className={['text-base font-black', fullyPaid ? 'text-green-400' : 'text-amber-400'].join(' ')}>
+            {brl(remaining)}
+          </span>
+        </div>
+      </div>
+
+      {error && (
+        <p className="text-red-400 text-xs bg-red-500/10 border border-red-500/20
+                       rounded-xl px-3 py-2 mb-3">{error}</p>
+      )}
+
+      {loading ? (
+        <div className="text-center py-6 text-stone-600 text-sm">Carregando pagamentos…</div>
+      ) : !readyToPay ? (
+        <p className="text-stone-600 text-sm text-center py-4">
+          Atribua todos os itens a alguém pra ver o valor de cada pessoa
+        </p>
+      ) : (
+        <>
+          {/* Lista de parcelas por pessoa */}
+          <div className="space-y-1.5 mb-2">
+            {amounts.map((slotAmount, i) => (
+              <div key={i} className="rounded-xl overflow-hidden" style={{ background: '#0d0b08' }}>
+                <div className="flex items-center justify-between px-3.5 py-2.5">
+                  <span className="text-stone-300 text-sm font-medium">Pessoa {i + 1}</span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-stone-200 text-sm font-semibold">{brl(slotAmount)}</span>
+                    {slotPaid[i] ? (
+                      <span className="text-green-400 text-xs font-bold">✓ Pago</span>
+                    ) : (
+                      <button
+                        onClick={() => setActiveSlot(activeSlot === i ? null : i)}
+                        className="text-xs font-bold text-amber-400 hover:text-amber-300 transition-colors px-2 py-1">
+                        {activeSlot === i ? 'Fechar' : 'Receber'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {activeSlot === i && !slotPaid[i] && (
+                  <form onSubmit={handlePaySlot} className="px-3.5 pb-3.5 space-y-3">
+                    <div className="grid grid-cols-5 gap-1.5">
+                      {PAYMENT_METHODS.map(m => (
+                        <button key={m.value} type="button" onClick={() => setMethod(m.value)}
+                          className={[
+                            'flex flex-col items-center gap-1 py-2 rounded-xl text-[10px] font-semibold transition-all border',
+                            method === m.value
+                              ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                              : 'text-stone-500 border-stone-800/60 hover:text-stone-300',
+                          ].join(' ')}>
+                          <span className="text-base leading-none">{m.icon}</span>
+                          {m.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className={method === 'cash' ? 'grid grid-cols-2 gap-3' : ''}>
+                      <Field label="Valor (R$)">
+                        <input type="text" inputMode="numeric" value={amount}
+                          onChange={e => setAmount(maskCurrency(e.target.value))}
+                          placeholder="0,00" className={inputCls} style={{ background: '#161210' }} />
+                      </Field>
+                      {method === 'cash' && (
+                        <Field label="Recebido (R$)">
+                          <input type="text" inputMode="numeric" value={tendered}
+                            onChange={e => setTendered(maskCurrency(e.target.value))}
+                            placeholder="0,00" className={inputCls} style={{ background: '#161210' }} />
+                        </Field>
+                      )}
+                    </div>
+
+                    {method === 'cash' && change > 0 && (
+                      <div className="flex justify-between text-xs px-1">
+                        <span className="text-stone-500">Troco</span>
+                        <span className="text-amber-400 font-bold">{brl(change)}</span>
+                      </div>
+                    )}
+
+                    <button type="submit" disabled={saving}
+                      className="w-full py-2 rounded-xl text-sm font-semibold
+                                 bg-amber-500 hover:bg-amber-400 text-stone-900
+                                 disabled:opacity-40 transition-colors">
+                      {saving ? 'Registrando…' : 'Registrar pagamento'}
+                    </button>
+                  </form>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {fullyPaid && (
+            <button onClick={handleFinish} disabled={finishing}
+              className="w-full py-3 rounded-xl text-sm font-bold mt-3
+                         bg-green-500 hover:bg-green-400 text-stone-900
+                         disabled:opacity-40 transition-colors">
+              {finishing ? 'Finalizando…' : 'Finalizar comanda e liberar mesa'}
+            </button>
+          )}
+        </>
+      )}
+    </ModalOverlay>
+  )
+}
+
 // ── Modal: Desconto ───────────────────────────────────────────────────────────
 
 function DiscountModal({
@@ -936,6 +1293,7 @@ export function OrderDetail({
 }) {
   const [showAddItem, setShowAddItem] = useState(false)
   const [showPayment, setShowPayment] = useState(false)
+  const [showSplit, setShowSplit] = useState(false)
   const [showDiscount, setShowDiscount] = useState(false)
   const [togglingFee, setTogglingFee] = useState(false)
   const [closing, setClosing] = useState(false)
@@ -949,6 +1307,8 @@ export function OrderDetail({
   const [kitchenMode, setKitchenMode] = useState(false)
   const [kitchenSelected, setKitchenSelected] = useState<Set<string>>(new Set())
   const [paidSoFar, setPaidSoFar] = useState(0)
+  const [sharingWA, setSharingWA] = useState(false)
+  const [waHint, setWaHint] = useState<string | null>(null)
   const remaining = Math.max(0, Math.round((Number(order.total) - paidSoFar) * 100) / 100)
 
   // Carrega pagamentos do servidor ao abrir ou trocar de comanda
@@ -1062,6 +1422,25 @@ export function OrderDetail({
     }
   }
 
+  async function handleShareWhatsApp() {
+    setActionError(null)
+    setWaHint(null)
+    setSharingWA(true)
+    try {
+      const result = await shareReceiptWhatsApp(order, table, getUser()?.company_name ?? 'BarrioERP')
+      if (result === 'downloaded') {
+        setWaHint('Imagem baixada — anexe no WhatsApp Web que abriu em outra aba')
+        setTimeout(() => setWaHint(null), 6000)
+      }
+    } catch (err) {
+      if (err instanceof Error && err.name !== 'AbortError') {
+        setActionError('Erro ao gerar recibo para o WhatsApp')
+      }
+    } finally {
+      setSharingWA(false)
+    }
+  }
+
   return (
     <div className="flex flex-col h-full">
 
@@ -1167,8 +1546,33 @@ export function OrderDetail({
                 d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a1 1 0 001-1v-4a1 1 0 00-1-1H9a1 1 0 00-1 1v4a1 1 0 001 1zm8-12V5a2 2 0 00-2-2H7a2 2 0 00-2 2v4h14z" />
             </svg>
           </button>
+
+          {/* Enviar recibo pelo WhatsApp (imagem formatada, igual ao impresso) */}
+          <button
+            onClick={handleShareWhatsApp}
+            disabled={sharingWA}
+            title="Enviar recibo pelo WhatsApp"
+            className="shrink-0 flex items-center justify-center w-9 h-9 rounded-xl
+                       border border-stone-800/60 text-stone-400 hover:text-green-400
+                       hover:border-stone-700/60 disabled:opacity-40 transition-all"
+            style={{ background: '#161210' }}>
+            {sharingWA ? (
+              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 12a8 8 0 018-8" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
+                <path d="M12.001 2C6.478 2 2 6.477 2 12c0 1.912.535 3.7 1.462 5.222L2 22l4.897-1.436A9.945 9.945 0 0012 22c5.523 0 10-4.477 10-10S17.523 2 12.001 2zm0 18.222a8.19 8.19 0 01-4.415-1.284l-.317-.19-3.257.956.972-3.253-.207-.325A8.19 8.19 0 013.778 12c0-4.542 3.68-8.222 8.223-8.222 4.542 0 8.222 3.68 8.222 8.222 0 4.543-3.68 8.222-8.222 8.222z" />
+              </svg>
+            )}
+          </button>
         </div>
 
+        {waHint && (
+          <p className="text-green-400 text-xs bg-green-500/10 border border-green-500/20
+                         rounded-xl px-3 py-2 mt-3">{waHint}</p>
+        )}
         {actionError && (
           <p className="text-red-400 text-xs bg-red-500/10 border border-red-500/20
                          rounded-xl px-3 py-2 mt-3">{actionError}</p>
@@ -1316,42 +1720,46 @@ export function OrderDetail({
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center justify-between gap-3 pt-0.5">
-                  <div className="flex items-center gap-3">
-                    <button onClick={() => setShowDiscount(true)}
-                      className="text-[11px] font-semibold text-stone-500 hover:text-amber-400 transition-colors py-1">
-                      {Number(order.discount) > 0 ? `Desconto: ${brl(order.discount)}` : '+ Desconto'}
-                    </button>
-                    {(Number(order.service_fee_percent) > 0 || Number(order.service_fee) > 0) && (
-                      <button
-                        onClick={async () => {
-                          setTogglingFee(true)
-                          try {
-                            const updated = await setOrderServiceFee(order.id, Number(order.service_fee_percent) === 0)
-                            onUpdated(updated)
-                          } catch (err) {
-                            setActionError(err instanceof Error ? err.message : 'Erro')
-                          } finally {
-                            setTogglingFee(false)
-                          }
-                        }}
-                        disabled={togglingFee}
-                        className="text-[11px] font-semibold text-stone-500 hover:text-amber-400 disabled:opacity-40 transition-colors py-1">
-                        {togglingFee ? '…' : Number(order.service_fee_percent) > 0 ? `− Taxa ${order.service_fee_percent}%` : '+ Taxa de serviço'}
-                      </button>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <button onClick={() => setShowDeleteConfirm(true)}
-                      className="text-[11px] text-stone-700 hover:text-red-400 transition-colors py-1">
-                      Apagar
-                    </button>
-                    <button onClick={handleClose} disabled={closing}
-                      className="text-[11px] font-semibold text-stone-500 hover:text-amber-400
-                                 disabled:opacity-40 transition-colors py-1">
-                      {closing ? 'Salvando…' : 'Fiado'}
-                    </button>
-                  </div>
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <button onClick={() => setShowDiscount(true)}
+                    className="px-3 py-2 rounded-lg text-xs font-semibold border transition-colors
+                               text-stone-300 border-stone-700/60 hover:bg-stone-800/50 hover:border-stone-600">
+                    {Number(order.discount) > 0 ? `Desconto: ${brl(order.discount)}` : '+ Desconto'}
+                  </button>
+                  <button
+                    onClick={async () => {
+                      setTogglingFee(true)
+                      try {
+                        const updated = await setOrderServiceFee(order.id, Number(order.service_fee_percent) === 0)
+                        onUpdated(updated)
+                      } catch (err) {
+                        setActionError(err instanceof Error ? err.message : 'Erro')
+                      } finally {
+                        setTogglingFee(false)
+                      }
+                    }}
+                    disabled={togglingFee}
+                    className="px-3 py-2 rounded-lg text-xs font-semibold border transition-colors
+                               text-stone-300 border-stone-700/60 hover:bg-stone-800/50 hover:border-stone-600
+                               disabled:opacity-40">
+                    {togglingFee ? '…' : Number(order.service_fee_percent) > 0 ? `− Taxa ${order.service_fee_percent}%` : '+ Taxa de serviço'}
+                  </button>
+                  <button onClick={() => setShowSplit(true)}
+                    className="px-3 py-2 rounded-lg text-xs font-semibold border transition-colors
+                               text-amber-400 border-amber-500/30 bg-amber-500/8 hover:bg-amber-500/15">
+                    Dividir conta
+                  </button>
+                  <button onClick={handleClose} disabled={closing}
+                    className="px-3 py-2 rounded-lg text-xs font-semibold border transition-colors
+                               text-amber-400 border-amber-500/30 bg-amber-500/8 hover:bg-amber-500/15
+                               disabled:opacity-40">
+                    {closing ? 'Salvando…' : 'Fiado'}
+                  </button>
+                  <button onClick={() => setShowDeleteConfirm(true)}
+                    className="ml-auto px-3 py-2 rounded-lg text-xs font-semibold border transition-colors
+                               text-red-400 border-red-500/25 hover:bg-red-500/10">
+                    Apagar
+                  </button>
                 </div>
               )}
             </div>
@@ -1373,6 +1781,15 @@ export function OrderDetail({
           order={order}
           onClose={() => setShowPayment(false)}
           onFinished={id => { setShowPayment(false); onClosed(id) }}
+          onPaidUpdate={setPaidSoFar}
+        />
+      )}
+
+      {showSplit && (
+        <SplitModal
+          order={order}
+          onClose={() => setShowSplit(false)}
+          onFinished={id => { setShowSplit(false); onClosed(id) }}
           onPaidUpdate={setPaidSoFar}
         />
       )}

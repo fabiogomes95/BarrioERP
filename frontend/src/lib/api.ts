@@ -227,6 +227,7 @@ export interface Order {
   items: OrderItem[]
   created_at: string
   updated_at: string
+  is_fiado?: boolean
 }
 
 export async function fetchOpenOrders(tableId?: string): Promise<Order[]> {
@@ -520,6 +521,50 @@ export async function resetUserPassword(
     method: 'PATCH',
     body: JSON.stringify({ new_password: newPassword, confirm_password: newPassword }),
   })
+}
+
+export async function changeMyPassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<TeamUser> {
+  const me = getUser()
+  if (!me) throw new Error('Sessão expirada')
+  return request<TeamUser>(`/users/${me.id}/password`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      current_password: currentPassword,
+      new_password: newPassword,
+      confirm_password: newPassword,
+    }),
+  })
+}
+
+// ── Auditoria ─────────────────────────────────────────────────────────────────
+
+export interface AuditLogEntry {
+  id: string
+  action: string
+  resource_type: string
+  resource_id: string | null
+  before: string | null
+  after: string | null
+  ip_address: string | null
+  user_agent: string | null
+  user_id: string | null
+  user_name: string | null
+  created_at: string
+}
+
+export async function fetchAuditLogs(params: {
+  page?: number
+  pageSize?: number
+  action?: string
+} = {}): Promise<{ items: AuditLogEntry[]; total: number; page: number; page_size: number }> {
+  const qs = new URLSearchParams()
+  qs.set('page', String(params.page ?? 1))
+  qs.set('page_size', String(params.pageSize ?? 50))
+  if (params.action) qs.set('action', params.action)
+  return request(`/audit/?${qs.toString()}`)
 }
 
 // ── Relatórios ──────────────────────────────────────────────────────────────────

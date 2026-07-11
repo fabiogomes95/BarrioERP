@@ -13,6 +13,7 @@ import AdminPage from './pages/AdminPage'
 import CardapioPage from './pages/CardapioPage'
 import EquipePage from './pages/EquipePage'
 import FiadoPage from './pages/FiadoPage'
+import AuditoriaPage from './pages/AuditoriaPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   if (!getToken()) return <Navigate to="/login" replace />
@@ -46,6 +47,7 @@ export default function App() {
           <Route path="cardapio" element={<CardapioPage />} />
           <Route path="equipe"   element={<EquipePage />} />
           <Route path="fiado"    element={<FiadoPage />} />
+          <Route path="auditoria" element={<AuditoriaPage />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

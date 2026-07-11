@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from 'react'
+import { NavLink } from 'react-router-dom'
 
 export const inputCls = `w-full rounded-xl px-3.5 py-2.5 text-sm border border-stone-800/80
   text-stone-100 placeholder-stone-700 focus:outline-none transition-all
@@ -65,6 +66,21 @@ export function ErrorBanner({ message, onRetry, onDismiss }: {
           Fechar
         </button>
       )}
+    </div>
+  )
+}
+
+export function AdminTabs() {
+  const tabCls = ({ isActive }: { isActive: boolean }) =>
+    [
+      'px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-colors',
+      isActive ? 'bg-amber-500/15 text-amber-400' : 'text-stone-500 hover:text-stone-300',
+    ].join(' ')
+  return (
+    <div className="flex gap-1 p-1 rounded-xl mb-4 w-fit" style={{ background: '#0d0b08' }}>
+      <NavLink to="/admin" end className={tabCls}>Geral</NavLink>
+      <NavLink to="/equipe" className={tabCls}>Equipe</NavLink>
+      <NavLink to="/auditoria" className={tabCls}>Auditoria</NavLink>
     </div>
   )
 }
