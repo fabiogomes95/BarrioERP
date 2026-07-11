@@ -231,16 +231,11 @@ function AddItemModal({
 
   async function addFromMenu(andPrint = false) {
     if (!picking) return
-    if (picking.complementos.length > 0 && !comp) {
-      setAddError('Escolha uma opção para este item')
-      return
-    }
     setAddError(null)
     setAdding(true)
     try {
-      const hasComp = picking.complementos.length > 0
-      const effectiveName = hasComp ? `${picking.name} - ${comp}` : picking.name
-      const updated = hasComp
+      const effectiveName = comp ? `${picking.name} - ${comp}` : picking.name
+      const updated = comp
         ? await addOrderItem(order.id, {
             item_name: effectiveName,
             unit_price: Number(picking.price),
@@ -370,12 +365,12 @@ function AddItemModal({
                   </svg>
                 </button>
               </div>
-              {/* Complemento obrigatório (corte do churrasco, sabor do suco, etc.) */}
+              {/* Complemento opcional (corte do churrasco, sabor do suco, etc.) */}
               {picking.complementos.length > 0 && (
-                <Field label="Escolha uma opção (obrigatório)">
+                <Field label="Escolha uma opção (opcional)">
                   <div className="flex flex-wrap gap-1.5">
                     {picking.complementos.map(opt => (
-                      <button key={opt} type="button" onClick={() => setComp(opt)}
+                      <button key={opt} type="button" onClick={() => setComp(c => c === opt ? '' : opt)}
                         className={[
                           'px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border',
                           comp === opt
@@ -1772,7 +1767,7 @@ export function OrderDetail({
           order={order}
           table={table}
           onClose={() => setShowAddItem(false)}
-          onAdded={updated => { onUpdated(updated); setShowAddItem(false) }}
+          onAdded={updated => onUpdated(updated)}
         />
       )}
 
