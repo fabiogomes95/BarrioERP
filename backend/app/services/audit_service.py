@@ -4,6 +4,7 @@ from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.audit_log import AuditLog
 
@@ -86,6 +87,7 @@ class AuditService:
         # Data
         q = (
             select(AuditLog)
+            .options(selectinload(AuditLog.user))
             .where(*conditions)
             .order_by(AuditLog.created_at.desc())
             .offset(offset)

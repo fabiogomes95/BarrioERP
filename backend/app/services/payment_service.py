@@ -287,6 +287,20 @@ class PaymentService(BaseService):
             reference=data.reference,
         )
         payment = await self._payment_repo.add(payment)
+
+        await self._log_audit(
+            action="payment.register",
+            resource_type="payment",
+            resource_id=str(payment.id),
+            after={
+                "order_id": str(order.id),
+                "customer_name": order.customer_name,
+                "method": data.method.value if hasattr(data.method, "value") else str(data.method),
+                "amount": str(data.amount),
+                "change_given": str(change_given) if change_given is not None else None,
+            },
+        )
+
         return PaymentResponse.model_validate(payment)
 
     async def list_for_order(self, order_id: UUID) -> list[PaymentResponse]:
@@ -417,6 +431,20 @@ class PaymentService(BaseService):
         except StaleDataError:
             # Race condition: alguém editou a comanda entre o GET e o flush
             raise OptimisticLockError("Order")
+
+        await self._log_audit(
+            action="order.finish",
+            resource_type="order",
+            resource_id=str(order.id),
+            before={"order_id": str(order.id), "status": "open"},
+            after={
+                "order_id": str(order.id),
+                "status": "closed",
+                "total": str(order.total),
+                "total_paid": str(total_pago),
+                "customer_name": order.customer_name,
+            },
+        )
 
         # Re-busca estado final do banco (inclui items para OrderResponse)
         order_final = await self._order_repo.get_with_items(order.id, establishment_id)

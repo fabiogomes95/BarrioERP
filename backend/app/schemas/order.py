@@ -337,3 +337,4 @@ class OrderResponse(UUIDSchema, TimestampSchema):
     closed_at: datetime | None
     version: int                     # necessário para o próximo PATCH
     items: list[OrderItemResponse]   # itens já carregados (eager loaded)
+    is_fiado: bool = False           # fechada mas com saldo em aberto — setado manualmente pelo service

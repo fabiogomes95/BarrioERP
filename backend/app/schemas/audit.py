@@ -13,4 +13,6 @@ class AuditLogEntry(BaseSchema):
     after: str | None = None
     ip_address: str | None = None
     user_agent: str | None = None
+    user_id: UUID | None = None
+    user_name: str | None = None
     created_at: datetime

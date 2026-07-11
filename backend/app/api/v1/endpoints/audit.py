@@ -37,7 +37,22 @@ async def list_audit_logs(
         offset=(page - 1) * page_size,
     )
     return PaginatedResponse(
-        items=[AuditLogEntry.model_validate(item) for item in items],
+        items=[
+            AuditLogEntry(
+                id=item.id,
+                action=item.action,
+                resource_type=item.resource_type,
+                resource_id=item.resource_id,
+                before=item.before,
+                after=item.after,
+                ip_address=item.ip_address,
+                user_agent=item.user_agent,
+                user_id=item.user_id,
+                user_name=item.user.name if item.user else None,
+                created_at=item.created_at,
+            )
+            for item in items
+        ],
         total=total,
         page=page,
         page_size=page_size,

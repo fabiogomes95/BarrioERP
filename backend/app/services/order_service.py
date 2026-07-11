@@ -454,6 +454,20 @@ class OrderService(BaseService):
             # O cliente deve tentar novamente (raramente acontece)
             raise OptimisticLockError("Order")
 
+        await self._log_audit(
+            action="order_item.add",
+            resource_type="order_item",
+            resource_id=str(new_item.id),
+            after={
+                "item_name": item_name,
+                "quantity": data.quantity,
+                "unit_price": str(unit_price),
+                "subtotal": str(subtotal),
+                "notes": data.notes,
+                "order": self._order_snapshot(order),
+            },
+        )
+
         # Re-busca do banco para garantir dados frescos e itens atualizados
         # (após flush, os IDs e timestamps gerados pelo banco estão disponíveis)
         return await self._get_or_raise(order.id, establishment_id)
@@ -461,6 +475,7 @@ class OrderService(BaseService):
     def _order_snapshot(self, order: Order) -> dict:
         """Extrai um snapshot dos campos relevantes da order para audit log."""
         return {
+            "order_id": str(order.id),
             "status": order.status.value if order.status else None,
             "subtotal": str(order.subtotal),
             "discount": str(order.discount),
@@ -550,7 +565,7 @@ class OrderService(BaseService):
             resource_type="order",
             resource_id=str(order.id),
             before={"status": "open"},
-            after={"status": "closed", "total": str(order.total)},
+            after=self._order_snapshot(order),
         )
 
         # Retorna estado final da comanda
@@ -630,7 +645,7 @@ class OrderService(BaseService):
                 "Para ajustes pós-serviço, utilize o processo de estorno manual."
             )
 
-        before_item = {"status": item.status.value, "quantity": item.quantity}
+        before_item = {"item_name": item.item_name, "status": item.status.value, "quantity": item.quantity}
 
         # Cancela o item — campos de auditoria registram quando e por quê
         item.status = OrderItemStatus.CANCELLED
@@ -647,7 +662,10 @@ class OrderService(BaseService):
             resource_type="order_item",
             resource_id=str(item.id),
             before={"item": before_item, "order": self._order_snapshot(order)},
-            after={"item": {"status": "cancelled", "reason": reason}, "order": self._order_snapshot(order)},
+            after={
+                "item": {"item_name": item.item_name, "status": "cancelled", "reason": reason},
+                "order": self._order_snapshot(order),
+            },
         )
 
         try:
@@ -698,6 +716,7 @@ class OrderService(BaseService):
                 f"O item '{item.item_name}' já foi servido e não pode ser alterado."
             )
 
+        old_quantity = item.quantity
         item.quantity = quantity
         item.subtotal = item.unit_price * quantity
         self._recalculate_total(order)
@@ -706,6 +725,14 @@ class OrderService(BaseService):
             await self.session.flush()
         except StaleDataError:
             raise OptimisticLockError("Order")
+
+        await self._log_audit(
+            action="order_item.quantity_change",
+            resource_type="order_item",
+            resource_id=str(item.id),
+            before={"item_name": item.item_name, "quantity": old_quantity, "order": self._order_snapshot(order)},
+            after={"item_name": item.item_name, "quantity": quantity, "order": self._order_snapshot(order)},
+        )
 
         return await self._get_or_raise(order.id, establishment_id)
 
@@ -724,6 +751,7 @@ class OrderService(BaseService):
                 "O desconto não pode ser maior que o subtotal da comanda."
             )
 
+        old_discount = order.discount
         order.discount = discount
         self._recalculate_total(order)
 
@@ -731,6 +759,14 @@ class OrderService(BaseService):
             await self.session.flush()
         except StaleDataError:
             raise OptimisticLockError("Order")
+
+        await self._log_audit(
+            action="order.discount_change",
+            resource_type="order",
+            resource_id=str(order.id),
+            before={"discount": str(old_discount), "order": self._order_snapshot(order)},
+            after={"discount": str(discount), "order": self._order_snapshot(order)},
+        )
 
         return await self._get_or_raise(order.id, establishment_id)
 
@@ -745,6 +781,7 @@ class OrderService(BaseService):
                 f"'{order.status.value}'."
             )
 
+        old_percent = order.service_fee_percent
         if apply:
             establishment = await self.session.get(Establishment, establishment_id)
             order.service_fee_percent = establishment.service_fee_percent if establishment else Decimal("0")
@@ -757,6 +794,14 @@ class OrderService(BaseService):
             await self.session.flush()
         except StaleDataError:
             raise OptimisticLockError("Order")
+
+        await self._log_audit(
+            action="order.service_fee_change",
+            resource_type="order",
+            resource_id=str(order.id),
+            before={"service_fee_percent": str(old_percent), "order": self._order_snapshot(order)},
+            after={"service_fee_percent": str(order.service_fee_percent), "order": self._order_snapshot(order)},
+        )
 
         return await self._get_or_raise(order.id, establishment_id)
 
@@ -779,7 +824,16 @@ class OrderService(BaseService):
         orders = await self._order_repo.list_closed(
             establishment_id, limit=limit, offset=offset, start=start, end=end
         )
-        return [OrderResponse.model_validate(o) for o in orders]
+        responses = []
+        for order in orders:
+            paid_total = sum(
+                (p.amount for p in order.payments if p.status == PaymentStatus.CONFIRMED),
+                Decimal("0.00"),
+            )
+            resp = OrderResponse.model_validate(order)
+            resp.is_fiado = paid_total < order.total
+            responses.append(resp)
+        return responses
 
     async def update_customer_name(self, order_id: UUID, name: str | None) -> OrderResponse:
         """Atualiza o nome do cliente de uma comanda."""
@@ -824,7 +878,7 @@ class OrderService(BaseService):
             resource_type="order",
             resource_id=str(order.id),
             before={"status": "closed"},
-            after={"status": "open"},
+            after=self._order_snapshot(order),
         )
 
         return await self._get_or_raise(order.id, establishment_id)
@@ -853,7 +907,7 @@ class OrderService(BaseService):
             resource_type="order",
             resource_id=str(order.id),
             before={"status": "open"},
-            after={"status": "cancelled"},
+            after=self._order_snapshot(order),
         )
 
     async def list_fiado(self) -> list[FiadoEntry]:
@@ -916,9 +970,22 @@ class OrderService(BaseService):
         method_counts: dict[str, int] = {}
         item_qty: dict[str, int] = {}
         item_total: dict[str, Decimal] = {}
+        count = 0
 
         for order in orders:
+            paid_total = sum(
+                (p.amount for p in order.payments if p.status == PaymentStatus.CONFIRMED),
+                Decimal("0.00"),
+            )
+            # Comandas fechadas como FIADO (saldo em aberto) não entram no faturamento
+            # do dia — só contam quando totalmente quitadas. O saldo pendente fica
+            # visível só na tela de Fiado, pra não inflar o faturamento com dinheiro
+            # que ainda não entrou.
+            if paid_total < order.total:
+                continue
+
             revenue_total += order.total
+            count += 1
             for payment in order.payments:
                 if payment.status == PaymentStatus.CONFIRMED:
                     key = payment.method.value
@@ -930,7 +997,6 @@ class OrderService(BaseService):
                 item_qty[it.item_name] = item_qty.get(it.item_name, 0) + it.quantity
                 item_total[it.item_name] = item_total.get(it.item_name, Decimal("0.00")) + it.subtotal
 
-        count = len(orders)
         average = (revenue_total / count) if count else Decimal("0.00")
 
         by_method = [

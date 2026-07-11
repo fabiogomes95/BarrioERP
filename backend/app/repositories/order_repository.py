@@ -286,7 +286,7 @@ class OrderRepository(BaseRepository[Order]):
         stmt = (
             select(Order)
             .where(*filters)
-            .options(selectinload(Order.items))
+            .options(selectinload(Order.items), selectinload(Order.payments))
             .order_by(Order.closed_at.desc())
             .limit(limit)
             .offset(offset)
