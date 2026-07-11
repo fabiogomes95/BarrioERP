@@ -54,7 +54,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Query
 
-from app.api.deps import CurrentUser, DBSession
+from app.api.deps import CurrentUser, DBSession, require_roles
+from app.models.user import UserRole
 from app.schemas.order import (
     CustomerNameUpdate,
     OrderClose,
@@ -264,6 +265,7 @@ async def set_discount(
     session: DBSession,
     current_user: CurrentUser,
 ) -> OrderResponse:
+    require_roles(current_user, UserRole.OWNER, UserRole.MANAGER, UserRole.CASHIER)
     return await _service(session, current_user).set_discount(order_id, data.discount)
 
 
@@ -282,6 +284,7 @@ async def toggle_service_fee(
     session: DBSession,
     current_user: CurrentUser,
 ) -> OrderResponse:
+    require_roles(current_user, UserRole.OWNER, UserRole.MANAGER, UserRole.CASHIER)
     return await _service(session, current_user).set_service_fee(order_id, data.apply)
 
 
@@ -403,6 +406,7 @@ async def cancel_order(
     session: DBSession,
     current_user: CurrentUser,
 ) -> None:
+    require_roles(current_user, UserRole.OWNER, UserRole.MANAGER)
     await _service(session, current_user).cancel_order(order_id)
 
 
@@ -439,4 +443,5 @@ async def close_order(
         → HTTP 409 Conflict (OptimisticLockError)
         → Recarregue a comanda e tente novamente com a nova versão.
     """
+    require_roles(current_user, UserRole.OWNER, UserRole.MANAGER, UserRole.CASHIER)
     return await _service(session, current_user).close_order(order_id, data)

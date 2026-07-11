@@ -284,7 +284,10 @@ class UserService(BaseService):
         # company_id vem do acting_user — nunca do body da requisição
         user = User(
             company_id=self.company_id,              # inferido do JWT
-            establishment_id=data.establishment_id,  # pode ser None
+            # Se não veio um establishment_id específico no request, herda o do
+            # usuário que está criando — sem isso, o novo funcionário ficava sem
+            # nenhum estabelecimento vinculado e não conseguia logar/operar.
+            establishment_id=data.establishment_id or self.establishment_id,
             name=data.name,
             email=data.email.lower(),                # normaliza para minúsculas
             phone=data.phone,

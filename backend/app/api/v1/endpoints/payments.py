@@ -62,7 +62,8 @@ from uuid import UUID
 
 from fastapi import APIRouter
 
-from app.api.deps import CurrentUser, DBSession
+from app.api.deps import CurrentUser, DBSession, require_roles
+from app.models.user import UserRole
 from app.schemas.order import OrderResponse
 from app.schemas.payment import OrderFinish, PaymentCreate, PaymentResponse
 from app.services.payment_service import PaymentService
@@ -123,6 +124,7 @@ async def register_payment(
 
     STATUS 201 Created: um novo registro financeiro foi criado.
     """
+    require_roles(current_user, UserRole.OWNER, UserRole.MANAGER, UserRole.CASHIER)
     return await _service(session, current_user).register(data)
 
 
@@ -196,4 +198,5 @@ async def finish_order(
     Se pagamento insuficiente → HTTP 422 com mensagem indicando quanto falta.
     Se conflito de versão → HTTP 409 (alguém editou a comanda — recarregue e tente novamente).
     """
+    require_roles(current_user, UserRole.OWNER, UserRole.MANAGER, UserRole.CASHIER)
     return await _service(session, current_user).finish(order_id, data)

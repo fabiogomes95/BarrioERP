@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Query
 
-from app.api.deps import CurrentUser, DBSession
+from app.api.deps import CurrentUser, DBSession, require_roles
+from app.models.user import UserRole
 from app.schemas.audit import AuditLogEntry
 from app.schemas.common import PaginatedResponse
 from app.services.audit_service import AuditService
@@ -26,6 +27,7 @@ async def list_audit_logs(
     page: int = Query(default=1, ge=1, description="Número da página"),
     page_size: int = Query(default=50, ge=1, le=200, description="Itens por página (máx 200)"),
 ) -> PaginatedResponse:
+    require_roles(current_user, UserRole.OWNER, UserRole.MANAGER)
     svc = AuditService(session)
     items, total = await svc.list_logs(
         company_id=current_user.company_id,

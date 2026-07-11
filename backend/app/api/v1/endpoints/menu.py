@@ -60,7 +60,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Query
 
-from app.api.deps import CurrentUser, DBSession
+from app.api.deps import CurrentUser, DBSession, require_roles
+from app.models.user import UserRole
 from app.schemas.common import PaginatedResponse
 from app.schemas.menu import (
     CategoryCreate,
@@ -110,6 +111,7 @@ async def create_category(
     O nome deve ser único no estabelecimento.
     `sort_order` controla a posição na interface (menor = primeiro).
     """
+    require_roles(current_user, UserRole.OWNER, UserRole.MANAGER)
     return await _service(session, current_user).create_category(data)
 
 
@@ -159,6 +161,7 @@ async def update_category(
     Se `name` for alterado: verifica unicidade no estabelecimento.
     Sem `version` — categorias são catálogo, não transações.
     """
+    require_roles(current_user, UserRole.OWNER, UserRole.MANAGER)
     return await _service(session, current_user).update_category(category_id, data)
 
 
@@ -185,6 +188,7 @@ async def delete_category(
 
     Histórico de pedidos: preservado. OrderItems continuam com snapshot.
     """
+    require_roles(current_user, UserRole.OWNER, UserRole.MANAGER)
     await _service(session, current_user).delete_category(category_id)
 
 
@@ -214,6 +218,7 @@ async def create_item(
 
     Novo item começa com is_active=True e is_available=True.
     """
+    require_roles(current_user, UserRole.OWNER, UserRole.MANAGER)
     return await _service(session, current_user).create_item(data)
 
 
@@ -305,6 +310,7 @@ async def update_item(
         Se category_id for enviado, o item é movido para a nova categoria.
         A nova categoria deve pertencer ao mesmo estabelecimento.
     """
+    require_roles(current_user, UserRole.OWNER, UserRole.MANAGER)
     return await _service(session, current_user).update_item(item_id, data)
 
 
@@ -325,4 +331,5 @@ async def delete_item(
     O item some da listagem mas continua no banco.
     Pedidos históricos que tinham este item: preservados via snapshot.
     """
+    require_roles(current_user, UserRole.OWNER, UserRole.MANAGER)
     await _service(session, current_user).delete_item(item_id)

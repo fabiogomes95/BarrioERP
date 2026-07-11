@@ -102,15 +102,16 @@ function IconHistory() {
 
 // ── Itens de navegação ────────────────────────────────────────────────────────
 
+// roles: undefined = visível pra todos; senão, só pros roles listados
 const NAV = [
   { to: '/dashboard',  label: 'Início',        Icon: IconHome },
   { to: '/mesas',      label: 'Mesas',         Icon: IconTable },
   { to: '/pedidos',    label: 'Pedidos',       Icon: IconClipboard },
-  { to: '/caixa',      label: 'Caixa',         Icon: IconCash },
+  { to: '/caixa',      label: 'Caixa',         Icon: IconCash,    roles: ['owner', 'manager', 'cashier'] },
   { to: '/fiado',      label: 'Fiado',         Icon: IconFiado },
   { to: '/cardapio',   label: 'Cardápio',      Icon: IconBook },
-  { to: '/auditoria',  label: 'Auditoria',     Icon: IconHistory },
-  { to: '/admin',      label: 'Administração', Icon: IconCog },
+  { to: '/auditoria',  label: 'Auditoria',     Icon: IconHistory, roles: ['owner', 'manager'] },
+  { to: '/admin',      label: 'Administração', Icon: IconCog,     roles: ['owner', 'manager'] },
 ]
 
 function userInitials(name?: string) {
@@ -172,7 +173,7 @@ function SideDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
 
         {/* Navegação */}
         <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
-          {NAV.map(({ to, label, Icon }) => {
+          {NAV.filter(item => !item.roles || item.roles.includes(user?.role ?? '')).map(({ to, label, Icon }) => {
             const extraActive = to === '/admin' && location.pathname.startsWith('/equipe')
             return (
             <NavLink

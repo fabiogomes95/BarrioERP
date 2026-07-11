@@ -8,7 +8,8 @@ from datetime import date
 
 from fastapi import APIRouter, Query
 
-from app.api.deps import CurrentUser, DBSession
+from app.api.deps import CurrentUser, DBSession, require_roles
+from app.models.user import UserRole
 from app.schemas.order import OrderResponse
 from app.schemas.report import DailyReport, FiadoCustomerGroup, FiadoEntry
 from app.services.order_service import OrderService
@@ -68,6 +69,7 @@ async def daily_report(
         description="Dia do relatório (YYYY-MM-DD). Padrão: hoje.",
     ),
 ) -> DailyReport:
+    require_roles(current_user, UserRole.OWNER, UserRole.MANAGER, UserRole.CASHIER)
     return await _service(session, current_user).daily_report(day)
 
 
@@ -84,4 +86,5 @@ async def history(
     offset: int = Query(default=0, ge=0),
     day: date | None = Query(default=None, description="Filtrar por data (YYYY-MM-DD)."),
 ) -> list[OrderResponse]:
+    require_roles(current_user, UserRole.OWNER, UserRole.MANAGER, UserRole.CASHIER)
     return await _service(session, current_user).list_history(limit=limit, offset=offset, day=day)

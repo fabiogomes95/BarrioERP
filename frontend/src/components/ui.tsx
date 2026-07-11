@@ -30,7 +30,8 @@ export function ModalOverlay({ title, onClose, children }: {
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
          style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)' }}
          onClick={onClose}>
-      <div className="w-full max-w-md rounded-3xl border border-stone-800/70 p-5"
+      <div className="w-full max-w-md rounded-3xl border border-stone-800/70 p-5
+                      max-h-[85dvh] overflow-y-auto overscroll-contain"
            style={{ background: '#161210' }}
            onClick={e => e.stopPropagation()}>
         {title && (
@@ -45,6 +46,30 @@ export function ModalOverlay({ title, onClose, children }: {
         )}
         {children}
       </div>
+    </div>
+  )
+}
+
+export function QtyStepper({ value, onChange, min = 1, max = 99 }: {
+  value: number; onChange: (v: number) => void; min?: number; max?: number
+}) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <button type="button" onClick={() => onChange(Math.max(min, value - 1))} disabled={value <= min}
+        className="w-10 h-10 flex items-center justify-center rounded-xl border border-stone-700/60
+                   text-stone-300 hover:bg-stone-800/60 active:scale-95 disabled:opacity-30 transition-all">
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+          <path strokeLinecap="round" d="M5 12h14" />
+        </svg>
+      </button>
+      <span className="text-stone-100 text-base font-bold w-8 text-center tabular-nums">{value}</span>
+      <button type="button" onClick={() => onChange(Math.min(max, value + 1))} disabled={value >= max}
+        className="w-10 h-10 flex items-center justify-center rounded-xl border border-stone-700/60
+                   text-stone-300 hover:bg-stone-800/60 active:scale-95 disabled:opacity-30 transition-all">
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+          <path strokeLinecap="round" d="M12 5v14M5 12h14" />
+        </svg>
+      </button>
     </div>
   )
 }

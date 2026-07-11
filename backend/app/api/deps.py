@@ -51,9 +51,10 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import ForbiddenError
 from app.core.security import decode_token
 from app.database.session import get_db
-from app.models.user import User
+from app.models.user import User, UserRole
 
 # ── Session ──────────────────────────────────────────────────────────────────
 
@@ -151,6 +152,23 @@ async def get_current_user(
         )
 
     return user
+
+
+def require_roles(user: User, *roles: UserRole) -> None:
+    """
+    Bloqueia o acesso se o usuário não tiver um dos roles permitidos.
+
+    Uso no endpoint (depois de CurrentUser injetado):
+        require_roles(current_user, UserRole.OWNER, UserRole.MANAGER)
+
+    Centraliza a checagem de RBAC nos endpoints (garçom não deve poder
+    ver faturamento, aplicar desconto, gerenciar caixa, etc.) — sem isso,
+    esconder o botão no frontend não impede a chamada direta à API.
+    """
+    if user.role not in roles:
+        raise ForbiddenError(
+            "Você não tem permissão para acessar este recurso."
+        )
 
 
 # ── Tipos anotados para uso nos endpoints ─────────────────────────────────────

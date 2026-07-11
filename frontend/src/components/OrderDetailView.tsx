@@ -9,7 +9,7 @@ import {
 import { maskCurrency, parseCurrency, toCurrencyInput } from '../lib/format'
 import { printComanda, printCozinha, type KitchenItem } from '../lib/print'
 import { shareReceiptWhatsApp } from '../lib/receiptImage'
-import { inputCls, Field, ModalOverlay } from './ui'
+import { inputCls, Field, ModalOverlay, QtyStepper } from './ui'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -215,6 +215,12 @@ function AddItemModal({
   const [halfNotes, setHalfNotes] = useState('')
 
   useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', h)
+    return () => document.removeEventListener('keydown', h)
+  }, [onClose])
+
+  useEffect(() => {
     Promise.all([fetchCategories(), fetchMenuItems()])
       .then(([cats, its]) => {
         setCategories(cats.filter(c => c.is_active))
@@ -319,7 +325,16 @@ function AddItemModal({
   const halfOptions = items.filter(i => pizzaCatIds.has(i.category_id))
 
   return (
-    <ModalOverlay onClose={onClose}>
+    // No mobile ocupa a tela inteira (em vez de um cartão flutuante) — assim o navegador
+    // consegue rolar até o campo focado mesmo com o teclado virtual cobrindo boa parte da tela.
+    // A partir de sm, volta a ser o modal centralizado de sempre.
+    <div className="fixed inset-0 z-50 flex flex-col sm:items-center sm:justify-center sm:p-4"
+         style={{ background: 'rgba(0,0,0,0.75)' }}
+         onClick={onClose}>
+      <div className="w-full h-[100dvh] sm:h-auto sm:max-w-md sm:max-h-[85dvh] sm:rounded-3xl
+                      overflow-y-auto overscroll-contain flex flex-col p-5"
+           style={{ background: '#161210' }}
+           onClick={e => e.stopPropagation()}>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-stone-100 text-base font-bold">Adicionar item</h2>
         <button onClick={onClose} className="text-stone-600 hover:text-stone-400 transition-colors">
@@ -348,7 +363,7 @@ function AddItemModal({
       )}
 
       {tab === 'menu' ? (
-        <div className="space-y-3">
+        <div className="flex flex-col flex-1 min-h-0 gap-3">
           {loadingMenu ? (
             <div className="text-center py-8 text-stone-600 text-sm">Carregando cardápio…</div>
           ) : picking ? (
@@ -383,14 +398,9 @@ function AddItemModal({
                   </div>
                 </Field>
               )}
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Quantidade">
-                  <input type="number" min={1} max={99} value={qty}
-                    onChange={e => setQty(e.target.value)}
-                    className={inputCls} style={{ background: '#0d0b08' }} />
-                </Field>
-                <div />
-              </div>
+              <Field label="Quantidade">
+                <QtyStepper value={Number(qty)} onChange={n => setQty(String(n))} />
+              </Field>
               <Field label="Observações (opcional)">
                 <input type="text" value={notes} onChange={e => setNotes(e.target.value)}
                   placeholder="ex: sem cebola, ao ponto"
@@ -459,7 +469,7 @@ function AddItemModal({
               )}
 
               {/* Lista de itens */}
-              <div className="max-h-52 overflow-y-auto space-y-1 -mx-1 px-1">
+              <div className="flex-1 min-h-0 overflow-y-auto space-y-1 -mx-1 px-1">
                 {visible.length === 0 ? (
                   <p className="text-stone-600 text-xs text-center py-4">Nenhum item encontrado</p>
                 ) : visible.map(item => (
@@ -521,9 +531,7 @@ function AddItemModal({
             )}
 
             <Field label="Quantidade">
-              <input type="number" min={1} max={99} value={halfQty}
-                onChange={e => setHalfQty(e.target.value)}
-                className={inputCls} style={{ background: '#0d0b08' }} />
+              <QtyStepper value={Number(halfQty)} onChange={n => setHalfQty(String(n))} />
             </Field>
             <Field label="Observações (opcional)">
               <input type="text" value={halfNotes} onChange={e => setHalfNotes(e.target.value)}
@@ -556,18 +564,14 @@ function AddItemModal({
             <input type="text" required value={manName} onChange={e => setManName(e.target.value)}
               placeholder="ex: Cerveja especial" className={inputCls} style={{ background: '#0d0b08' }} />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Preço (R$)">
-              <input type="text" inputMode="numeric" required value={manPrice}
-                onChange={e => setManPrice(maskCurrency(e.target.value))}
-                placeholder="0,00" className={inputCls} style={{ background: '#0d0b08' }} />
-            </Field>
-            <Field label="Quantidade">
-              <input type="number" min={1} max={99} required value={manQty}
-                onChange={e => setManQty(e.target.value)}
-                className={inputCls} style={{ background: '#0d0b08' }} />
-            </Field>
-          </div>
+          <Field label="Preço (R$)">
+            <input type="text" inputMode="numeric" required value={manPrice}
+              onChange={e => setManPrice(maskCurrency(e.target.value))}
+              placeholder="0,00" className={inputCls} style={{ background: '#0d0b08' }} />
+          </Field>
+          <Field label="Quantidade">
+            <QtyStepper value={Number(manQty)} onChange={n => setManQty(String(n))} />
+          </Field>
           <Field label="Observações (opcional)">
             <input type="text" value={manNotes} onChange={e => setManNotes(e.target.value)}
               placeholder="ex: sem gelo" className={inputCls} style={{ background: '#0d0b08' }} />
@@ -591,7 +595,8 @@ function AddItemModal({
           </div>
         </form>
       )}
-    </ModalOverlay>
+      </div>
+    </div>
   )
 }
 
@@ -1359,6 +1364,9 @@ export function OrderDetail({
   const canAddItem = order.status === 'open'
   const canRequestBill = order.status === 'open' && table
   const canClose = order.status === 'open' || order.status === 'bill_requested'
+  // Garçom/cozinha não veem valores nem mexem em fechamento — só quem atende o caixa.
+  const role = getUser()?.role
+  const canSeeMoney = role !== 'waiter' && role !== 'kitchen'
 
   const activeItems = order.items.filter(i => i.status !== 'cancelled')
   const cancelledItems = order.items.filter(i => i.status === 'cancelled')
@@ -1618,28 +1626,30 @@ export function OrderDetail({
       <div className="border-t border-stone-800/50 shrink-0 p-4 space-y-3"
            style={{ background: '#0f0d0a' }}>
 
-        {/* Totais */}
-        <div className="space-y-1">
-          {Number(order.service_fee) > 0 && (
-            <div className="flex justify-between text-xs text-stone-500">
-              <span>Subtotal</span><span>{brl(order.subtotal)}</span>
+        {/* Totais — só quem lida com pagamento/caixa vê o valor */}
+        {canSeeMoney && (
+          <div className="space-y-1">
+            {Number(order.service_fee) > 0 && (
+              <div className="flex justify-between text-xs text-stone-500">
+                <span>Subtotal</span><span>{brl(order.subtotal)}</span>
+              </div>
+            )}
+            {Number(order.service_fee) > 0 && (
+              <div className="flex justify-between text-xs text-stone-500">
+                <span>Taxa de serviço</span><span>{brl(order.service_fee)}</span>
+              </div>
+            )}
+            {Number(order.discount) > 0 && (
+              <div className="flex justify-between text-xs text-green-400">
+                <span>Desconto</span><span>−{brl(order.discount)}</span>
+              </div>
+            )}
+            <div className="flex justify-between pt-1 border-t border-stone-800/50">
+              <span className="text-stone-200 text-sm font-bold">Total</span>
+              <span className="text-amber-400 text-base font-black">{brl(order.total)}</span>
             </div>
-          )}
-          {Number(order.service_fee) > 0 && (
-            <div className="flex justify-between text-xs text-stone-500">
-              <span>Taxa de serviço</span><span>{brl(order.service_fee)}</span>
-            </div>
-          )}
-          {Number(order.discount) > 0 && (
-            <div className="flex justify-between text-xs text-green-400">
-              <span>Desconto</span><span>−{brl(order.discount)}</span>
-            </div>
-          )}
-          <div className="flex justify-between pt-1 border-t border-stone-800/50">
-            <span className="text-stone-200 text-sm font-bold">Total</span>
-            <span className="text-amber-400 text-base font-black">{brl(order.total)}</span>
           </div>
-        </div>
+        )}
 
         {/* Botões de ação */}
         {canClose && (
@@ -1692,13 +1702,15 @@ export function OrderDetail({
                     {requestingBill ? '…' : 'Solicitar conta'}
                   </button>
                 )}
-                <button onClick={() => setShowPayment(true)}
-                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold
-                             bg-amber-500 hover:bg-amber-400 text-stone-900 transition-colors">
-                  Receber {brl(remaining > 0 ? remaining : order.total)}
-                </button>
+                {canSeeMoney && (
+                  <button onClick={() => setShowPayment(true)}
+                    className="flex-1 py-2.5 rounded-xl text-sm font-semibold
+                               bg-amber-500 hover:bg-amber-400 text-stone-900 transition-colors">
+                    Receber {brl(remaining > 0 ? remaining : order.total)}
+                  </button>
+                )}
               </div>
-              {showDeleteConfirm ? (
+              {!canSeeMoney ? null : showDeleteConfirm ? (
                 <div className="flex items-center justify-between gap-2 pt-0.5
                                 rounded-xl px-3 py-2 border border-red-500/20 bg-red-500/5">
                   <p className="text-xs text-red-400 font-medium">Apagar esta comanda?</p>

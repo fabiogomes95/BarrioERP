@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { type Order, type Table, type OrderType, fetchOpenOrders, fetchTables, createOrder } from '../lib/api'
+import { type Order, type Table, type OrderType, fetchOpenOrders, fetchTables, createOrder, getUser } from '../lib/api'
 import { brl, timeAgo, ORDER_STATUS } from '../components/OrderDetailView'
 import { inputCls, Field, ModalOverlay } from '../components/ui'
 
@@ -54,10 +54,12 @@ function OrderCard({ order, table, onClick }: {
         </span>
       </div>
 
-      {/* Base: itens + total */}
+      {/* Base: itens + total (total só pra quem lida com pagamento) */}
       <div className="flex items-center justify-between pt-2.5 border-t border-stone-800/50">
         <span className="text-stone-600 text-xs">{activeItems} {activeItems === 1 ? 'item' : 'itens'}</span>
-        <span className="text-amber-400 text-sm font-bold">{brl(order.total)}</span>
+        {getUser()?.role !== 'waiter' && getUser()?.role !== 'kitchen' && (
+          <span className="text-amber-400 text-sm font-bold">{brl(order.total)}</span>
+        )}
       </div>
     </button>
   )

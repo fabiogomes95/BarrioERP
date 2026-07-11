@@ -72,6 +72,7 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
   const user = getUser()
+  const canSeeMoney = user?.role !== 'waiter' && user?.role !== 'kitchen'
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -168,19 +169,23 @@ export default function DashboardPage() {
           <>
             {/* Métricas */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-              <StatCard
-                label="Em aberto"
-                value={brl(openTotal)}
-                hint={`${openCount} ${openCount === 1 ? 'comanda' : 'comandas'}`}
-                accent="amber"
-                onClick={() => navigate('/pedidos')}
-              />
-              <StatCard
-                label="Ticket médio"
-                value={brl(avgTicket)}
-                hint="por comanda aberta"
-                accent="stone"
-              />
+              {canSeeMoney && (
+                <StatCard
+                  label="Em aberto"
+                  value={brl(openTotal)}
+                  hint={`${openCount} ${openCount === 1 ? 'comanda' : 'comandas'}`}
+                  accent="amber"
+                  onClick={() => navigate('/pedidos')}
+                />
+              )}
+              {canSeeMoney && (
+                <StatCard
+                  label="Ticket médio"
+                  value={brl(avgTicket)}
+                  hint="por comanda aberta"
+                  accent="stone"
+                />
+              )}
               <StatCard
                 label="Contas pedidas"
                 value={String(billRequested)}
@@ -240,7 +245,9 @@ export default function DashboardPage() {
                           </p>
                         </div>
                       </div>
-                      <span className="text-amber-400 text-sm font-bold shrink-0">{brl(o.total)}</span>
+                      {canSeeMoney && (
+                        <span className="text-amber-400 text-sm font-bold shrink-0">{brl(o.total)}</span>
+                      )}
                     </button>
                   )
                 })

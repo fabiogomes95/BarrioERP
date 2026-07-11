@@ -6,7 +6,8 @@ Controle de Caixa: abrir, sangria/suprimento, fechar e histórico.
 
 from fastapi import APIRouter, Query
 
-from app.api.deps import CurrentUser, DBSession
+from app.api.deps import CurrentUser, DBSession, require_roles
+from app.models.user import UserRole
 from app.schemas.cash import (
     CashClose,
     CashMovementCreate,
@@ -19,6 +20,8 @@ router = APIRouter()
 
 
 def _service(session: DBSession, user: CurrentUser) -> CashService:
+    # Todo o módulo de Caixa é restrito — garçom e cozinha não mexem com dinheiro/faturamento.
+    require_roles(user, UserRole.OWNER, UserRole.MANAGER, UserRole.CASHIER)
     return CashService(
         session=session,
         company_id=user.company_id,

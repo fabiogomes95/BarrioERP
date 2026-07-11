@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { getToken } from './lib/api'
+import { getToken, getUser } from './lib/api'
 import ErrorBoundary from './components/ErrorBoundary'
 import Layout from './components/Layout'
 import LoginPage from './pages/LoginPage'
@@ -17,6 +17,13 @@ import AuditoriaPage from './pages/AuditoriaPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   if (!getToken()) return <Navigate to="/login" replace />
+  return <>{children}</>
+}
+
+/** Bloqueia a rota (redireciona pro Dashboard) se o role do usuário não estiver na lista. */
+function RequireRole({ roles, children }: { roles: string[]; children: React.ReactNode }) {
+  const role = getUser()?.role
+  if (!role || !roles.includes(role)) return <Navigate to="/dashboard" replace />
   return <>{children}</>
 }
 
@@ -42,12 +49,12 @@ export default function App() {
           <Route path="mesas"    element={<MesasPage />} />
           <Route path="pedidos"  element={<PedidosPage />} />
           <Route path="comanda/:orderId" element={<ComandaPage />} />
-          <Route path="caixa"    element={<CaixaPage />} />
-          <Route path="admin"    element={<AdminPage />} />
+          <Route path="caixa"    element={<RequireRole roles={['owner', 'manager', 'cashier']}><CaixaPage /></RequireRole>} />
+          <Route path="admin"    element={<RequireRole roles={['owner', 'manager']}><AdminPage /></RequireRole>} />
           <Route path="cardapio" element={<CardapioPage />} />
-          <Route path="equipe"   element={<EquipePage />} />
+          <Route path="equipe"   element={<RequireRole roles={['owner', 'manager']}><EquipePage /></RequireRole>} />
           <Route path="fiado"    element={<FiadoPage />} />
-          <Route path="auditoria" element={<AuditoriaPage />} />
+          <Route path="auditoria" element={<RequireRole roles={['owner', 'manager']}><AuditoriaPage /></RequireRole>} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -5,6 +5,171 @@
 
 ---
 
+## Próximos passos
+
+- **Notificação no PC ao solicitar conta pelo celular**: quando o garçom pedir a conta
+  (`Solicitar conta`) pelo celular, o PC do caixa deve mostrar uma notificação em tempo
+  real (som/popup), sem precisar ficar checando a tela. Provavelmente via polling mais
+  frequente na tela do Caixa/Mesas, ou WebSocket/SSE pra empurrar o evento na hora.
+- **Botão do WhatsApp no recibo ainda não abre o app direto no celular** — hoje usa
+  a Web Share API (`navigator.share`), que deveria abrir o menu nativo de compartilhar
+  do Android/iOS, mas na prática ainda não está abrindo o WhatsApp/app nenhum no
+  celular do usuário. Precisa investigar por que o compartilhamento nativo não está
+  disparando (permissões do navegador? HTTPS obrigatório pra Web Share API em alguns
+  celulares — o acesso hoje é via `http://192.168.x.x:5173`, sem HTTPS, o que pode
+  ser a causa raiz).
+- **Imprimir direto pelo celular** — o botão de impressão (recibo térmico) hoje
+  assume uma impressora conectada ao PC/navegador que abre o pop-up de impressão;
+  no celular isso não funciona do mesmo jeito (sem impressora térmica pareada).
+  Avaliar impressão via Bluetooth/rede local direto do celular, ou definir que
+  impressão só acontece pelo PC do caixa mesmo.
+- Rodar `instalar_servicos.ps1` (PowerShell como Administrador) pra registrar o
+  BarrioERP como serviço do Windows e iniciar sozinho no boot (NSSM já instalado
+  via winget, script já pronto — só falta executar).
+- Avaliar se `kitchen` precisa de alguma visão própria simplificada (hoje usa as
+  mesmas restrições do `waiter`).
+- Voltar ao tema de acesso remoto/hospedagem quando fizer sentido (documentado em
+  memória — ficou pausado por enquanto).
+
+---
+
+## [v0.5.0] — RBAC por cargo, Auditoria, correções de Fiado/Caixa e polish geral
+
+Sessão longa cobrindo: controle de acesso por cargo (garçom não vê dinheiro),
+tela de Auditoria nova, correções de contabilidade (fiado inflando o faturamento),
+identidade visual própria, exportação de relatórios, recibo por WhatsApp,
+divisão de conta por item e vários ajustes de mobile.
+
+### Backend — RBAC (controle de acesso por cargo)
+
+**Arquivos:** `app/api/deps.py` (helper `require_roles`), `orders.py`, `payments.py`,
+`cash.py`, `reports.py`, `audit.py`, `menu.py`
+
+Garçom (`waiter`) e cozinha (`kitchen`) não devem ver dinheiro nem faturamento —
+só quem atende caixa. Endpoints agora bloqueados (HTTP 403) pra esses cargos:
+
+| Ação | Endpoint | Cargos permitidos |
+|---|---|---|
+| Desconto / taxa de serviço | `PATCH /orders/{id}/discount`, `/service-fee` | owner, manager, cashier |
+| Apagar comanda | `DELETE /orders/{id}` | owner, manager |
+| Fechar em fiado / finalizar | `PATCH /orders/{id}/close`, `/finish` | owner, manager, cashier |
+| Registrar pagamento | `POST /payments` | owner, manager, cashier |
+| Todo o módulo Caixa | `/cash/*` | owner, manager, cashier |
+| Relatório do dia / histórico | `GET /reports/daily`, `/history` | owner, manager, cashier |
+| Auditoria | `GET /audit` | owner, manager |
+| Editar cardápio (criar/editar/apagar) | `/menu/*` (mutações) | owner, manager |
+
+Reads não-sensíveis (listar cardápio, itens, fiado) continuam liberados pra todos.
+
+### Frontend — RBAC
+
+**Arquivos:** `Layout.tsx`, `App.tsx`, `OrderDetailView.tsx`, `DashboardPage.tsx`, `PedidosPage.tsx`
+
+- Menu lateral filtra Caixa/Auditoria/Administração por `roles` no item de nav
+- `RequireRole` no `App.tsx` bloqueia acesso direto por URL (redireciona pro Dashboard)
+- Dentro da comanda: garçom não vê Total/Subtotal/Taxa/Desconto nem os botões
+  Receber/Desconto/Taxa/Dividir conta/Fiado/Apagar — só itens, `+ Item`, `Cozinha`
+  e `Solicitar conta` (preço de linha do item continua visível, só o agregado some)
+- Dashboard e Pedidos escondem os valores em R$ dos cards pra garçom/cozinha
+- Testado ao vivo logando como um garçom real (Felipe) e conferindo cada tela
+
+### Backend — Correções de contabilidade e auditoria
+
+**Arquivos:** `order_service.py`, `payment_service.py`, `order_repository.py`, `schemas/order.py`
+
+- **Fix:** comanda fechada como fiado (pagamento parcial) estava sendo somada
+  como faturamento do dia igual a uma venda quitada — corrigido pra só contar
+  quando `total_pago >= total`
+- **Fix:** `PaymentService.finish()` (fechar com pagamento total) nunca tinha
+  log de auditoria — só o fechamento em fiado tinha
+- Log de auditoria adicionado em: registrar pagamento, finalizar comanda,
+  aplicar desconto, alternar taxa de serviço, fechar em fiado
+- Nome do cliente/mesa agora incluído em **todos** os eventos de auditoria
+  (antes faltava em fechar/reabrir/cancelar/desconto/taxa)
+- Novo campo `is_fiado` no `OrderResponse`, calculado em `list_history()`
+- **Fix:** usuário criado pela tela de Equipe ficava sem `establishment_id`
+  vinculado e não conseguia operar o sistema — agora herda o do usuário que criou
+
+### Frontend — Tela de Auditoria (nova)
+
+**Arquivo:** `pages/AuditoriaPage.tsx`
+
+Histórico em tempo real (auto-refresh 20s) de tudo que acontece nas comandas:
+item adicionado/cancelado, quantidade alterada, pagamento, abertura/fechamento/
+finalização/reabertura, com filtros por tipo de ação, nome de quem fez e de quem
+se refere a ação, link direto pra comanda. Acessível pelo menu lateral e como
+aba dentro de Administração.
+
+### Frontend — Divisão de conta por item
+
+**Arquivo:** `components/OrderDetailView.tsx` (`SplitModal`)
+
+Modal de dividir conta ganhou duas abas: **Igualmente** (já existia) e **Por item**
+— toca no número da pessoa em cada item da comanda pra atribuir; o valor de cada
+um é calculado proporcionalmente (incluindo taxa/desconto), exato em centavos.
+
+### Frontend — Exportar relatório e recibo por WhatsApp
+
+**Arquivos:** `lib/reportExport.ts`, `lib/receiptImage.ts`, `pages/CaixaPage.tsx`,
+`components/OrderDetailView.tsx`
+
+- Caixa: botões CSV e PDF (impressão em A4) do relatório do dia
+- Comanda: recibo gerado como **imagem** (canvas, com a logo do bar) pra
+  compartilhar pelo WhatsApp — usa Web Share API no celular, baixa a imagem
+  no desktop
+
+### Frontend — Administração reorganizada
+
+**Arquivos:** `pages/AdminPage.tsx`, `pages/EquipePage.tsx`, `components/ui.tsx`
+
+- Equipe e Auditoria viraram abas dentro de Administração (`AdminTabs`)
+- "Trocar minha senha" adicionado (endpoint já existia no backend sem uso)
+
+### Frontend — Fiado
+
+**Arquivo:** `pages/FiadoPage.tsx`
+
+- Busca por nome do cliente
+- Card de resumo no topo: total em fiado, nº de clientes, nº de comandas
+- Botão "Ver itens" — mostra os itens da comanda sem precisar reabrir
+- Cards de cada cliente vêm colapsados por padrão (evita rolagem enorme)
+- Grid lado a lado quando o cliente tem mais de uma comanda em fiado
+
+### Frontend — Cardápio / adicionar itens
+
+**Arquivo:** `components/OrderDetailView.tsx`
+
+- Complemento do item (sabor/corte) deixou de ser obrigatório — se não escolher,
+  usa só o nome base; se escolher, concatena (ex: "Churrasco - carne")
+- Modal "Adicionar item" não fecha mais sozinho após adicionar — dá pra lançar
+  vários itens seguidos sem reabrir o modal a cada um
+
+### Frontend — Mobile
+
+- Modal "Adicionar item" ocupa a tela inteira no celular (era um cartão pequeno
+  que ficava atrás do teclado virtual) — lista de itens agora preenche o espaço
+  disponível em vez de cortar na metade
+- Quantidade com stepper (`QtyStepper` em `ui.tsx`) — toca +/- em vez de apagar
+  e digitar
+- Nome do bar no topo vira só o ícone no mobile (evitava sobrepor o menu/atalhos)
+- `ModalOverlay` (todos os modais) ganhou altura máxima + rolagem interna, pra
+  não ficar cortado atrás do teclado
+
+### Identidade visual
+
+**Arquivos:** `assets/`, `frontend/public/`, `components/Layout.tsx`
+
+- Ícone/logo próprio (palmeira, paleta bege/marrom do Recanto) — favicon, atalho
+  da área de trabalho, cabeçalho do app
+- Título da aba trocado de "frontend" pra "BarrioERP"
+
+### Infraestrutura
+
+- `instalar_servicos.ps1` — script pra registrar o backend/frontend como serviço
+  do Windows via NSSM, iniciando sozinho no boot (falta rodar como Administrador)
+
+---
+
 ## [v0.4.0] — Equipe, Pagamentos (Caixa) e Dashboard
 
 ### Frontend — Página de Equipe (EquipePage.tsx)
