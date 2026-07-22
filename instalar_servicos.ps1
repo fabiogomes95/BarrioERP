@@ -18,6 +18,7 @@ $root = "C:\Users\Fabinho\Documents\BarrioERP"
 & $nssm set BarrioERP-Backend AppStderr "$root\backend\service_err.log"
 & $nssm set BarrioERP-Backend AppRotateFiles 1
 & $nssm set BarrioERP-Backend Start SERVICE_AUTO_START
+& $nssm set BarrioERP-Backend DependOnService postgresql-x64-16
 
 # ── Frontend ─────────────────────────────────────────────────────────────────
 & $nssm install BarrioERP-Frontend "C:\Program Files\nodejs\npm.cmd" "run dev"
@@ -26,6 +27,7 @@ $root = "C:\Users\Fabinho\Documents\BarrioERP"
 & $nssm set BarrioERP-Frontend AppStderr "$root\frontend\service_err.log"
 & $nssm set BarrioERP-Frontend AppRotateFiles 1
 & $nssm set BarrioERP-Frontend Start SERVICE_AUTO_START
+& $nssm set BarrioERP-Frontend DependOnService BarrioERP-Backend
 
 Write-Host ""
 Write-Host "Servicos instalados! Eles vao iniciar sozinhos no proximo boot do Windows." -ForegroundColor Green
