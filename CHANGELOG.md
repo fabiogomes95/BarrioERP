@@ -11,13 +11,6 @@
   (`Solicitar conta`) pelo celular, o PC do caixa deve mostrar uma notificação em tempo
   real (som/popup), sem precisar ficar checando a tela. Provavelmente via polling mais
   frequente na tela do Caixa/Mesas, ou WebSocket/SSE pra empurrar o evento na hora.
-- **Botão do WhatsApp no recibo ainda não abre o app direto no celular** — hoje usa
-  a Web Share API (`navigator.share`), que deveria abrir o menu nativo de compartilhar
-  do Android/iOS, mas na prática ainda não está abrindo o WhatsApp/app nenhum no
-  celular do usuário. Provável causa raiz: Web Share API exige contexto seguro
-  (HTTPS) na maioria dos navegadores móveis, e o acesso hoje é `http://` puro
-  (rede local ou Tailscale). Ainda não implementado — avaliar certificado local
-  (mkcert) ou aceitar a limitação por enquanto.
 - **Imprimir direto pelo celular** — o botão de impressão (recibo térmico) hoje
   assume uma impressora conectada ao PC/navegador que abre o pop-up de impressão;
   no celular isso não funciona do mesmo jeito (sem impressora térmica pareada).
@@ -114,6 +107,38 @@ celular — rede privada (WireGuard) que dá um endereço fixo alcançável de
 qualquer rede, sem mexer no roteador. Testado com sucesso em rede móvel (dados).
 Regra de firewall `BarrioERP Backend 8000` já cobria os perfis Privado e Público,
 então não precisou de ajuste extra.
+
+### Infraestrutura — HTTPS via certificado Tailscale (resolve o botão do WhatsApp)
+
+Sem domínio público, um certificado confiável só é possível pro hostname que o
+Tailscale já verifica e resolve: **HTTPS Certificates** ativado no admin do
+Tailscale (`login.tailscale.com/admin/dns`), tailnet renomeado pra
+`cod-aldebaran.ts.net`, certificado emitido via `tailscale cert` pro hostname
+`gomes-pc.cod-aldebaran.ts.net`.
+
+**Arquivos novos:**
+- `backend/certs/` (gitignored — só `.crt`/`.key`/`.log` ficam de fora, o script
+  abaixo é versionado)
+- `backend/certs/renovar-cert.ps1` — renova o certificado e reinicia o serviço
+  HTTPS; agendado via Task Scheduler (`BarrioERP-Renovar-Cert`, diário às 4h,
+  idempotente — só renova de fato perto do vencimento)
+
+**Novo serviço Windows** `BarrioERP-Backend-TLS` — segunda instância do mesmo
+`uvicorn app.main:app`, na porta 443 com `--ssl-certfile`/`--ssl-keyfile`. Roda
+em paralelo ao `BarrioERP-Backend` (porta 8000, HTTP puro) — quem tem Tailscale
+ativo usa `https://gomes-pc.cod-aldebaran.ts.net` (contexto seguro, Web Share
+API funciona); acesso local pela rede do bar sem Tailscale continua disponível
+em HTTP puro como fallback. `instalar_servicos.ps1` atualizado pra instalar os
+dois de uma vez numa reinstalação futura (e corrigido: apontava pra
+`C:\Users\Fabinho\...`, caminho antigo de antes da migração pra `D:`).
+
+**Resultado:** botão de compartilhar recibo por WhatsApp agora dispara o menu
+nativo de compartilhar corretamente (testado no PC e no celular). Não abre o
+WhatsApp diretamente — abre o menu do sistema com a imagem já anexada, e o
+usuário escolhe o app. Isso é o comportamento correto e esperado da Web Share
+API com arquivos (`navigator.share({ files })`): nenhum site consegue pular
+essa escolha do usuário por questão de segurança/privacidade da plataforma —
+não é uma limitação do BarrioERP.
 
 ---
 

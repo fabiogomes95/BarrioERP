@@ -1,4 +1,7 @@
 .env
+certs/*.key
+certs/*.crt
+certs/*.log
 __pycache__/
 *.py[cod]
 *.egg-info/
