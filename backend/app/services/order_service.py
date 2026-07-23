@@ -94,6 +94,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm.exc import StaleDataError
 
+from app.core import events
 from app.core.config import settings
 from app.core.exceptions import (
     BusinessRuleError,
@@ -569,6 +570,64 @@ class OrderService(BaseService):
         )
 
         # Retorna estado final da comanda
+        return await self._get_or_raise(order.id, establishment_id)
+
+    async def request_bill(self, order_id: UUID) -> OrderResponse:
+        """
+        Marca a comanda como CONTA SOLICITADA (garçom avisando que o cliente
+        quer pagar) e notifica o caixa em tempo real (SSE).
+
+        Por que na Order e não só na Table?
+            Comandas de balcão (sem mesa — table_id None) também precisam
+            pedir a conta; e nem toda mesa tem uma única comanda (mesas com
+            várias pessoas podem ter comandas separadas por pessoa). O status
+            "conta pedida" é da COMANDA — quando ela está ligada a uma mesa,
+            espelhamos o status na mesa também, só para o card colorir
+            corretamente na tela de Mesas.
+
+        LANÇA:
+            NotFoundError (404)      → comanda não encontrada
+            BusinessRuleError (422)  → comanda não está aberta
+        """
+        establishment_id = self._require_establishment()
+        order = await self._get_or_raise(order_id, establishment_id)
+
+        if order.status != OrderStatus.OPEN:
+            raise BusinessRuleError(
+                f"Não é possível solicitar a conta de uma comanda com status "
+                f"'{order.status.value}'. Apenas comandas ABERTAS podem solicitar a conta."
+            )
+
+        order.status = OrderStatus.BILL_REQUESTED
+
+        table = None
+        if order.table_id is not None:
+            table = await self._table_repo.get_by_establishment(
+                order.table_id, establishment_id
+            )
+            if table is not None:
+                table.status = TableStatus.BILL_REQUESTED
+
+        await self.session.flush()
+
+        await events.publish(
+            self.session,
+            "table.bill_requested",
+            company_id=str(self.company_id),
+            establishment_id=str(establishment_id),
+            order_id=str(order.id),
+            table_id=str(table.id) if table else None,
+            table_number=table.number if table else None,
+            table_label=table.label if table else (order.customer_name or "Balcão"),
+        )
+
+        await self._log_audit(
+            action="order.bill_requested",
+            resource_type="order",
+            resource_id=str(order.id),
+            after=self._order_snapshot(order),
+        )
+
         return await self._get_or_raise(order.id, establishment_id)
 
     async def cancel_item(

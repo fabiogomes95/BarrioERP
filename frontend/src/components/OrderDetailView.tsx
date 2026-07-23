@@ -3,7 +3,7 @@ import {
   type Order, type OrderItem, type Table, type Category, type MenuItem,
   type Payment, type PaymentMethod,
   fetchCategories, fetchMenuItems,
-  addOrderItem, cancelOrderItem, cancelOrder, setItemQuantity, setOrderDiscount, setOrderServiceFee, closeOrder, updateTableStatus,
+  addOrderItem, cancelOrderItem, cancelOrder, setItemQuantity, setOrderDiscount, setOrderServiceFee, closeOrder, requestBill,
   fetchOrderPayments, registerPayment, finishOrder, updateOrderCustomerName, getUser,
 } from '../lib/api'
 import { maskCurrency, parseCurrency, toCurrencyInput } from '../lib/format'
@@ -1362,7 +1362,7 @@ export function OrderDetail({
   const cfg = ORDER_STATUS[order.status] ?? ORDER_STATUS.open
   const canEdit = order.status === 'open' || order.status === 'bill_requested'
   const canAddItem = order.status === 'open'
-  const canRequestBill = order.status === 'open' && table
+  const canRequestBill = order.status === 'open'
   const canClose = order.status === 'open' || order.status === 'bill_requested'
   // Garçom/cozinha não veem valores nem mexem em fechamento — só quem atende o caixa.
   const role = getUser()?.role
@@ -1372,12 +1372,11 @@ export function OrderDetail({
   const cancelledItems = order.items.filter(i => i.status === 'cancelled')
 
   async function handleRequestBill() {
-    if (!table) return
     setActionError(null)
     setRequestingBill(true)
     try {
-      await updateTableStatus(table.id, 'bill_requested', table.version)
-      onUpdated({ ...order, status: 'bill_requested' })
+      const updated = await requestBill(order.id)
+      onUpdated(updated)
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Erro')
     } finally {

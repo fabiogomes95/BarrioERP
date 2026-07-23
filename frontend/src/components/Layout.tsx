@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { clearToken, getUser, refreshCompanyName } from '../lib/api'
+import { useBillRequestAlerts } from '../lib/notifications'
 
 // ── Ícones ────────────────────────────────────────────────────────────────────
 
@@ -287,6 +288,47 @@ function TopBar({ onMenu, barName }: { onMenu: () => void; barName: string }) {
 
 // ── Layout principal ──────────────────────────────────────────────────────────
 
+function BillRequestToasts() {
+  const { alerts, dismiss } = useBillRequestAlerts()
+  const navigate = useNavigate()
+
+  if (alerts.length === 0) return null
+
+  return (
+    <div className="fixed top-3 right-3 z-[100] flex flex-col gap-2 w-[calc(100%-1.5rem)] max-w-sm">
+      {alerts.map(a => (
+        <div key={a.id}
+          className="flex items-center gap-3 rounded-xl border border-orange-500/30 shadow-lg px-3.5 py-3"
+          style={{ background: '#1a1410' }}>
+          <div className="w-9 h-9 rounded-full bg-orange-500/15 flex items-center justify-center shrink-0">
+            <svg className="w-5 h-5 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.9}>
+              <path strokeLinecap="round" strokeLinejoin="round"
+                d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+            </svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-stone-100 text-sm font-semibold">Conta solicitada</p>
+            <p className="text-stone-400 text-xs truncate">{a.tableLabel || `Mesa ${a.tableNumber}`}</p>
+          </div>
+          <button
+            onClick={() => { dismiss(a.id); navigate(`/comanda/${a.orderId}`) }}
+            className="text-xs font-semibold text-amber-400 hover:text-amber-300 px-2 py-1 shrink-0">
+            Ver
+          </button>
+          <button
+            onClick={() => dismiss(a.id)}
+            aria-label="Dispensar"
+            className="text-stone-500 hover:text-stone-300 shrink-0">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export default function Layout() {
   const [open, setOpen] = useState(false)
   const [barName, setBarName] = useState(getUser()?.company_name ?? 'BarrioERP')
@@ -303,6 +345,9 @@ export default function Layout() {
 
       {/* Drawer lateral recolhível */}
       <SideDrawer open={open} onClose={() => setOpen(false)} />
+
+      {/* Alerta em tempo real: mesa solicitou a conta (som + toast) */}
+      <BillRequestToasts />
 
       {/* Conteúdo da rota ativa */}
       <main className="flex-1 overflow-auto min-h-0">

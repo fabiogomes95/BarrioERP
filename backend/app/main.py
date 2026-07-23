@@ -56,6 +56,7 @@ from app.core.exceptions import (
     ValidationError,
 )
 from app.database.session import engine
+from app.core import events
 from app.core.rate_limit import limiter
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -68,8 +69,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     Tudo antes do yield: roda ao iniciar.
     Tudo depois do yield: roda ao desligar.
     """
+    await events.start_listener()
     yield
     # Ao desligar: fecha todas as conexões do pool
+    await events.stop_listener()
     await engine.dispose()
 
 

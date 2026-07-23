@@ -445,3 +445,24 @@ async def close_order(
     """
     require_roles(current_user, UserRole.OWNER, UserRole.MANAGER, UserRole.CASHIER)
     return await _service(session, current_user).close_order(order_id, data)
+
+
+# ── PATCH /orders/{order_id}/request-bill — Solicitar a conta ─────────────────
+
+
+@router.patch(
+    "/{order_id}/request-bill",
+    response_model=OrderResponse,
+    summary="Solicitar a conta",
+    description=(
+        "Marca a comanda como CONTA SOLICITADA e avisa o caixa em tempo real. "
+        "Funciona com ou sem mesa vinculada (comandas de balcão inclusas). "
+        "Qualquer cargo pode chamar — é o garçom quem normalmente aciona isso."
+    ),
+)
+async def request_bill(
+    order_id: UUID,
+    session: DBSession,
+    current_user: CurrentUser,
+) -> OrderResponse:
+    return await _service(session, current_user).request_bill(order_id)

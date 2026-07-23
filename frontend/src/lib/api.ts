@@ -381,6 +381,11 @@ export async function finishOrder(orderId: string, version: number): Promise<Ord
   })
 }
 
+export async function requestBill(orderId: string): Promise<Order> {
+  // Funciona com ou sem mesa vinculada (comandas de balcão inclusas)
+  return request<Order>(`/orders/${orderId}/request-bill`, { method: 'PATCH' })
+}
+
 // ── Cardápio ──────────────────────────────────────────────────────────────────
 
 export interface Category {

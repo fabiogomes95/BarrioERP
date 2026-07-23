@@ -104,29 +104,9 @@ async def get_current_user_id(
         )
 
 
-async def get_current_user(
-    token: Annotated[str, Depends(oauth2_scheme)],
-    session: DBSession,
-) -> User:
-    """
-    Decodifica o JWT e carrega o usuário completo do banco.
-
-    Use quando você precisa dos dados completos do usuário logado
-    (ex: GET /auth/me, verificações de permissão por empresa).
-
-    FLUXO:
-        1. oauth2_scheme extrai o token do header
-        2. decode_token() verifica assinatura e expiração
-        3. Extrai user_id do payload "sub"
-        4. Busca o User no banco (session.get usa cache interno)
-        5. Verifica se o usuário está ativo e não deletado
-        6. Retorna o objeto User
-
-    Por que verificar is_active aqui e não só no JWT?
-    O JWT tem validade de até 60 minutos. Se um usuário for desativado
-    durante esse período, o token ainda seria válido. Verificando no banco,
-    garantimos que usuários desativados são bloqueados imediatamente.
-    """
+async def _load_user_from_token(token: str, session: AsyncSession) -> User:
+    """Lógica compartilhada entre get_current_user (header) e a variante por
+    query param usada pelo SSE (EventSource não permite headers customizados)."""
     try:
         payload = decode_token(token)
         if payload.get("type") != "access":
@@ -154,6 +134,41 @@ async def get_current_user(
     return user
 
 
+async def get_current_user(
+    token: Annotated[str, Depends(oauth2_scheme)],
+    session: DBSession,
+) -> User:
+    """
+    Decodifica o JWT (header Authorization) e carrega o usuário completo do banco.
+
+    Use quando você precisa dos dados completos do usuário logado
+    (ex: GET /auth/me, verificações de permissão por empresa).
+
+    Por que verificar is_active aqui e não só no JWT?
+    O JWT tem validade de até 60 minutos. Se um usuário for desativado
+    durante esse período, o token ainda seria válido. Verificando no banco,
+    garantimos que usuários desativados são bloqueados imediatamente.
+    """
+    return await _load_user_from_token(token, session)
+
+
+async def get_current_user_from_query_token(
+    token: str,
+    session: DBSession,
+) -> User:
+    """
+    Mesma coisa que get_current_user, mas lê o token de `?token=` na URL em
+    vez do header Authorization.
+
+    Necessário só para o endpoint SSE de notificações — a EventSource do
+    navegador não permite mandar headers customizados, então não dá pra usar
+    o esquema Bearer normal ali. O token na query string é um trade-off aceito
+    para esse caso específico (rede local/Tailscale, não fica exposto na
+    internet pública).
+    """
+    return await _load_user_from_token(token, session)
+
+
 def require_roles(user: User, *roles: UserRole) -> None:
     """
     Bloqueia o acesso se o usuário não tiver um dos roles permitidos.
@@ -179,3 +194,6 @@ CurrentUserId = Annotated[UUID, Depends(get_current_user_id)]
 
 # Retorna o objeto User completo (faz query ao banco)
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+# Variante para SSE — autentica via ?token= na URL (ver get_current_user_from_query_token)
+CurrentUserSSE = Annotated[User, Depends(get_current_user_from_query_token)]
