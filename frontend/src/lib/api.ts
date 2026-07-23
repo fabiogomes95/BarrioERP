@@ -81,6 +81,28 @@ export interface LoginResult {
   user: LocalUser
 }
 
+export async function forgotPassword(
+  email: string,
+  recoveryCode: string,
+  newPassword: string,
+): Promise<void> {
+  // Fetch cru (não usa request()) — request() trata qualquer 401 como
+  // "sessão expirada" e redireciona pro /login, o que atrapalharia aqui
+  // (código de recuperação errado também retorna 401, mas não é sessão
+  // nenhuma expirando — o usuário nem está logado).
+  const res = await fetch(`${BASE}/auth/forgot-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, recovery_code: recoveryCode, new_password: newPassword }),
+  })
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    const msg = body.detail ?? body.message ?? 'Não foi possível redefinir a senha'
+    throw new Error(Array.isArray(msg) ? msg.map((e: { msg: string }) => e.msg).join(', ') : msg)
+  }
+}
+
 export async function login(email: string, password: string): Promise<LoginResult> {
   const res = await fetch(`${BASE}/auth/login`, {
     method: 'POST',

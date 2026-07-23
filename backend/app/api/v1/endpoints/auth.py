@@ -30,7 +30,7 @@ from fastapi import APIRouter, Request
 from app.api.deps import CurrentUser, DBSession
 from app.core.rate_limit import limiter
 from app.models.company import Company
-from app.schemas.auth import LoginRequest, TokenResponse, UserMeResponse
+from app.schemas.auth import ForgotPasswordRequest, LoginRequest, TokenResponse, UserMeResponse
 from app.services.auth_service import AuthService
 
 # prefix e tags são adicionados no router.py central
@@ -74,6 +74,33 @@ async def login(
     """
     service = AuthService(session)
     return await service.login(credentials)
+
+
+@router.post(
+    "/forgot-password",
+    summary="Redefinir senha esquecida",
+    description=(
+        "Redefine a senha de um usuário usando o código de recuperação do "
+        "bar (PASSWORD_RECOVERY_CODE). Não exige login — é justamente para "
+        "quando ninguém consegue entrar."
+    ),
+)
+@limiter.limit("5/minute")
+async def forgot_password(
+    request: Request,
+    data: ForgotPasswordRequest,
+    session: DBSession,
+) -> dict:
+    """
+    RESPOSTAS:
+        200 → {"status": "ok"}
+        401 → código de recuperação incorreto
+        404 → e-mail não encontrado
+        429 → mais de 5 tentativas por minuto (rate limit)
+    """
+    service = AuthService(session)
+    await service.forgot_password(data)
+    return {"status": "ok"}
 
 
 @router.get(

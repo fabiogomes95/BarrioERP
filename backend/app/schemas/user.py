@@ -100,29 +100,14 @@ class UserCreate(BaseSchema):
     @classmethod
     def password_strength(cls, v: str) -> str:
         """
-        Valida a força mínima da senha.
+        Valida o tamanho mínimo da senha.
 
-        REGRAS IMPLEMENTADAS:
-          - Mínimo 8 caracteres
-          - Pelo menos 1 letra
-          - Pelo menos 1 número
-
-        POR QUE NO SCHEMA?
-        O schema é a primeira barreira — rejeita senhas fracas antes de
-        chegar ao Service ou ao banco. Isso poupa processamento: não
-        cria sessão de banco para depois rejeitar.
-
-        EM PRODUÇÃO SaaS:
-        Sistemas maiores usam bibliotecas como `zxcvbn` que avaliam
-        a entropia real da senha (ex: "password1" é fraca mesmo tendo letra e número).
-        Para nosso contexto, as regras básicas são suficientes.
+        REGRA: mínimo 4 caracteres, qualquer combinação de letras/números.
+        Time pequeno, sistema só acessível na rede local/Tailscale — a
+        prioridade aqui é facilidade de uso, não robustez contra ataque.
         """
-        if len(v) < 8:
-            raise ValueError("Password must be at least 8 characters")
-        if not any(c.isalpha() for c in v):
-            raise ValueError("Password must contain at least one letter")
-        if not any(c.isdigit() for c in v):
-            raise ValueError("Password must contain at least one digit")
+        if len(v) < 4:
+            raise ValueError("Password must be at least 4 characters")
         return v
 
     @field_validator("phone")
@@ -229,13 +214,9 @@ class ChangePasswordRequest(BaseSchema):
     @field_validator("new_password")
     @classmethod
     def new_password_strength(cls, v: str) -> str:
-        """Mesmas regras de força que UserCreate.password_strength."""
-        if len(v) < 8:
-            raise ValueError("New password must be at least 8 characters")
-        if not any(c.isalpha() for c in v):
-            raise ValueError("New password must contain at least one letter")
-        if not any(c.isdigit() for c in v):
-            raise ValueError("New password must contain at least one digit")
+        """Mesma regra que UserCreate.password_strength (mínimo 4 caracteres)."""
+        if len(v) < 4:
+            raise ValueError("New password must be at least 4 characters")
         return v
 
     @model_validator(mode="after")

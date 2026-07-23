@@ -48,6 +48,28 @@ class LoginRequest(BaseModel):
         return v
 
 
+class ForgotPasswordRequest(BaseModel):
+    """
+    Dados enviados pelo cliente para redefinir a senha esquecida.
+
+    Não exige login (o usuário esqueceu a senha, não tem como logar!).
+    Em vez de link por e-mail (exigiria configurar envio de e-mail),
+    usa um código de recuperação fixo (PASSWORD_RECOVERY_CODE no .env) —
+    quem souber o código consegue redefinir a senha de qualquer e-mail
+    cadastrado. Funciona mesmo sem nenhum outro admin disponível.
+    """
+    email: EmailStr
+    recovery_code: str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def password_strength(cls, v: str) -> str:
+        if len(v) < 4:
+            raise ValueError("New password must be at least 4 characters")
+        return v
+
+
 # ── Saída (Responses) ─────────────────────────────────────────────────────────
 
 class TokenResponse(BaseModel):

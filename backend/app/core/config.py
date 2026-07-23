@@ -36,6 +36,14 @@ class Settings(BaseSettings):
     # Sem default: a aplicação não inicia sem este valor no .env.
     ONBOARDING_SECRET: str
 
+    # Recuperação de senha
+    # Código fixo (compartilhado entre todos os usuários) que permite
+    # redefinir a senha direto na tela de login, sem precisar de outro
+    # admin disponível nem de e-mail/SMS configurado. Quem souber o código
+    # consegue redefinir a senha de qualquer e-mail cadastrado — guarde-o
+    # como uma senha mestra.
+    PASSWORD_RECOVERY_CODE: str
+
     # Auth
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7

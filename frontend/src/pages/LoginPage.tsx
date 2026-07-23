@@ -1,7 +1,125 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { login } from '../lib/api'
+import { login, forgotPassword } from '../lib/api'
 import { ThemeToggle } from '../components/ui'
+
+function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
+  const [email, setEmail] = useState('')
+  const [code, setCode] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [done, setDone] = useState(false)
+  const [loading, setLoading] = useState(false)
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault()
+    setError(null)
+    setLoading(true)
+    try {
+      await forgotPassword(email, code, newPassword)
+      setDone(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao conectar com o servidor')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (done) {
+    return (
+      <div className="text-center py-2">
+        <p className="text-stone-200 text-sm font-semibold mb-1">Senha redefinida!</p>
+        <p className="text-stone-500 text-xs mb-5">Já pode entrar com a senha nova.</p>
+        <button
+          onClick={onBack}
+          className="w-full py-2.5 rounded-xl text-sm font-semibold
+                     bg-amber-500 hover:bg-amber-400 text-stone-900 transition-colors">
+          Voltar pro login
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <p className="text-stone-300 text-sm font-semibold mb-1">Redefinir senha</p>
+      <p className="text-stone-600 text-xs mb-5">
+        Pede o código de recuperação pra quem administra o sistema.
+      </p>
+
+      {error && (
+        <div className="flex items-start gap-2.5 bg-red-500/8 border border-red-500/20
+                        text-red-400 text-xs rounded-xl px-3.5 py-3 mb-4">
+          <svg className="w-3.5 h-3.5 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24"
+               stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round"
+                  d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+          </svg>
+          {error}
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-3.5">
+        <div>
+          <label className="block text-[11px] font-semibold text-stone-500 uppercase tracking-wider mb-1.5">
+            E-mail
+          </label>
+          <input
+            type="email" required autoComplete="email" value={email}
+            onChange={e => setEmail(e.target.value)} placeholder="voce@seubar.com" disabled={loading}
+            className="w-full rounded-xl px-3.5 py-2.5 text-sm border border-stone-800/80 text-stone-100
+                       placeholder-stone-700 focus:outline-none focus:border-amber-500/40
+                       focus:ring-1 focus:ring-amber-500/20 disabled:opacity-40 transition-all"
+            style={{ background: 'var(--color-app-bg)' }}
+          />
+        </div>
+
+        <div>
+          <label className="block text-[11px] font-semibold text-stone-500 uppercase tracking-wider mb-1.5">
+            Código de recuperação
+          </label>
+          <input
+            type="text" required value={code}
+            onChange={e => setCode(e.target.value)} placeholder="peça pro administrador" disabled={loading}
+            className="w-full rounded-xl px-3.5 py-2.5 text-sm border border-stone-800/80 text-stone-100
+                       placeholder-stone-700 focus:outline-none focus:border-amber-500/40
+                       focus:ring-1 focus:ring-amber-500/20 disabled:opacity-40 transition-all"
+            style={{ background: 'var(--color-app-bg)' }}
+          />
+        </div>
+
+        <div>
+          <label className="block text-[11px] font-semibold text-stone-500 uppercase tracking-wider mb-1.5">
+            Senha nova
+          </label>
+          <input
+            type="password" required autoComplete="new-password" minLength={4} value={newPassword}
+            onChange={e => setNewPassword(e.target.value)} placeholder="mínimo 4 caracteres" disabled={loading}
+            className="w-full rounded-xl px-3.5 py-2.5 text-sm border border-stone-800/80 text-stone-100
+                       placeholder-stone-700 focus:outline-none focus:border-amber-500/40
+                       focus:ring-1 focus:ring-amber-500/20 disabled:opacity-40 transition-all"
+            style={{ background: 'var(--color-app-bg)' }}
+          />
+        </div>
+
+        <button
+          type="submit" disabled={loading}
+          className="w-full mt-1 py-2.5 rounded-xl text-sm font-semibold
+                     bg-amber-500 hover:bg-amber-400 active:bg-amber-600
+                     text-stone-900 disabled:opacity-40 disabled:cursor-not-allowed
+                     transition-colors duration-150">
+          {loading ? 'Redefinindo…' : 'Redefinir senha'}
+        </button>
+        <button
+          type="button" onClick={onBack} disabled={loading}
+          className="w-full py-2 rounded-xl text-xs font-semibold text-stone-500
+                     hover:text-stone-300 transition-colors">
+          Voltar pro login
+        </button>
+      </form>
+    </>
+  )
+}
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -9,6 +127,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [mode, setMode] = useState<'login' | 'forgot'>('login')
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -60,6 +179,10 @@ export default function LoginPage() {
           className="rounded-2xl border border-stone-800/70 p-6"
           style={{ background: 'var(--color-app-surface-2)' }}
         >
+          {mode === 'forgot' ? (
+            <ForgotPasswordForm onBack={() => setMode('login')} />
+          ) : (
+          <>
           <p className="text-stone-300 text-sm font-semibold mb-5">Entrar na sua conta</p>
 
           {error && (
@@ -129,7 +252,15 @@ export default function LoginPage() {
             >
               {loading ? 'Entrando…' : 'Entrar'}
             </button>
+            <button
+              type="button"
+              onClick={() => { setError(null); setMode('forgot') }}
+              className="w-full py-1 text-xs font-semibold text-stone-500 hover:text-stone-300 transition-colors">
+              Esqueci minha senha
+            </button>
           </form>
+          </>
+          )}
         </div>
 
         {/* Criar conta */}

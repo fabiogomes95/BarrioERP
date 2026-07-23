@@ -9,14 +9,45 @@
 
 - Avaliar se `kitchen` precisa de alguma visão própria simplificada (hoje usa as
   mesmas restrições do `waiter`).
-- **Sem "esqueci minha senha" no login** — só um manager/owner consegue resetar a
-  senha de outro usuário (tela Equipe). Se sobrar um único owner e ele esquecer a
-  senha, não tem saída pela interface.
 - **`ARCHITECTURE.md` desatualizado** desde 2026-06-10 — cash, reports e audit já
   existem no código mas não estão documentados lá (só o changelog está em dia).
 - Gaps de produto ainda não avaliados: controle de estoque/insumos, reservas de
   mesa com data/hora, relatórios por período (hoje só por dia), emissão fiscal
   (NFC-e), gestão de múltiplos estabelecimentos pela UI.
+
+---
+
+## [v0.10.0] — "Esqueci minha senha" + senha mínima simplificada
+
+### Backend — Recuperação de senha sem e-mail/SMS
+
+**Arquivos:** `app/core/config.py`, `app/schemas/auth.py`, `app/services/auth_service.py`,
+`app/api/v1/endpoints/auth.py`
+
+Sistema não tem e-mail/SMS configurado, então um fluxo tradicional de "link
+por e-mail" exigiria montar essa infraestrutura primeiro. Em vez disso:
+**código de recuperação mestre** (`PASSWORD_RECOVERY_CODE` no `.env`,
+mesmo padrão do `ONBOARDING_SECRET`) — `POST /api/v1/auth/forgot-password`
+recebe `{email, recovery_code, new_password}`, sem precisar estar logado.
+
+- Funciona mesmo sem nenhum admin disponível (resolve o caso "sobrou um
+  único owner e ele esqueceu a senha")
+- Comparação do código via `hmac.compare_digest` (resistente a timing attack)
+- Rate limit próprio (5/min) — mais restrito que o login, por ser ação que
+  efetivamente altera a senha de alguém
+- Log de auditoria (`auth.password_recovery`)
+- Frontend: tela de Login ganhou "Esqueci minha senha" — alterna pra um
+  formulário inline (e-mail + código + senha nova), sem precisar de rota nova
+
+### Backend — Senha mínima simplificada (8→4 caracteres)
+
+**Arquivos:** `app/schemas/user.py`, `app/schemas/onboarding.py`, `app/schemas/auth.py`
+
+Regra antiga (mín. 8 caracteres + letra + número) trocada por só **mínimo 4
+caracteres, qualquer combinação**. Decisão consciente: sistema só acessível
+pela rede local/Tailscale (não exposto na internet pública), equipe pequena,
+prioridade é facilidade de uso no dia a dia sobre robustez contra ataque de
+força bruta.
 
 ---
 

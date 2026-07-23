@@ -27,13 +27,17 @@ MENSAGEM GENÉRICA INTENCIONAL:
     outras senhas para aquele e-mail. Segurança por obscuridade mínima.
 """
 
+import hmac
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import AuthenticationError
-from app.core.security import create_access_token, verify_password
+from app.core.config import settings
+from app.core.exceptions import AuthenticationError, NotFoundError
+from app.core.security import create_access_token, hash_password, verify_password
 from app.models.company import Company
 from app.repositories.user_repository import UserRepository
-from app.schemas.auth import LoginRequest, TokenResponse
+from app.schemas.auth import ForgotPasswordRequest, LoginRequest, TokenResponse
+from app.services.audit_service import AuditService
 
 
 class AuthService:
@@ -95,3 +99,38 @@ class AuthService:
         access_token = create_access_token(subject=user.id, extra=token_extra)
 
         return TokenResponse(access_token=access_token)
+
+    async def forgot_password(self, data: ForgotPasswordRequest) -> None:
+        """
+        Redefine a senha de um usuário via código de recuperação (sem login).
+
+        FLUXO:
+            1. Confere o código de recuperação (comparação resistente a
+               timing attack — hmac.compare_digest, não `==`)
+            2. Busca o usuário pelo e-mail
+            3. Define a nova senha (hash bcrypt)
+            4. Registra em auditoria (ação sensível — alguém redefiniu a
+               própria senha ou a de outra pessoa via código mestre)
+
+        LANÇA:
+            AuthenticationError (401) → código de recuperação incorreto
+            NotFoundError (404)       → e-mail não encontrado
+        """
+        if not hmac.compare_digest(data.recovery_code, settings.PASSWORD_RECOVERY_CODE):
+            raise AuthenticationError("Código de recuperação incorreto")
+
+        user = await self.user_repo.get_by_email(data.email)
+        if user is None:
+            raise NotFoundError("User", data.email)
+
+        user.password_hash = hash_password(data.new_password)
+        await self.session.flush()
+
+        await AuditService(self.session).log(
+            company_id=user.company_id,
+            establishment_id=user.establishment_id,
+            user_id=user.id,
+            action="auth.password_recovery",
+            resource_type="user",
+            resource_id=str(user.id),
+        )

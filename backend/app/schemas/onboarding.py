@@ -122,34 +122,10 @@ class OnboardingRequest(BaseSchema):
     @field_validator("password")
     @classmethod
     def password_strength(cls, v: str) -> str:
-        """
-        Valida a força mínima da senha.
-
-        REGRAS:
-          - Mínimo 8 caracteres
-          - Pelo menos 1 letra
-          - Pelo menos 1 número
-
-        POR QUE DUPLICAR EM VEZ DE IMPORTAR DE user.py?
-        ─────────────────────────────────────────────────
-        Em engenharia, existe a tensão entre DRY (Don't Repeat Yourself)
-        e coesão dos módulos. Aqui optamos por coesão:
-
-          - Este schema não deve depender do módulo de Users
-          - A regra de senha pode evoluir diferentemente para o onboarding
-            (ex: exigir senha mais forte para o primeiro acesso)
-          - Copiar 4 linhas é mais simples do que criar uma dependência
-            circular ou um módulo compartilhado para um único validator
-
-        Quando a duplicação cresce além de 2-3 lugares, extrai-se
-        para um módulo shared. Por ora, este nível é aceitável.
-        """
-        if len(v) < 8:
-            raise ValueError("Password must be at least 8 characters")
-        if not any(c.isalpha() for c in v):
-            raise ValueError("Password must contain at least one letter")
-        if not any(c.isdigit() for c in v):
-            raise ValueError("Password must contain at least one digit")
+        """Mesma regra de user.py (mínimo 4 caracteres) — ver nota lá sobre
+        por que essa validação é duplicada em vez de importada."""
+        if len(v) < 4:
+            raise ValueError("Password must be at least 4 characters")
         return v
 
     @field_validator("phone")
