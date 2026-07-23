@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { clearToken, getUser, refreshCompanyName } from '../lib/api'
-import { useBillRequestAlerts } from '../lib/notifications'
+import { useBillRequestAlerts, isPrintStation, setPrintStation } from '../lib/notifications'
 
 // ── Ícones ────────────────────────────────────────────────────────────────────
 
@@ -120,6 +120,36 @@ function userInitials(name?: string) {
   return name.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()
 }
 
+// ── Toggle: "impressora do bar" ──────────────────────────────────────────────
+// A impressora térmica está ligada por cabo a um único PC. Quem estiver
+// fisicamente nele liga isso uma vez — daí em diante, pedidos de impressão
+// vindos de qualquer outro dispositivo (celular do garçom, etc.) saem aqui.
+
+function PrintStationToggle() {
+  const [enabled, setEnabled] = useState(isPrintStation())
+
+  return (
+    <div className="px-3 pt-2">
+      <label className="flex items-center justify-between gap-2 px-2 py-2 rounded-lg
+                         text-stone-500 hover:bg-stone-800/50 cursor-pointer select-none transition-colors">
+        <span className="flex items-center gap-2 text-xs">
+          <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+            <path strokeLinecap="round" strokeLinejoin="round"
+              d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a1 1 0 001-1v-4a1 1 0 00-1-1H9a1 1 0 00-1 1v4a1 1 0 001 1zm8-12V5a2 2 0 00-2-2H7a2 2 0 00-2 2v4h14z" />
+          </svg>
+          Impressora do bar é este PC
+        </span>
+        <div
+          onClick={() => { const next = !enabled; setEnabled(next); setPrintStation(next) }}
+          className={['relative shrink-0 w-8 rounded-full transition-colors duration-200', enabled ? 'bg-amber-500' : 'bg-stone-700'].join(' ')}
+          style={{ height: '18px' }}>
+          <span className={['absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow transition-transform duration-200', enabled ? 'translate-x-4' : 'translate-x-0.5'].join(' ')} />
+        </div>
+      </label>
+    </div>
+  )
+}
+
 // ── Drawer lateral (recolhível) ─────────────────────────────────────────────────
 
 function SideDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -203,6 +233,8 @@ function SideDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
             </NavLink>
           )})}
         </nav>
+
+        {user && user.role !== 'waiter' && user.role !== 'kitchen' && <PrintStationToggle />}
 
         {/* Perfil + Sair */}
         <div className="p-3 border-t border-stone-800/50">

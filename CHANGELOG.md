@@ -7,11 +7,6 @@
 
 ## Próximos passos
 
-- **Imprimir direto pelo celular** — o botão de impressão (recibo térmico) hoje
-  assume uma impressora conectada ao PC/navegador que abre o pop-up de impressão;
-  no celular isso não funciona do mesmo jeito (sem impressora térmica pareada).
-  Avaliar impressão via Bluetooth/rede local direto do celular, ou definir que
-  impressão só acontece pelo PC do caixa mesmo.
 - Avaliar se `kitchen` precisa de alguma visão própria simplificada (hoje usa as
   mesmas restrições do `waiter`).
 - **Sem "esqueci minha senha" no login** — só um manager/owner consegue resetar a
@@ -22,6 +17,36 @@
 - Gaps de produto ainda não avaliados: controle de estoque/insumos, reservas de
   mesa com data/hora, relatórios por período (hoje só por dia), emissão fiscal
   (NFC-e), gestão de múltiplos estabelecimentos pela UI.
+
+---
+
+## [v0.8.0] — Impressão remota (celular → impressora do bar)
+
+**Arquivos:** `backend/app/api/v1/endpoints/notifications.py`,
+`frontend/src/lib/notifications.ts`, `frontend/src/lib/api.ts`,
+`frontend/src/components/Layout.tsx`, `frontend/src/components/OrderDetailView.tsx`
+
+A impressora térmica está ligada por cabo USB a um único PC — o celular do
+garçom não tem como imprimir localmente. Reaproveitando o canal SSE da
+notificação de "conta pedida" (v0.7.0):
+
+- **`POST /orders` não existe pra isso** — é só `POST /notifications/print`
+  com `{order_id, print_type}`, que publica um evento `print.request` no
+  mesmo barramento (Postgres LISTEN/NOTIFY)
+- **"Impressora do bar é este PC"** — toggle novo na barra lateral (visível pra
+  owner/manager/cashier), salvo em `localStorage` por dispositivo — quem estiver
+  fisicamente no PC com a impressora liga uma vez só
+- Quando o toggle está ligado, o dispositivo escuta `print.request` no mesmo
+  listener SSE já aberto, busca a comanda fresca (`fetchOrder`) e chama
+  `printComanda()` — o mesmo fluxo de sempre (popup + `window.print()`)
+- O botão "Imprimir" na comanda passa a ser inteligente: neste PC (toggle
+  ligado) imprime local como sempre; em qualquer outro dispositivo, manda a
+  impressão pro PC e mostra um ✓ de confirmação por 2s
+
+**Limitação aceita:** só funciona enquanto o navegador estiver aberto no PC da
+impressora (o listener é JS rodando na aba, não um serviço de sistema). Se o
+navegador for fechado nesse PC, os pedidos de impressão remota não chegam —
+mas o sistema continua funcionando normalmente pra tudo o mais.
 
 ---
 

@@ -14,14 +14,22 @@ Por que SSE e não WebSocket?
 
 import asyncio
 import json
+from typing import Literal
+from uuid import UUID
 
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
-from app.api.deps import CurrentUserSSE
+from app.api.deps import CurrentUser, CurrentUserSSE, DBSession
 from app.core import events
 
 router = APIRouter()
+
+
+class PrintRequestIn(BaseModel):
+    order_id: UUID
+    print_type: Literal["comanda"] = "comanda"
 
 
 @router.get(
@@ -64,3 +72,29 @@ async def stream(current_user: CurrentUserSSE) -> StreamingResponse:
             "Connection": "keep-alive",
         },
     )
+
+
+@router.post(
+    "/print",
+    summary="Solicita impressão remota do recibo",
+    description=(
+        "Publica um evento pro dispositivo marcado como 'impressora do bar' "
+        "(a impressora térmica só está fisicamente ligada a um PC — a maioria "
+        "dos dispositivos, celulares inclusive, não tem como imprimir e deve "
+        "mandar a impressão pra quem tem)."
+    ),
+)
+async def request_print(
+    data: PrintRequestIn,
+    session: DBSession,
+    current_user: CurrentUser,
+) -> dict:
+    await events.publish(
+        session,
+        "print.request",
+        company_id=str(current_user.company_id),
+        establishment_id=str(current_user.establishment_id) if current_user.establishment_id else None,
+        order_id=str(data.order_id),
+        print_type=data.print_type,
+    )
+    return {"status": "sent"}

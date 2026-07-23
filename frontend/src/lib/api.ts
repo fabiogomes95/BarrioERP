@@ -386,6 +386,14 @@ export async function requestBill(orderId: string): Promise<Order> {
   return request<Order>(`/orders/${orderId}/request-bill`, { method: 'PATCH' })
 }
 
+export async function requestRemotePrint(orderId: string): Promise<void> {
+  // Envia o pedido de impressão pro dispositivo marcado como impressora do bar
+  await request(`/notifications/print`, {
+    method: 'POST',
+    body: JSON.stringify({ order_id: orderId, print_type: 'comanda' }),
+  })
+}
+
 // ── Cardápio ──────────────────────────────────────────────────────────────────
 
 export interface Category {

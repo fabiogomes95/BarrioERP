@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { getToken, getUser } from './api'
+import { getToken, getUser, fetchOrder, fetchTables } from './api'
+import { printComanda } from './print'
 
 export interface BillRequestAlert {
   id: string
@@ -7,6 +8,24 @@ export interface BillRequestAlert {
   tableNumber: number | null
   tableLabel: string
   tableId: string | null
+}
+
+// ── Estação de impressão ────────────────────────────────────────────────────
+// A impressora térmica está ligada por cabo a um único PC. Qualquer outro
+// dispositivo (celular do garçom, etc.) não tem como imprimir localmente —
+// precisa mandar a impressão pra quem tem. Essa flag é por dispositivo
+// (localStorage), não por usuário: quem liga é quem está fisicamente no PC
+// do caixa, uma vez só.
+
+const PRINT_STATION_KEY = 'barrio_print_station'
+
+export function isPrintStation(): boolean {
+  return localStorage.getItem(PRINT_STATION_KEY) === '1'
+}
+
+export function setPrintStation(value: boolean): void {
+  if (value) localStorage.setItem(PRINT_STATION_KEY, '1')
+  else localStorage.removeItem(PRINT_STATION_KEY)
 }
 
 function beep() {
@@ -40,12 +59,26 @@ function beep() {
   }
 }
 
+async function handleRemotePrint(orderId: string) {
+  try {
+    const [order, tables] = await Promise.all([fetchOrder(orderId), fetchTables()])
+    const table = tables.find(t => t.id === order.table_id)
+    const barName = getUser()?.company_name ?? 'BarrioERP'
+    printComanda(order, table, barName)
+  } catch {
+    // Se a comanda não existir mais (foi fechada nesse meio tempo, etc.),
+    // simplesmente não imprime — não há usuário esperando um retorno aqui.
+  }
+}
+
 /**
- * Escuta o canal de eventos em tempo real (SSE) e mantém uma fila de alertas
- * de "mesa solicitou a conta" pra exibir como toast + som.
+ * Escuta o canal de eventos em tempo real (SSE): alertas de "mesa solicitou
+ * a conta" (toast + som) e pedidos de impressão remota (quando este
+ * dispositivo está marcado como a impressora do bar — ver isPrintStation()).
  *
  * Só conecta pra quem lida com pagamento (owner/manager/cashier) — garçom e
- * cozinha não precisam saber quando alguém pede a conta.
+ * cozinha não precisam saber quando alguém pede a conta, e não são quem
+ * teria a impressora física conectada.
  */
 export function useBillRequestAlerts() {
   const [alerts, setAlerts] = useState<BillRequestAlert[]>([])
@@ -75,6 +108,9 @@ export function useBillRequestAlerts() {
               tableId: data.table_id,
             },
           ])
+        }
+        if (data.type === 'print.request' && isPrintStation()) {
+          handleRemotePrint(data.order_id)
         }
       } catch {
         // ignora mensagens malformadas

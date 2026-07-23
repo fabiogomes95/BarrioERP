@@ -4,11 +4,12 @@ import {
   type Payment, type PaymentMethod,
   fetchCategories, fetchMenuItems,
   addOrderItem, cancelOrderItem, cancelOrder, setItemQuantity, setOrderDiscount, setOrderServiceFee, closeOrder, requestBill,
-  fetchOrderPayments, registerPayment, finishOrder, updateOrderCustomerName, getUser,
+  fetchOrderPayments, registerPayment, finishOrder, updateOrderCustomerName, getUser, requestRemotePrint,
 } from '../lib/api'
 import { maskCurrency, parseCurrency, toCurrencyInput } from '../lib/format'
 import { printComanda, printCozinha, type KitchenItem } from '../lib/print'
 import { shareReceiptWhatsApp } from '../lib/receiptImage'
+import { isPrintStation } from '../lib/notifications'
 import { inputCls, Field, ModalOverlay, QtyStepper } from './ui'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1298,6 +1299,7 @@ export function OrderDetail({
   const [togglingFee, setTogglingFee] = useState(false)
   const [closing, setClosing] = useState(false)
   const [requestingBill, setRequestingBill] = useState(false)
+  const [printSent, setPrintSent] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [editingName, setEditingName] = useState(false)
@@ -1381,6 +1383,23 @@ export function OrderDetail({
       setActionError(err instanceof Error ? err.message : 'Erro')
     } finally {
       setRequestingBill(false)
+    }
+  }
+
+  async function handlePrint() {
+    // A impressora térmica só está ligada (por cabo) a um PC específico.
+    // Se este dispositivo não é ele, manda a impressão pra quem tem.
+    if (isPrintStation()) {
+      printComanda(order, table, getUser()?.company_name ?? 'BarrioERP')
+      return
+    }
+    setPrintSent(true)
+    try {
+      await requestRemotePrint(order.id)
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Erro ao enviar impressão')
+    } finally {
+      setTimeout(() => setPrintSent(false), 2000)
     }
   }
 
@@ -1535,18 +1554,28 @@ export function OrderDetail({
             </p>
           </div>
 
-          {/* Imprimir recibo (impressora térmica 80mm) */}
+          {/* Imprimir recibo — local se este dispositivo tem a impressora
+              térmica, senão manda a impressão pro PC que tem (ver isPrintStation) */}
           <button
-            onClick={() => printComanda(order, table, getUser()?.company_name ?? 'BarrioERP')}
-            title="Imprimir comanda"
-            className="shrink-0 flex items-center justify-center w-9 h-9 rounded-xl
-                       border border-stone-800/60 text-stone-400 hover:text-amber-400
-                       hover:border-stone-700/60 transition-all"
+            onClick={handlePrint}
+            title={isPrintStation() ? 'Imprimir comanda' : 'Enviar para a impressora do bar'}
+            className={[
+              'shrink-0 flex items-center justify-center w-9 h-9 rounded-xl border transition-all',
+              printSent
+                ? 'border-green-500/40 text-green-400'
+                : 'border-stone-800/60 text-stone-400 hover:text-amber-400 hover:border-stone-700/60',
+            ].join(' ')}
             style={{ background: '#161210' }}>
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-              <path strokeLinecap="round" strokeLinejoin="round"
-                d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a1 1 0 001-1v-4a1 1 0 00-1-1H9a1 1 0 00-1 1v4a1 1 0 001 1zm8-12V5a2 2 0 00-2-2H7a2 2 0 00-2 2v4h14z" />
-            </svg>
+            {printSent ? (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                <path strokeLinecap="round" strokeLinejoin="round"
+                  d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a1 1 0 001-1v-4a1 1 0 00-1-1H9a1 1 0 00-1 1v4a1 1 0 001 1zm8-12V5a2 2 0 00-2-2H7a2 2 0 00-2 2v4h14z" />
+              </svg>
+            )}
           </button>
 
           {/* Enviar recibo pelo WhatsApp (imagem formatada, igual ao impresso) */}
