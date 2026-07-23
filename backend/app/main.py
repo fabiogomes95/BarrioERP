@@ -168,7 +168,13 @@ if _FRONTEND.exists():
         # (roteamento client-side do React Router).
         candidate = (_FRONTEND / full_path).resolve()
         if full_path and candidate.is_file() and _FRONTEND.resolve() in candidate.parents:
-            return FileResponse(str(candidate))
+            # no-cache (não "no-store"): o navegador ainda pode guardar o arquivo,
+            # mas é obrigado a revalidar com o servidor a cada uso — favicon/ícones
+            # atualizados aparecem na hora em vez de precisar limpar cache manual.
+            return FileResponse(
+                str(candidate),
+                headers={"Cache-Control": "no-cache, must-revalidate"},
+            )
         return FileResponse(
             str(_FRONTEND / "index.html"),
             headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
