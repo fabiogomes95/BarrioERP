@@ -9,11 +9,39 @@
 
 - Avaliar se `kitchen` precisa de alguma visão própria simplificada (hoje usa as
   mesmas restrições do `waiter`).
-- **`ARCHITECTURE.md` desatualizado** desde 2026-06-10 — cash, reports e audit já
-  existem no código mas não estão documentados lá (só o changelog está em dia).
-- Gaps de produto ainda não avaliados: controle de estoque/insumos, reservas de
-  mesa com data/hora, relatórios por período (hoje só por dia), emissão fiscal
-  (NFC-e), gestão de múltiplos estabelecimentos pela UI.
+- Gaps de produto em andamento (plano de comercialização — multi-estabelecimento
+  fica de fora, o resto entra um por um): controle de estoque/insumos, reservas
+  de mesa com data/hora, tela simplificada pra cozinha (KDS).
+- **NFC-e descartada** — dono não é MEI/CNPJ, não há obrigação fiscal hoje.
+  Revisitar só se a situação formal do negócio mudar.
+
+---
+
+## [v0.11.0] — Relatório por período
+
+**Arquivos:** `backend/app/schemas/report.py` (`PeriodReport`, `DailyBreakdownEntry`),
+`backend/app/services/order_service.py` (`period_report`, `_aggregate_orders`),
+`backend/app/api/v1/endpoints/reports.py` (`GET /reports/period`),
+`frontend/src/lib/api.ts`, `frontend/src/pages/CaixaPage.tsx`
+
+Primeiro item de uma leva de melhorias voltada a comercializar o sistema pra
+outros bares (dono confirmou que vai vender/licenciar o BarrioERP, não é só
+uso próprio — daí a prioridade em fechar gaps de produto que hoje não afetam
+o Recanto mas afetariam outro cliente).
+
+- `GET /reports/period?start=YYYY-MM-DD&end=YYYY-MM-DD` — mesma lógica do
+  relatório diário (faturamento, ticket médio, por forma de pagamento, itens
+  mais vendidos), só que somando um intervalo de datas, mais
+  `daily_breakdown`: o total de cada dia dentro do período
+- Validação: período máximo 366 dias, `start` não pode ser depois de `end`
+- Lógica de agregação extraída pra `_aggregate_orders()` (método estático),
+  compartilhada entre `daily_report()` e `period_report()` — evita duplicar
+  o loop de soma/agrupamento
+- Tela de Caixa ganhou toggle **Dia / Período**: no modo período, os campos
+  de data viram um intervalo (com atalhos "7 dias", "15 dias", "30 dias",
+  "Este mês") e aparece a tabela de faturamento por dia. Export CSV/PDF e o
+  painel de abertura/fechamento de caixa continuam só no modo Dia (não fazem
+  sentido pra um intervalo)
 
 ---
 

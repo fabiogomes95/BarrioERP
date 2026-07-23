@@ -68,3 +68,32 @@ class DailyReport(BaseSchema):
     average_ticket: Decimal
     by_payment_method: list[PaymentMethodTotal]
     top_items: list[TopItem]
+
+
+class DailyBreakdownEntry(BaseSchema):
+    """Faturamento de um único dia dentro de um período — usado no gráfico/tabela do relatório por período."""
+
+    date: date
+    revenue_total: Decimal
+    orders_count: int
+
+
+class PeriodReport(BaseSchema):
+    """
+    Resumo de um período (intervalo de datas, inclusive nos dois extremos).
+
+    Usado em: GET /api/v1/reports/period?start=...&end=...
+
+    Mesma lógica do DailyReport, mas somando o intervalo inteiro, mais
+    `daily_breakdown` — o total de cada dia dentro do período, pra dar pra
+    ver a evolução dia a dia (gráfico ou tabela) em vez de só o agregado.
+    """
+
+    date_start: date
+    date_end: date
+    revenue_total: Decimal
+    orders_count: int
+    average_ticket: Decimal
+    by_payment_method: list[PaymentMethodTotal]
+    top_items: list[TopItem]
+    daily_breakdown: list[DailyBreakdownEntry]

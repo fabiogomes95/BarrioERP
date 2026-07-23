@@ -11,7 +11,7 @@ from fastapi import APIRouter, Query
 from app.api.deps import CurrentUser, DBSession, require_roles
 from app.models.user import UserRole
 from app.schemas.order import OrderResponse
-from app.schemas.report import DailyReport, FiadoCustomerGroup, FiadoEntry
+from app.schemas.report import DailyReport, FiadoCustomerGroup, FiadoEntry, PeriodReport
 from app.services.order_service import OrderService
 
 router = APIRouter()
@@ -71,6 +71,26 @@ async def daily_report(
 ) -> DailyReport:
     require_roles(current_user, UserRole.OWNER, UserRole.MANAGER, UserRole.CASHIER)
     return await _service(session, current_user).daily_report(day)
+
+
+@router.get(
+    "/period",
+    response_model=PeriodReport,
+    summary="Relatório por período",
+    description=(
+        "Faturamento, nº de comandas, ticket médio, faturamento por forma de "
+        "pagamento, itens mais vendidos e detalhamento dia a dia das comandas "
+        "FECHADAS entre `start` e `end` (ambos inclusos). Período máximo: 366 dias."
+    ),
+)
+async def period_report(
+    session: DBSession,
+    current_user: CurrentUser,
+    start: date = Query(description="Data inicial (YYYY-MM-DD), inclusa."),
+    end: date = Query(description="Data final (YYYY-MM-DD), inclusa."),
+) -> PeriodReport:
+    require_roles(current_user, UserRole.OWNER, UserRole.MANAGER, UserRole.CASHIER)
+    return await _service(session, current_user).period_report(start, end)
 
 
 @router.get(

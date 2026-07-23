@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  type DailyReport, type Order, type Table, type CashSession,
-  fetchDailyReport, fetchHistory, fetchTables, fetchCurrentCash,
+  type DailyReport, type Order, type Table, type CashSession, type PeriodReport,
+  fetchDailyReport, fetchHistory, fetchTables, fetchCurrentCash, fetchPeriodReport,
   openCash, addCashMovement, closeCash, getUser,
 } from '../lib/api'
 import { brl } from '../components/OrderDetailView'
@@ -18,6 +18,25 @@ const METHOD_LABEL: Record<string, string> = {
 function todayISO() {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function toISO(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function daysAgoISO(n: number) {
+  const d = new Date()
+  d.setDate(d.getDate() - n)
+  return toISO(d)
+}
+
+function firstDayOfMonthISO() {
+  const d = new Date()
+  return toISO(new Date(d.getFullYear(), d.getMonth(), 1))
+}
+
+function fmtDatePt(iso: string) {
+  return new Date(iso + 'T12:00:00').toLocaleDateString('pt-BR')
 }
 
 function timeOf(iso: string | null) {
@@ -359,12 +378,96 @@ function CashPanel({ session, onRefresh }: { session: CashSession | null; onRefr
   )
 }
 
+// ── Relatório por período ────────────────────────────────────────────────────
+
+function PeriodView({ report }: { report: PeriodReport }) {
+  return (
+    <>
+      <div className="grid grid-cols-3 gap-3 mb-5">
+        <StatCard label="Faturado" value={brl(report.revenue_total)} accent="green" />
+        <StatCard label="Comandas" value={String(report.orders_count)} accent="stone" />
+        <StatCard label="Ticket médio" value={brl(report.average_ticket)} accent="amber" />
+      </div>
+
+      <div className="rounded-2xl border border-stone-800/60 overflow-hidden mb-5"
+           style={{ background: 'var(--color-app-surface)' }}>
+        <div className="px-4 py-3 border-b border-stone-800/50">
+          <h2 className="text-stone-200 text-sm font-bold">Por forma de pagamento</h2>
+        </div>
+        {report.by_payment_method.length === 0 ? (
+          <p className="text-stone-600 text-xs px-4 py-4">Nenhum pagamento registrado no período</p>
+        ) : (
+          report.by_payment_method.map(m => (
+            <div key={m.method} className="flex items-center justify-between px-4 py-2.5
+                                            border-b border-stone-800/30 last:border-0">
+              <span className="text-stone-300 text-sm">{METHOD_LABEL[m.method] ?? m.method}
+                <span className="text-stone-600 text-xs ml-2">({m.count})</span>
+              </span>
+              <span className="text-stone-200 text-sm font-semibold">{brl(m.total)}</span>
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className="rounded-2xl border border-stone-800/60 overflow-hidden mb-5"
+           style={{ background: 'var(--color-app-surface)' }}>
+        <div className="px-4 py-3 border-b border-stone-800/50">
+          <h2 className="text-stone-200 text-sm font-bold">Itens mais vendidos</h2>
+        </div>
+        {report.top_items.length === 0 ? (
+          <p className="text-stone-600 text-xs px-4 py-4">Nada vendido no período</p>
+        ) : (
+          report.top_items.map((it, i) => (
+            <div key={it.name} className="flex items-center justify-between gap-3 px-4 py-2.5
+                                          border-b border-stone-800/30 last:border-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="text-stone-600 text-xs font-bold w-4 shrink-0">{i + 1}</span>
+                <span className="text-stone-300 text-sm truncate">{it.name}</span>
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                <span className="text-amber-400 text-sm font-bold">{it.quantity}×</span>
+                <span className="text-stone-500 text-xs w-20 text-right">{brl(it.total)}</span>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className="rounded-2xl border border-stone-800/60 overflow-hidden"
+           style={{ background: 'var(--color-app-surface)' }}>
+        <div className="px-4 py-3 border-b border-stone-800/50">
+          <h2 className="text-stone-200 text-sm font-bold">Faturamento por dia</h2>
+        </div>
+        {report.daily_breakdown.length === 0 ? (
+          <p className="text-stone-600 text-xs px-4 py-4">Nenhuma comanda fechada no período</p>
+        ) : (
+          report.daily_breakdown.map(d => (
+            <div key={d.date} className="flex items-center justify-between px-4 py-2.5
+                                          border-b border-stone-800/30 last:border-0">
+              <span className="text-stone-300 text-sm">{fmtDatePt(d.date)}
+                <span className="text-stone-600 text-xs ml-2">
+                  ({d.orders_count} {d.orders_count === 1 ? 'comanda' : 'comandas'})
+                </span>
+              </span>
+              <span className="text-stone-200 text-sm font-semibold">{brl(d.revenue_total)}</span>
+            </div>
+          ))
+        )}
+      </div>
+    </>
+  )
+}
+
 // ── Página Caixa ──────────────────────────────────────────────────────────────
 
 export default function CaixaPage() {
   const navigate = useNavigate()
+  const [scope, setScope] = useState<'day' | 'period'>('day')
   const [day, setDay] = useState(todayISO())
+  const [periodStart, setPeriodStart] = useState(daysAgoISO(6))
+  const [periodEnd, setPeriodEnd] = useState(todayISO())
   const [report, setReport] = useState<DailyReport | null>(null)
+  const [periodReport, setPeriodReport] = useState<PeriodReport | null>(null)
   const [history, setHistory] = useState<Order[]>([])
   const [tables, setTables] = useState<Table[]>([])
   const [cashSession, setCashSession] = useState<CashSession | null | undefined>(undefined)
@@ -383,6 +486,14 @@ export default function CaixaPage() {
     setLoading(true)
     setError(null)
     try {
+      if (scope === 'period') {
+        const [rep, ts] = await Promise.all([
+          fetchPeriodReport(periodStart, periodEnd), fetchTables(),
+        ])
+        setPeriodReport(rep)
+        setTables(ts)
+        return
+      }
       const [rep, hist, ts, cash] = await Promise.all([
         fetchDailyReport(day), fetchHistory(100, day), fetchTables(), fetchCurrentCash(),
       ])
@@ -395,7 +506,7 @@ export default function CaixaPage() {
     } finally {
       setLoading(false)
     }
-  }, [day])
+  }, [scope, day, periodStart, periodEnd])
 
   useEffect(() => { load() }, [load])
 
@@ -404,36 +515,84 @@ export default function CaixaPage() {
       <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
 
         {/* Cabeçalho */}
-        <div className="flex items-center justify-between gap-3 mb-6 flex-wrap">
+        <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
           <div>
             <h1 className="text-stone-100 text-xl font-bold leading-tight">Caixa</h1>
             <p className="text-stone-500 text-sm mt-1">Faturamento e histórico de comandas</p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <input type="date" value={day} max={todayISO()} onChange={e => setDay(e.target.value)}
-              className="rounded-xl px-3 py-2 text-sm border border-stone-800/60 text-stone-200
-                         focus:outline-none focus:border-amber-500/40 transition-all"
-              style={{ background: 'var(--color-app-surface)' }} />
-            {report && (
+            {/* Dia único x Período */}
+            <div className="flex gap-1 p-1 rounded-xl" style={{ background: 'var(--color-app-bg)' }}>
+              <button onClick={() => setScope('day')}
+                className={['px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors',
+                  scope === 'day' ? 'bg-amber-500/15 text-amber-400' : 'text-stone-500 hover:text-stone-300'].join(' ')}>
+                Dia
+              </button>
+              <button onClick={() => setScope('period')}
+                className={['px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors',
+                  scope === 'period' ? 'bg-amber-500/15 text-amber-400' : 'text-stone-500 hover:text-stone-300'].join(' ')}>
+                Período
+              </button>
+            </div>
+
+            {scope === 'day' ? (
               <>
-                <button
-                  onClick={() => exportDailyReportCSV(report, history, tables, day)}
-                  title="Exportar CSV"
-                  className="px-3 py-2 rounded-xl text-xs font-semibold border transition-colors
-                             text-stone-300 border-stone-700/60 hover:bg-stone-800/50 hover:border-stone-600">
-                  CSV
-                </button>
-                <button
-                  onClick={() => printDailyReport(report, history, tables, day, getUser()?.company_name ?? 'BarrioERP')}
-                  title="Exportar PDF (imprimir e salvar como PDF)"
-                  className="px-3 py-2 rounded-xl text-xs font-semibold border transition-colors
-                             text-stone-300 border-stone-700/60 hover:bg-stone-800/50 hover:border-stone-600">
-                  PDF
-                </button>
+                <input type="date" value={day} max={todayISO()} onChange={e => setDay(e.target.value)}
+                  className="rounded-xl px-3 py-2 text-sm border border-stone-800/60 text-stone-200
+                             focus:outline-none focus:border-amber-500/40 transition-all"
+                  style={{ background: 'var(--color-app-surface)' }} />
+                {report && (
+                  <>
+                    <button
+                      onClick={() => exportDailyReportCSV(report, history, tables, day)}
+                      title="Exportar CSV"
+                      className="px-3 py-2 rounded-xl text-xs font-semibold border transition-colors
+                                 text-stone-300 border-stone-700/60 hover:bg-stone-800/50 hover:border-stone-600">
+                      CSV
+                    </button>
+                    <button
+                      onClick={() => printDailyReport(report, history, tables, day, getUser()?.company_name ?? 'BarrioERP')}
+                      title="Exportar PDF (imprimir e salvar como PDF)"
+                      className="px-3 py-2 rounded-xl text-xs font-semibold border transition-colors
+                                 text-stone-300 border-stone-700/60 hover:bg-stone-800/50 hover:border-stone-600">
+                      PDF
+                    </button>
+                  </>
+                )}
+              </>
+            ) : (
+              <>
+                <input type="date" value={periodStart} max={periodEnd} onChange={e => setPeriodStart(e.target.value)}
+                  className="rounded-xl px-3 py-2 text-sm border border-stone-800/60 text-stone-200
+                             focus:outline-none focus:border-amber-500/40 transition-all"
+                  style={{ background: 'var(--color-app-surface)' }} />
+                <span className="text-stone-600 text-xs">até</span>
+                <input type="date" value={periodEnd} min={periodStart} max={todayISO()} onChange={e => setPeriodEnd(e.target.value)}
+                  className="rounded-xl px-3 py-2 text-sm border border-stone-800/60 text-stone-200
+                             focus:outline-none focus:border-amber-500/40 transition-all"
+                  style={{ background: 'var(--color-app-surface)' }} />
               </>
             )}
           </div>
         </div>
+
+        {scope === 'period' && (
+          <div className="flex items-center gap-1.5 mb-6 flex-wrap">
+            {[
+              { label: '7 dias', start: daysAgoISO(6) },
+              { label: '15 dias', start: daysAgoISO(14) },
+              { label: '30 dias', start: daysAgoISO(29) },
+              { label: 'Este mês', start: firstDayOfMonthISO() },
+            ].map(p => (
+              <button key={p.label}
+                onClick={() => { setPeriodStart(p.start); setPeriodEnd(todayISO()) }}
+                className="px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-colors
+                           text-stone-500 border-stone-700/60 hover:bg-stone-800/50 hover:text-stone-300">
+                {p.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {error && (
           <div className="flex items-center gap-3 bg-red-500/10 border border-red-500/20
@@ -444,12 +603,14 @@ export default function CaixaPage() {
         )}
 
         {/* Painel de caixa (sempre visível, só carrega quando day === hoje) */}
-        {cashSession !== undefined && day === todayISO() && (
+        {scope === 'day' && cashSession !== undefined && day === todayISO() && (
           <CashPanel session={cashSession} onRefresh={refreshCash} />
         )}
 
         {loading ? (
           <div className="text-center py-16 text-stone-600 text-sm">Carregando…</div>
+        ) : scope === 'period' ? (
+          periodReport && <PeriodView report={periodReport} />
         ) : report && (
           <>
             {/* Métricas do dia */}

@@ -630,6 +630,27 @@ export async function fetchDailyReport(day?: string): Promise<DailyReport> {
   return request<DailyReport>(`/reports/daily${qs}`)
 }
 
+export interface DailyBreakdownEntry {
+  date: string
+  revenue_total: string
+  orders_count: number
+}
+
+export interface PeriodReport {
+  date_start: string
+  date_end: string
+  revenue_total: string
+  orders_count: number
+  average_ticket: string
+  by_payment_method: PaymentMethodTotal[]
+  top_items: TopItem[]
+  daily_breakdown: DailyBreakdownEntry[]
+}
+
+export async function fetchPeriodReport(start: string, end: string): Promise<PeriodReport> {
+  return request<PeriodReport>(`/reports/period?start=${start}&end=${end}`)
+}
+
 export async function fetchHistory(limit = 50, day?: string): Promise<Order[]> {
   const dayQs = day ? `&day=${day}` : ''
   return request<Order[]>(`/reports/history?limit=${limit}${dayQs}`)
