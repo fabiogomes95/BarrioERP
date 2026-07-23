@@ -1,1 +1,157 @@
 @import "tailwindcss";
+
+/*
+ * Paleta "Recanto da Barra" — extraída do cardápio físico do bar.
+ *
+ * @theme define os valores padrão (modo claro) e registra cada um como
+ * variável CSS em :root. O Tailwind gera as classes utilitárias
+ * (bg-amber-500, text-stone-400, etc.) referenciando essas variáveis via
+ * var(--color-*) — não valores fixos — então os blocos abaixo (modo escuro)
+ * só precisam REDEFINIR a variável no escopo certo pra repintar tudo.
+ *
+ * IMPORTANTE — por que stone-100 é ESCURO no claro e CLARO no escuro:
+ * a escala "stone" é usada no código sempre pelo mesmo papel semântico
+ * (100 = texto de maior destaque, 800 = fundo/borda de card, etc.), não pelo
+ * valor real de luminosidade do Tailwind padrão. Por isso os tokens são
+ * invertidos entre os temas — mantém a mesma classe funcionando nos dois.
+ */
+
+@theme {
+  /* Decorativas — iguais nos dois temas */
+  --color-app-gold: #c28f62;
+  --color-app-cream: #ffe3bc;
+
+  /* Semânticas — modo claro (padrão) */
+  --color-app-bg: #fcf6ed;
+  --color-app-surface: #f5ead9;
+  --color-app-surface-2: #eadccd;
+  --color-app-border: rgba(116, 50, 0, 0.14);
+  --color-app-heading: #743200;
+  --color-app-accent: #8e3d00;
+  --color-app-accent-hover: #6e2f00;
+  --color-app-accent-soft: rgba(142, 61, 0, 0.1);
+  --color-app-text: #231107;
+  --color-app-text-muted: #7a5c48;
+  --color-app-text-faint: #a8917c;
+  --color-app-price: #600000;
+  --color-app-success: #2f6f4e;
+
+  /* Escala amber (acento principal) — terracota/sienna no claro */
+  --color-amber-50: #fdf3ea;
+  --color-amber-100: #fae2cc;
+  --color-amber-200: #f2c398;
+  --color-amber-300: #dd9a5f;
+  --color-amber-400: #a8551c;
+  --color-amber-500: #8e3d00;
+  --color-amber-600: #6e2f00;
+  --color-amber-700: #522300;
+  --color-amber-800: #3a1900;
+  --color-amber-900: #260f00;
+  --color-amber-950: #180900;
+
+  /* Escala stone (neutros/texto) — invertida, ver nota acima */
+  --color-stone-50: #fffefb;
+  --color-stone-100: #241206;
+  --color-stone-200: #3d2615;
+  --color-stone-300: #543722;
+  --color-stone-400: #6f4e36;
+  --color-stone-500: #8b6b4e;
+  --color-stone-600: #a88968;
+  --color-stone-700: #c7ac8b;
+  --color-stone-800: #e3d2b9;
+  --color-stone-900: #f3e9d8;
+  --color-stone-950: #fffcf6;
+}
+
+/* ── Modo escuro — usuário escolheu explicitamente (ThemeToggle) ────────── */
+:root[data-theme="dark"] {
+  --color-app-bg: #0d0b08;
+  --color-app-surface: #161210;
+  --color-app-surface-2: #0f0d0a;
+  --color-app-border: rgba(224, 168, 101, 0.14);
+  --color-app-heading: #e0a865;
+  --color-app-accent: #dd8a3c;
+  --color-app-accent-hover: #f0a35c;
+  --color-app-accent-soft: rgba(221, 138, 60, 0.14);
+  --color-app-text: #f2e6d8;
+  --color-app-text-muted: #b6a08c;
+  --color-app-text-faint: #7d6a5a;
+  --color-app-price: #ff8b6b;
+  --color-app-success: #4caf7d;
+
+  --color-amber-50: #2b1b0a;
+  --color-amber-100: #3d2610;
+  --color-amber-200: #5c3a15;
+  --color-amber-300: #b8701f;
+  --color-amber-400: #e0a865;
+  --color-amber-500: #dd8a3c;
+  --color-amber-600: #f0a35c;
+  --color-amber-700: #f0c090;
+  --color-amber-800: #f5d3ae;
+  --color-amber-900: #fae6cf;
+  --color-amber-950: #fdf3ea;
+
+  --color-stone-50: #0d0908;
+  --color-stone-100: #f2e6d8;
+  --color-stone-200: #e3d2bd;
+  --color-stone-300: #c9b49b;
+  --color-stone-400: #a88a6e;
+  --color-stone-500: #886d54;
+  --color-stone-600: #6b543f;
+  --color-stone-700: #4a3b2c;
+  --color-stone-800: #241a10;
+  --color-stone-900: #180f09;
+  --color-stone-950: #0a0705;
+}
+
+/* ── Modo escuro — segue o sistema, só quando o usuário nunca escolheu ──── */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-theme="dark"]) {
+    --color-app-bg: #0d0b08;
+    --color-app-surface: #161210;
+    --color-app-surface-2: #0f0d0a;
+    --color-app-border: rgba(224, 168, 101, 0.14);
+    --color-app-heading: #e0a865;
+    --color-app-accent: #dd8a3c;
+    --color-app-accent-hover: #f0a35c;
+    --color-app-accent-soft: rgba(221, 138, 60, 0.14);
+    --color-app-text: #f2e6d8;
+    --color-app-text-muted: #b6a08c;
+    --color-app-text-faint: #7d6a5a;
+    --color-app-price: #ff8b6b;
+    --color-app-success: #4caf7d;
+
+    --color-amber-50: #2b1b0a;
+    --color-amber-100: #3d2610;
+    --color-amber-200: #5c3a15;
+    --color-amber-300: #b8701f;
+    --color-amber-400: #e0a865;
+    --color-amber-500: #dd8a3c;
+    --color-amber-600: #f0a35c;
+    --color-amber-700: #f0c090;
+    --color-amber-800: #f5d3ae;
+    --color-amber-900: #fae6cf;
+    --color-amber-950: #fdf3ea;
+
+    --color-stone-50: #0d0908;
+    --color-stone-100: #f2e6d8;
+    --color-stone-200: #e3d2bd;
+    --color-stone-300: #c9b49b;
+    --color-stone-400: #a88a6e;
+    --color-stone-500: #886d54;
+    --color-stone-600: #6b543f;
+    --color-stone-700: #4a3b2c;
+    --color-stone-800: #241a10;
+    --color-stone-900: #180f09;
+    --color-stone-950: #0a0705;
+  }
+}
+
+html {
+  color-scheme: light dark;
+}
+
+body {
+  background: var(--color-app-bg);
+  transition: background-color 0.2s ease;
+}

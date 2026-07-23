@@ -54,7 +54,7 @@ function StatCard({
         'text-left rounded-2xl p-4 border border-stone-800/60 transition-all',
         onClick ? 'hover:border-stone-700/70 hover:bg-stone-800/20 cursor-pointer' : 'cursor-default',
       ].join(' ')}
-      style={{ background: '#161210' }}
+      style={{ background: 'var(--color-app-surface)' }}
     >
       <p className="text-stone-500 text-[11px] font-semibold uppercase tracking-wider">{label}</p>
       <p className={['text-2xl font-black mt-1.5 leading-none', accentText].join(' ')}>{value}</p>
@@ -137,7 +137,7 @@ export default function DashboardPage() {
             className="flex items-center justify-center w-9 h-9 rounded-xl
                        border border-stone-800/60 text-stone-500 hover:text-stone-300
                        hover:border-stone-700/60 disabled:opacity-40 transition-all"
-            style={{ background: '#161210' }}>
+            style={{ background: 'var(--color-app-surface)' }}>
             <svg className={['w-4 h-4', loading ? 'animate-spin' : ''].join(' ')}
                  fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round"
@@ -158,7 +158,7 @@ export default function DashboardPage() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="rounded-2xl p-4 border border-stone-800/60 animate-pulse"
-                   style={{ background: '#161210' }}>
+                   style={{ background: 'var(--color-app-surface)' }}>
                 <div className="w-20 h-3 bg-stone-800 rounded" />
                 <div className="w-16 h-7 bg-stone-800 rounded mt-3" />
                 <div className="w-24 h-3 bg-stone-800 rounded mt-3" />
@@ -204,7 +204,7 @@ export default function DashboardPage() {
 
             {/* Comandas que precisam de atenção */}
             <div className="rounded-2xl border border-stone-800/60 overflow-hidden"
-                 style={{ background: '#161210' }}>
+                 style={{ background: 'var(--color-app-surface)' }}>
               <div className="px-4 py-3 border-b border-stone-800/50 flex items-center justify-between">
                 <h2 className="text-stone-200 text-sm font-bold">Comandas abertas há mais tempo</h2>
                 <button onClick={() => navigate('/pedidos')}

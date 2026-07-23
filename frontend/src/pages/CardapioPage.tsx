@@ -75,17 +75,17 @@ function CategoryModal({ editing, onClose, onSaved }: {
         <Field label="Nome">
           <input type="text" required value={name} onChange={e => setName(e.target.value)}
             placeholder="ex: Bebidas, Pratos, Sobremesas"
-            className={inputCls} style={{ background: '#0d0b08' }} />
+            className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
         </Field>
         <Field label="Descrição (opcional)">
           <input type="text" value={description} onChange={e => setDescription(e.target.value)}
             placeholder="ex: Cervejas, chopes e coquetéis"
-            className={inputCls} style={{ background: '#0d0b08' }} />
+            className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
         </Field>
         <Field label="Posição (ordem)">
           <input type="number" min={0} max={9999} value={sortOrder}
             onChange={e => setSortOrder(e.target.value)}
-            className={inputCls} style={{ background: '#0d0b08' }} />
+            className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
         </Field>
         {editing && <Toggle label="Categoria ativa" value={isActive} onChange={setIsActive} />}
         <div className="flex gap-2 pt-1">
@@ -153,36 +153,36 @@ function ItemModal({ editing, defaultCategoryId, categories, onClose, onSaved }:
       <form onSubmit={handleSubmit} className="space-y-3.5">
         <Field label="Categoria">
           <select value={categoryId} onChange={e => setCategoryId(e.target.value)}
-            className={inputCls + ' appearance-none'} style={{ background: '#0d0b08' }}>
+            className={inputCls + ' appearance-none'} style={{ background: 'var(--color-app-bg)' }}>
             {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </Field>
         <Field label="Nome do item">
           <input type="text" required value={name} onChange={e => setName(e.target.value)}
             placeholder="ex: Cerveja Heineken 600ml"
-            className={inputCls} style={{ background: '#0d0b08' }} />
+            className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
         </Field>
         <Field label="Descrição (opcional)">
           <input type="text" value={description} onChange={e => setDescription(e.target.value)}
             placeholder="ex: Gelada, servida em copo americano"
-            className={inputCls} style={{ background: '#0d0b08' }} />
+            className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Preço (R$)">
             <input type="text" inputMode="numeric" required value={price}
               onChange={e => setPrice(maskCurrency(e.target.value))}
-              placeholder="0,00" className={inputCls} style={{ background: '#0d0b08' }} />
+              placeholder="0,00" className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
           </Field>
           <Field label="Posição">
             <input type="number" min={0} max={9999} value={sortOrder}
               onChange={e => setSortOrder(e.target.value)}
-              className={inputCls} style={{ background: '#0d0b08' }} />
+              className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
           </Field>
         </div>
         <Field label="Complementos (opcional)">
           <textarea value={complementos} onChange={e => setComplementos(e.target.value)}
             rows={3} placeholder={'Uma opção por linha. Ex:\nPicanha\nMaminha\nFrango'}
-            className={inputCls + ' resize-none'} style={{ background: '#0d0b08' }} />
+            className={inputCls + ' resize-none'} style={{ background: 'var(--color-app-bg)' }} />
           <p className="text-stone-700 text-[10px] mt-1">
             Se preenchido, o garçom será obrigado a escolher uma opção ao lançar o item
             (ex: corte do churrasco, sabor do suco).
@@ -224,7 +224,7 @@ function ItemCard({ item, canEdit, onToggleAvailable, onEdit, onToggleActive }: 
 
   return (
     <div className={['rounded-2xl border border-stone-800/50 p-4 transition-all', !item.is_active ? 'opacity-40' : ''].join(' ')}
-         style={{ background: '#161210' }}>
+         style={{ background: 'var(--color-app-surface)' }}>
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex-1 min-w-0">
           <p className="text-stone-100 text-sm font-semibold leading-tight truncate">{item.name}</p>
@@ -232,7 +232,7 @@ function ItemCard({ item, canEdit, onToggleAvailable, onEdit, onToggleActive }: 
             <p className="text-stone-600 text-xs mt-0.5 leading-snug line-clamp-2">{item.description}</p>
           )}
         </div>
-        <span className="text-amber-400 text-base font-black shrink-0 leading-tight">{brl(item.price)}</span>
+        <span className="text-base font-black shrink-0 leading-tight" style={{ color: 'var(--color-app-price)' }}>{brl(item.price)}</span>
       </div>
 
       <div className="flex items-center justify-between mt-3 pt-3 border-t border-stone-800/40">
@@ -360,7 +360,7 @@ export default function CardapioPage() {
         mobileItems ? 'hidden md:flex' : 'flex'].join(' ')}>
 
         <div className="px-4 pt-5 pb-4 border-b border-stone-800/50 shrink-0"
-             style={{ background: '#0f0d0a' }}>
+             style={{ background: 'var(--color-app-surface-2)' }}>
           <div className="flex items-center justify-between">
             <h1 className="text-stone-100 text-lg font-bold">Cardápio</h1>
             {canEdit && (
@@ -439,7 +439,7 @@ export default function CardapioPage() {
         {selectedCat ? (
           <>
             <div className="px-5 pt-5 pb-4 border-b border-stone-800/50 shrink-0"
-                 style={{ background: '#0f0d0a' }}>
+                 style={{ background: 'var(--color-app-surface-2)' }}>
               <div className="flex items-center gap-3 mb-4">
                 <button onClick={() => setMobileItems(false)}
                   className="md:hidden text-stone-500 hover:text-stone-300 transition-colors">
@@ -471,7 +471,7 @@ export default function CardapioPage() {
                   className="w-full pl-9 pr-4 py-2.5 rounded-xl text-sm border border-stone-800/60
                              text-stone-200 placeholder-stone-600 focus:outline-none
                              focus:border-amber-500/40 focus:ring-1 focus:ring-amber-500/20 transition-all"
-                  style={{ background: '#161210' }} />
+                  style={{ background: 'var(--color-app-surface)' }} />
               </div>
             </div>
 

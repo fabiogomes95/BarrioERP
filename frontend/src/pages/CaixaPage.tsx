@@ -30,7 +30,7 @@ function StatCard({ label, value, hint, accent = 'amber' }: {
 }) {
   const c = { amber: 'text-amber-400', green: 'text-green-400', stone: 'text-stone-200', red: 'text-red-400' }[accent]
   return (
-    <div className="rounded-2xl p-4 border border-stone-800/60" style={{ background: '#161210' }}>
+    <div className="rounded-2xl p-4 border border-stone-800/60" style={{ background: 'var(--color-app-surface)' }}>
       <p className="text-stone-500 text-[11px] font-semibold uppercase tracking-wider">{label}</p>
       <p className={['text-2xl font-black mt-1.5 leading-none', c].join(' ')}>{value}</p>
       {hint && <p className="text-stone-600 text-xs mt-1.5">{hint}</p>}
@@ -95,7 +95,7 @@ function CashPanel({ session, onRefresh }: { session: CashSession | null; onRefr
 
   return (
     <div className="rounded-2xl border border-stone-800/60 overflow-hidden mb-5"
-         style={{ background: '#161210' }}>
+         style={{ background: 'var(--color-app-surface)' }}>
       {/* Header */}
       <div className="px-4 py-3 border-b border-stone-800/50 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
@@ -157,14 +157,14 @@ function CashPanel({ session, onRefresh }: { session: CashSession | null; onRefr
               </label>
               <input type="text" inputMode="numeric" value={openingAmount}
                 onChange={e => setOpeningAmount(maskCurrency(e.target.value))}
-                placeholder="0,00" className={inputCls} style={{ background: '#0d0b08' }} />
+                placeholder="0,00" className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
             </div>
             <div>
               <label className="block text-[11px] font-semibold text-stone-500 uppercase tracking-wider mb-1.5">
                 Observação (opcional)
               </label>
               <input type="text" value={openNotes} onChange={e => setOpenNotes(e.target.value)}
-                placeholder="…" className={inputCls} style={{ background: '#0d0b08' }} />
+                placeholder="…" className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
             </div>
           </div>
           <div className="flex gap-2">
@@ -211,7 +211,7 @@ function CashPanel({ session, onRefresh }: { session: CashSession | null; onRefr
             <div className="space-y-1 pt-1">
               {session.movements.map(m => (
                 <div key={m.id} className="flex items-center justify-between text-xs px-3 py-1.5 rounded-lg"
-                     style={{ background: '#0d0b08' }}>
+                     style={{ background: 'var(--color-app-bg)' }}>
                   <span className={m.kind === 'sangria' ? 'text-red-400' : 'text-green-400'}>
                     {m.kind === 'sangria' ? '↓ Sangria' : '↑ Suprimento'}
                     {m.reason && <span className="text-stone-600 ml-1.5">{m.reason}</span>}
@@ -229,7 +229,7 @@ function CashPanel({ session, onRefresh }: { session: CashSession | null; onRefr
       {/* Form: sangria / suprimento */}
       {mode === 'movement' && (
         <form onSubmit={handleMovement} className="px-4 py-4 space-y-3">
-          <div className="flex gap-1 p-1 rounded-xl" style={{ background: '#0d0b08' }}>
+          <div className="flex gap-1 p-1 rounded-xl" style={{ background: 'var(--color-app-bg)' }}>
             {(['sangria', 'suprimento'] as const).map(k => (
               <button key={k} type="button" onClick={() => setMovKind(k)}
                 className={[
@@ -249,14 +249,14 @@ function CashPanel({ session, onRefresh }: { session: CashSession | null; onRefr
               </label>
               <input type="text" inputMode="numeric" required value={movAmount}
                 onChange={e => setMovAmount(maskCurrency(e.target.value))}
-                placeholder="0,00" className={inputCls} style={{ background: '#0d0b08' }} />
+                placeholder="0,00" className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
             </div>
             <div>
               <label className="block text-[11px] font-semibold text-stone-500 uppercase tracking-wider mb-1.5">
                 Motivo (opcional)
               </label>
               <input type="text" value={movReason} onChange={e => setMovReason(e.target.value)}
-                placeholder="…" className={inputCls} style={{ background: '#0d0b08' }} />
+                placeholder="…" className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
             </div>
           </div>
           <div className="flex gap-2">
@@ -277,7 +277,7 @@ function CashPanel({ session, onRefresh }: { session: CashSession | null; onRefr
       {/* Form: fechar caixa */}
       {mode === 'close' && (
         <form onSubmit={handleClose} className="px-4 py-4 space-y-3">
-          <div className="rounded-xl px-3.5 py-3 text-sm" style={{ background: '#0d0b08' }}>
+          <div className="rounded-xl px-3.5 py-3 text-sm" style={{ background: 'var(--color-app-bg)' }}>
             <p className="text-stone-500 text-xs mb-1">Esperado em caixa (dinheiro)</p>
             <p className="text-amber-400 text-xl font-black">{brl(session!.expected_so_far)}</p>
           </div>
@@ -288,14 +288,14 @@ function CashPanel({ session, onRefresh }: { session: CashSession | null; onRefr
               </label>
               <input type="text" inputMode="numeric" required value={countedAmount}
                 onChange={e => setCountedAmount(maskCurrency(e.target.value))}
-                placeholder="0,00" className={inputCls} style={{ background: '#0d0b08' }} autoFocus />
+                placeholder="0,00" className={inputCls} style={{ background: 'var(--color-app-bg)' }} autoFocus />
             </div>
             <div>
               <label className="block text-[11px] font-semibold text-stone-500 uppercase tracking-wider mb-1.5">
                 Observação (opcional)
               </label>
               <input type="text" value={closeNotes} onChange={e => setCloseNotes(e.target.value)}
-                placeholder="…" className={inputCls} style={{ background: '#0d0b08' }} />
+                placeholder="…" className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
             </div>
           </div>
           {countedAmount && (
@@ -413,7 +413,7 @@ export default function CaixaPage() {
             <input type="date" value={day} max={todayISO()} onChange={e => setDay(e.target.value)}
               className="rounded-xl px-3 py-2 text-sm border border-stone-800/60 text-stone-200
                          focus:outline-none focus:border-amber-500/40 transition-all"
-              style={{ background: '#161210' }} />
+              style={{ background: 'var(--color-app-surface)' }} />
             {report && (
               <>
                 <button
@@ -461,7 +461,7 @@ export default function CaixaPage() {
 
             {/* Por forma de pagamento */}
             <div className="rounded-2xl border border-stone-800/60 overflow-hidden mb-5"
-                 style={{ background: '#161210' }}>
+                 style={{ background: 'var(--color-app-surface)' }}>
               <div className="px-4 py-3 border-b border-stone-800/50">
                 <h2 className="text-stone-200 text-sm font-bold">Por forma de pagamento</h2>
               </div>
@@ -482,7 +482,7 @@ export default function CaixaPage() {
 
             {/* Itens mais vendidos */}
             <div className="rounded-2xl border border-stone-800/60 overflow-hidden mb-5"
-                 style={{ background: '#161210' }}>
+                 style={{ background: 'var(--color-app-surface)' }}>
               <div className="px-4 py-3 border-b border-stone-800/50">
                 <h2 className="text-stone-200 text-sm font-bold">Itens mais vendidos</h2>
               </div>
@@ -507,7 +507,7 @@ export default function CaixaPage() {
 
             {/* Histórico de comandas fechadas */}
             <div className="rounded-2xl border border-stone-800/60 overflow-hidden"
-                 style={{ background: '#161210' }}>
+                 style={{ background: 'var(--color-app-surface)' }}>
               <div className="px-4 py-3 border-b border-stone-800/50">
                 <h2 className="text-stone-200 text-sm font-bold">
                   Comandas fechadas {day !== todayISO() ? `em ${new Date(day + 'T12:00:00').toLocaleDateString('pt-BR')}` : 'hoje'}

@@ -1,5 +1,6 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
+import { getEffectiveTheme, setTheme, type Theme } from '../lib/theme'
 
 export const inputCls = `w-full rounded-xl px-3.5 py-2.5 text-sm border border-stone-800/80
   text-stone-100 placeholder-stone-700 focus:outline-none transition-all
@@ -32,7 +33,7 @@ export function ModalOverlay({ title, onClose, children }: {
          onClick={onClose}>
       <div className="w-full max-w-md rounded-3xl border border-stone-800/70 p-5
                       max-h-[85dvh] overflow-y-auto overscroll-contain"
-           style={{ background: '#161210' }}
+           style={{ background: 'var(--color-app-surface)' }}
            onClick={e => e.stopPropagation()}>
         {title && (
           <div className="flex items-center justify-between mb-5">
@@ -102,11 +103,46 @@ export function AdminTabs() {
       isActive ? 'bg-amber-500/15 text-amber-400' : 'text-stone-500 hover:text-stone-300',
     ].join(' ')
   return (
-    <div className="flex gap-1 p-1 rounded-xl mb-4 w-fit" style={{ background: '#0d0b08' }}>
+    <div className="flex gap-1 p-1 rounded-xl mb-4 w-fit" style={{ background: 'var(--color-app-bg)' }}>
       <NavLink to="/admin" end className={tabCls}>Geral</NavLink>
       <NavLink to="/equipe" className={tabCls}>Equipe</NavLink>
       <NavLink to="/auditoria" className={tabCls}>Auditoria</NavLink>
     </div>
+  )
+}
+
+/** Botão sol/lua — alterna e lembra o tema claro/escuro (localStorage). */
+export function ThemeToggle({ className }: { className?: string }) {
+  const [theme, setThemeState] = useState<Theme>(getEffectiveTheme())
+
+  function toggle() {
+    const next: Theme = theme === 'dark' ? 'light' : 'dark'
+    setTheme(next)
+    setThemeState(next)
+  }
+
+  return (
+    <button
+      onClick={toggle}
+      title={theme === 'dark' ? 'Mudar para modo claro' : 'Mudar para modo escuro'}
+      className={[
+        'flex items-center justify-center w-8 h-8 rounded-lg transition-colors',
+        'text-stone-500 hover:text-amber-400 hover:bg-stone-800/50',
+        className ?? '',
+      ].join(' ')}
+    >
+      {theme === 'dark' ? (
+        <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+          <path strokeLinecap="round" strokeLinejoin="round"
+            d="M12 3v1.5m0 15V21m9-9h-1.5M4.5 12H3m15.36 6.36-1.06-1.06M6.7 6.7 5.64 5.64m12.72 0-1.06 1.06M6.7 17.3l-1.06 1.06M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+        </svg>
+      ) : (
+        <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+          <path strokeLinecap="round" strokeLinejoin="round"
+            d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
+        </svg>
+      )}
+    </button>
   )
 }
 

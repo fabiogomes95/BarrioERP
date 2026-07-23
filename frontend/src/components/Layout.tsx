@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { clearToken, getUser, refreshCompanyName } from '../lib/api'
 import { useBillRequestAlerts, isPrintStation, setPrintStation } from '../lib/notifications'
+import { ThemeToggle } from './ui'
 
 // ── Ícones ────────────────────────────────────────────────────────────────────
 
@@ -183,7 +184,7 @@ function SideDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
           'transform transition-transform duration-200 ease-out',
           open ? 'translate-x-0' : '-translate-x-full',
         ].join(' ')}
-        style={{ background: '#0f0d0a' }}
+        style={{ background: 'var(--color-app-surface-2)' }}
       >
         {/* Marca + fechar */}
         <div className="px-5 py-5 border-b border-stone-800/50 flex items-center gap-3">
@@ -273,7 +274,7 @@ function TopBar({ onMenu, barName }: { onMenu: () => void; barName: string }) {
   return (
     <header
       className="relative flex items-center gap-2 sm:gap-3 px-2 sm:px-4 h-14 shrink-0 border-b border-stone-800/50"
-      style={{ background: '#161210' }}
+      style={{ background: 'var(--color-app-surface)' }}
     >
       <button
         onClick={onMenu}
@@ -313,6 +314,7 @@ function TopBar({ onMenu, barName }: { onMenu: () => void; barName: string }) {
             {label}
           </NavLink>
         ))}
+        <ThemeToggle className="ml-1" />
       </nav>
     </header>
   )
@@ -331,7 +333,7 @@ function BillRequestToasts() {
       {alerts.map(a => (
         <div key={a.id}
           className="flex items-center gap-3 rounded-xl border border-orange-500/30 shadow-lg px-3.5 py-3"
-          style={{ background: '#1a1410' }}>
+          style={{ background: 'var(--color-app-surface)' }}>
           <div className="w-9 h-9 rounded-full bg-orange-500/15 flex items-center justify-center shrink-0">
             <svg className="w-5 h-5 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.9}>
               <path strokeLinecap="round" strokeLinejoin="round"
@@ -371,7 +373,7 @@ export default function Layout() {
   }, [])
 
   return (
-    <div className="flex flex-col h-screen" style={{ background: '#0d0b08' }}>
+    <div className="flex flex-col h-screen" style={{ background: 'var(--color-app-bg)' }}>
       {/* Barra superior com o menu hambúrguer */}
       <TopBar onMenu={() => setOpen(true)} barName={barName} />
 

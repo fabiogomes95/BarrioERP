@@ -112,7 +112,7 @@ function FiadoPaymentModal({
          style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)' }}
          onClick={onClose}>
       <div className="w-full max-w-md rounded-3xl border border-stone-800/70 p-5"
-           style={{ background: '#161210' }}
+           style={{ background: 'var(--color-app-surface)' }}
            onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <div>
@@ -128,7 +128,7 @@ function FiadoPaymentModal({
           </button>
         </div>
 
-        <div className="rounded-2xl p-4 mb-4 space-y-1.5" style={{ background: '#0d0b08' }}>
+        <div className="rounded-2xl p-4 mb-4 space-y-1.5" style={{ background: 'var(--color-app-bg)' }}>
           <div className="flex justify-between text-sm">
             <span className="text-stone-500">Total da conta</span>
             <span className="text-stone-200 font-semibold">{brl(total)}</span>
@@ -155,7 +155,7 @@ function FiadoPaymentModal({
           <div className="space-y-1 mb-4">
             {payments.map(p => (
               <div key={p.id} className="flex items-center justify-between text-xs px-3 py-2 rounded-lg"
-                   style={{ background: '#0d0b08' }}>
+                   style={{ background: 'var(--color-app-bg)' }}>
                 <span className="text-stone-400">{METHOD_LABEL[p.method] ?? p.method}</span>
                 <span className="text-stone-300 font-semibold">{brl(p.amount)}</span>
               </div>
@@ -198,7 +198,7 @@ function FiadoPaymentModal({
                 </label>
                 <input type="text" inputMode="numeric" value={amount}
                   onChange={e => setAmount(maskCurrency(e.target.value))}
-                  placeholder="0,00" className={inputCls} style={{ background: '#0d0b08' }} />
+                  placeholder="0,00" className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
               </div>
               {method === 'cash' && (
                 <div>
@@ -207,7 +207,7 @@ function FiadoPaymentModal({
                   </label>
                   <input type="text" inputMode="numeric" value={tendered}
                     onChange={e => setTendered(maskCurrency(e.target.value))}
-                    placeholder="0,00" className={inputCls} style={{ background: '#0d0b08' }} />
+                    placeholder="0,00" className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
                 </div>
               )}
             </div>
@@ -314,7 +314,7 @@ function FiadoEntryCard({
 
   return (
     <div className="rounded-xl border border-stone-800/60 p-4 h-full flex flex-col"
-         style={{ background: '#161210' }}>
+         style={{ background: 'var(--color-app-surface)' }}>
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
@@ -380,7 +380,7 @@ function CustomerGroup({
 
   return (
     <div className="rounded-2xl border border-stone-800/60 overflow-hidden"
-         style={{ background: '#0f0d0a' }}>
+         style={{ background: 'var(--color-app-surface-2)' }}>
       {/* Header do grupo */}
       <button onClick={() => setCollapsed(!collapsed)}
         className="w-full flex items-center justify-between px-5 py-4 hover:bg-stone-800/30 transition-colors text-left">
@@ -493,15 +493,15 @@ export default function FiadoPage() {
 
       {groups.length > 0 && (
         <div className="grid grid-cols-3 gap-3 mb-5">
-          <div className="rounded-2xl p-4 border border-stone-800/60" style={{ background: '#161210' }}>
+          <div className="rounded-2xl p-4 border border-stone-800/60" style={{ background: 'var(--color-app-surface)' }}>
             <p className="text-stone-500 text-[11px] font-semibold uppercase tracking-wider">Total em fiado</p>
             <p className="text-amber-400 text-2xl font-black mt-1.5 leading-none">{brl(totalRemaining)}</p>
           </div>
-          <div className="rounded-2xl p-4 border border-stone-800/60" style={{ background: '#161210' }}>
+          <div className="rounded-2xl p-4 border border-stone-800/60" style={{ background: 'var(--color-app-surface)' }}>
             <p className="text-stone-500 text-[11px] font-semibold uppercase tracking-wider">Clientes</p>
             <p className="text-stone-200 text-2xl font-black mt-1.5 leading-none">{groups.length}</p>
           </div>
-          <div className="rounded-2xl p-4 border border-stone-800/60" style={{ background: '#161210' }}>
+          <div className="rounded-2xl p-4 border border-stone-800/60" style={{ background: 'var(--color-app-surface)' }}>
             <p className="text-stone-500 text-[11px] font-semibold uppercase tracking-wider">Comandas</p>
             <p className="text-stone-200 text-2xl font-black mt-1.5 leading-none">{totalEntries}</p>
           </div>
@@ -520,7 +520,7 @@ export default function FiadoPage() {
             className="w-full pl-9 pr-3.5 py-2.5 rounded-xl text-sm border border-stone-800/80
                        text-stone-200 placeholder-stone-700 focus:outline-none
                        focus:border-amber-500/40 focus:ring-1 focus:ring-amber-500/20 transition-all"
-            style={{ background: '#161210' }} />
+            style={{ background: 'var(--color-app-surface)' }} />
         </div>
       )}
 

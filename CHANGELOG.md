@@ -20,6 +20,88 @@
 
 ---
 
+## [v0.9.0] — Identidade visual oficial + modo claro/escuro
+
+Rebrand completo do frontend a partir do cardápio físico do bar
+(`Cardápio Recanto da Barra`) — ícone oficial, paleta de cores extraída do
+material impresso, e o app ganhou modo claro (novo) além do escuro que já
+existia.
+
+### Ícone oficial
+
+**Arquivos:** `frontend/public/icon-recanto*.png`, `favicon.png`,
+`assets/icon-recanto.png`, `assets/icon-recanto.ico`
+
+O ícone provisório (palmeira simplificada) foi substituído pelo logo real —
+recortado do arquivo `icon-recanto.jpeg` do cardápio (círculo com duas
+palmeiras, gaivotas e ondas), com fundo transformado de branco em
+transparente (o JPEG original não suporta alpha). Gerado em 512×512, 192×192
+e 64×64 a partir do mesmo recorte, todos em alta qualidade.
+
+### Paleta de cores — extraída do cardápio físico
+
+Cores exatas obtidas por amostragem de pixel das artes reais (`export/
+cardapio-pagina-*.png`, `cardapio-whatsapp*.png`):
+
+| Papel | Hex | Onde aparece no cardápio |
+|---|---|---|
+| Fundo | `#FCF6ED` | papel |
+| Título/cabeçalhos | `#743200` | "RECANTO", nomes de seção |
+| Categoria/destaque | `#8E3D00` | "LONG NECK", subtítulo |
+| Texto principal | `#231107` | nomes dos itens |
+| Preço | `#600000` | valores em R$ |
+| Acento dourado | `#C28F62` | círculo da logo |
+| Creme claro | `#FFE3BC` | anel externo da logo |
+
+### Arquitetura do tema — sem editar cada página
+
+**Arquivo:** `frontend/src/index.css`
+
+Em vez de editar manualmente as ~15 páginas do app, a troca de identidade
+inteira foi feita redefinindo a paleta no Tailwind via `@theme`:
+
+- As escalas `amber-*` (acento) e `stone-*` (neutros/texto) do Tailwind foram
+  **remapeadas** pros tons do cardápio — toda classe já existente no código
+  (`bg-amber-500`, `text-stone-400`, `border-stone-800/60`, etc.) herdou a
+  nova cara automaticamente, sem tocar em nenhuma página
+- Tailwind v4 gera as classes utilitárias referenciando `var(--color-*)` em
+  vez de valores fixos — por isso um bloco `:root[data-theme="dark"]` redefine
+  as mesmas variáveis e repinta tudo de uma vez
+- **Detalhe não-óbvio:** a escala `stone` é invertida entre os temas —
+  `stone-100` é o tom mais ESCURO no claro (era o texto de maior destaque,
+  quase-branco no escuro; no claro o de maior destaque é quase-preto) e
+  vice-versa. Comentado no `index.css` pra não confundir no futuro
+- Cores semânticas (vermelho/verde/azul/laranja de erro, sucesso, pendência,
+  info) foram mantidas como o Tailwind padrão — não fazem parte da
+  identidade visual da marca, só precisam continuar legíveis
+- Os ~130 fundos com hex fixo (`style={{background: '#0d0b08'}}` etc.,
+  espalhados em ~15 arquivos) viraram `var(--color-app-bg)` /
+  `var(--color-app-surface)` / `var(--color-app-surface-2)`
+
+### Modo claro/escuro
+
+**Arquivos:** `frontend/src/lib/theme.ts` (novo), `components/ui.tsx`
+(`ThemeToggle`), `components/Layout.tsx`, `pages/LoginPage.tsx`
+
+- Sem escolha salva, segue `prefers-color-scheme` do sistema automaticamente
+- Botão sol/lua (`ThemeToggle`) grava a escolha em `localStorage` e aplica via
+  atributo `data-theme` na `<html>` — persiste entre sessões, sobrepõe o tema
+  do sistema
+- `initTheme()` roda em `main.tsx` antes do primeiro render, pra não piscar
+  o tema errado ao carregar a página
+- Toggle disponível na barra superior (autenticado) e no canto do Login
+
+### Decisão: recibo e relatório impresso continuam com cor fixa
+
+`lib/receiptImage.ts` (imagem do recibo pro WhatsApp) e `lib/reportExport.ts`
+(relatório A4 em PDF) **não** seguem o tema claro/escuro do app — um recibo/
+relatório impresso não tem "modo escuro", então usam cores fixas. O recibo
+foi atualizado pra usar a paleta nova (papel `#FCF6ED`, tinta `#231107`); o
+relatório A4 manteve tons neutros de documento (é um relatório interno, não
+uma peça de marca).
+
+---
+
 ## [v0.8.0] — Impressão remota (celular → impressora do bar)
 
 **Arquivos:** `backend/app/api/v1/endpoints/notifications.py`,

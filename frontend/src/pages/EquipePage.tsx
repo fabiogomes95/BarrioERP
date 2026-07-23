@@ -100,7 +100,7 @@ function UserModal({
     <ModalOverlay onClose={onClose}>
       <div
         className="w-full max-w-md rounded-2xl border border-stone-800/60 p-6"
-        style={{ background: '#161210' }}
+        style={{ background: 'var(--color-app-surface)' }}
       >
         <div className="flex items-center justify-between mb-5">
           <p className="text-stone-100 font-semibold text-sm">
@@ -125,7 +125,7 @@ function UserModal({
               placeholder="Nome completo"
               disabled={loading}
               className={inputCls}
-              style={{ background: '#0f0d0a' }}
+              style={{ background: 'var(--color-app-surface-2)' }}
             />
           </div>
 
@@ -139,7 +139,7 @@ function UserModal({
               placeholder="nome@seubar.com"
               disabled={loading}
               className={inputCls}
-              style={{ background: '#0f0d0a' }}
+              style={{ background: 'var(--color-app-surface-2)' }}
             />
           </div>
 
@@ -154,7 +154,7 @@ function UserModal({
                 placeholder="Mínimo 8 caracteres, 1 letra e 1 número"
                 disabled={loading}
                 className={inputCls}
-                style={{ background: '#0f0d0a' }}
+                style={{ background: 'var(--color-app-surface-2)' }}
               />
             </div>
           )}
@@ -167,7 +167,7 @@ function UserModal({
               placeholder="(opcional)"
               disabled={loading}
               className={inputCls}
-              style={{ background: '#0f0d0a' }}
+              style={{ background: 'var(--color-app-surface-2)' }}
             />
           </div>
 
@@ -178,7 +178,7 @@ function UserModal({
               onChange={e => setRole(e.target.value as UserRole)}
               disabled={loading}
               className={inputCls}
-              style={{ background: '#0f0d0a' }}
+              style={{ background: 'var(--color-app-surface-2)' }}
             >
               {availableRoles.map(r => (
                 <option key={r} value={r}>{ROLE_CONFIG[r].label}</option>
@@ -198,7 +198,7 @@ function UserModal({
               >
                 <div
                   className="absolute inset-0 rounded-full transition-colors"
-                  style={{ background: isActive ? '#F59E0B' : '#44403c' }}
+                  style={{ background: isActive ? 'var(--color-app-accent)' : 'var(--color-stone-700)' }}
                 />
                 <div
                   className="absolute top-0.5 rounded-full bg-white transition-all"
@@ -257,7 +257,7 @@ function PasswordModal({ user, onClose }: { user: TeamUser; onClose: () => void 
     <ModalOverlay onClose={onClose}>
       <div
         className="w-full max-w-sm rounded-2xl border border-stone-800/60 p-6"
-        style={{ background: '#161210' }}
+        style={{ background: 'var(--color-app-surface)' }}
       >
         <div className="flex items-center justify-between mb-5">
           <p className="text-stone-100 font-semibold text-sm">Redefinir senha</p>
@@ -299,7 +299,7 @@ function PasswordModal({ user, onClose }: { user: TeamUser; onClose: () => void 
                 placeholder="Mínimo 8 caracteres"
                 disabled={loading}
                 className="w-full rounded-xl px-3.5 py-2.5 text-sm border border-stone-800/80 text-stone-100 placeholder-stone-700 focus:outline-none focus:border-amber-500/40 focus:ring-1 focus:ring-amber-500/20 disabled:opacity-40 transition-all"
-                style={{ background: '#0f0d0a' }}
+                style={{ background: 'var(--color-app-surface-2)' }}
               />
               <div className="flex gap-2">
                 <button
@@ -351,7 +351,7 @@ function UserCard({
     <div
       className="relative rounded-2xl border p-4 flex flex-col gap-3 transition-colors"
       style={{
-        background: user.is_active ? '#161210' : '#100e0c',
+        background: user.is_active ? 'var(--color-app-surface)' : 'var(--color-app-surface-2)',
         borderColor: user.is_active ? 'rgba(120,113,108,0.2)' : 'rgba(120,113,108,0.1)',
         opacity: user.is_active ? 1 : 0.6,
       }}
@@ -361,9 +361,9 @@ function UserCard({
         <div
           className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0 border"
           style={{
-            background: `rgba(245,158,11,0.${user.is_active ? '12' : '06'})`,
-            borderColor: `rgba(245,158,11,0.${user.is_active ? '25' : '12'})`,
-            color: user.is_active ? '#F59E0B' : '#78716c',
+            background: `color-mix(in srgb, var(--color-app-accent) ${user.is_active ? 12 : 6}%, transparent)`,
+            borderColor: `color-mix(in srgb, var(--color-app-accent) ${user.is_active ? 25 : 12}%, transparent)`,
+            color: user.is_active ? 'var(--color-app-accent)' : 'var(--color-stone-500)',
           }}
         >
           {initials(user.name)}
@@ -496,9 +496,9 @@ export default function EquipePage() {
   const inactiveCount = users.filter(u => !u.is_active).length
 
   return (
-    <div className="h-full flex flex-col" style={{ background: '#0d0b08' }}>
+    <div className="h-full flex flex-col" style={{ background: 'var(--color-app-bg)' }}>
       {/* Header */}
-      <div className="shrink-0 border-b border-stone-800/50 px-4 py-3" style={{ background: '#0f0d0a' }}>
+      <div className="shrink-0 border-b border-stone-800/50 px-4 py-3" style={{ background: 'var(--color-app-surface-2)' }}>
         <AdminTabs />
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -536,7 +536,7 @@ export default function EquipePage() {
             onChange={e => setSearch(e.target.value)}
             placeholder="Buscar por nome ou e-mail…"
             className="w-full pl-9 pr-3.5 py-2 rounded-xl text-sm border border-stone-800/80 text-stone-300 placeholder-stone-700 focus:outline-none focus:border-amber-500/30 focus:ring-1 focus:ring-amber-500/15 transition-all"
-            style={{ background: '#0d0b08' }}
+            style={{ background: 'var(--color-app-bg)' }}
           />
         </div>
 
@@ -548,9 +548,9 @@ export default function EquipePage() {
               onClick={() => setFilter(f.key)}
               className="px-3 py-1 rounded-full text-xs font-medium transition-colors"
               style={{
-                background: filter === f.key ? 'rgba(245,158,11,0.15)' : 'rgba(255,255,255,0.04)',
-                color: filter === f.key ? '#F59E0B' : '#78716c',
-                border: `1px solid ${filter === f.key ? 'rgba(245,158,11,0.3)' : 'rgba(255,255,255,0.06)'}`,
+                background: filter === f.key ? 'color-mix(in srgb, var(--color-app-accent) 15%, transparent)' : 'color-mix(in srgb, var(--color-app-text) 4%, transparent)',
+                color: filter === f.key ? 'var(--color-app-accent)' : 'var(--color-stone-500)',
+                border: `1px solid ${filter === f.key ? 'color-mix(in srgb, var(--color-app-accent) 30%, transparent)' : 'color-mix(in srgb, var(--color-app-text) 6%, transparent)'}`,
               }}
             >
               {f.label}
@@ -564,14 +564,14 @@ export default function EquipePage() {
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="h-40 rounded-2xl animate-pulse" style={{ background: '#161210' }} />
+              <div key={i} className="h-40 rounded-2xl animate-pulse" style={{ background: 'var(--color-app-surface)' }} />
             ))}
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <div
               className="w-12 h-12 rounded-2xl border border-stone-800/50 flex items-center justify-center mb-3"
-              style={{ background: '#161210' }}
+              style={{ background: 'var(--color-app-surface)' }}
             >
               <svg className="w-5 h-5 text-stone-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round"

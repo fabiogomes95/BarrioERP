@@ -43,7 +43,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: '#0d0b08' }}>
+    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'var(--color-app-bg)' }}>
       {/* Glow de fundo sutil */}
       <div className="absolute inset-0 pointer-events-none"
         style={{ background: 'radial-gradient(ellipse 60% 40% at 50% -10%, rgba(180,100,10,0.12) 0%, transparent 70%)' }} />
@@ -62,7 +62,7 @@ export default function RegisterPage() {
         </div>
 
         {/* Card */}
-        <div className="rounded-2xl border border-stone-800/70 p-6" style={{ background: '#121009' }}>
+        <div className="rounded-2xl border border-stone-800/70 p-6" style={{ background: 'var(--color-app-surface-2)' }}>
 
           {error && (
             <div className="flex items-start gap-2.5 bg-red-500/8 border border-red-500/20
@@ -81,35 +81,35 @@ export default function RegisterPage() {
               <Label htmlFor="barName">Nome do bar</Label>
               <input id="barName" type="text" required value={barName}
                 onChange={e => setBarName(e.target.value)} placeholder="ex: Boteco do Fabio"
-                disabled={loading} className={inputCls} style={{ background: '#0d0b08' }} />
+                disabled={loading} className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
             </div>
 
             <div>
               <Label htmlFor="ownerName">Seu nome</Label>
               <input id="ownerName" type="text" required value={ownerName}
                 onChange={e => setOwnerName(e.target.value)} placeholder="ex: Fabio Gomes"
-                disabled={loading} className={inputCls} style={{ background: '#0d0b08' }} />
+                disabled={loading} className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
             </div>
 
             <div>
               <Label htmlFor="email">E-mail</Label>
               <input id="email" type="email" required autoComplete="email" value={email}
                 onChange={e => setEmail(e.target.value)} placeholder="voce@seubar.com"
-                disabled={loading} className={inputCls} style={{ background: '#0d0b08' }} />
+                disabled={loading} className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
             </div>
 
             <div>
               <Label htmlFor="phone">Telefone (opcional)</Label>
               <input id="phone" type="tel" value={phone}
                 onChange={e => setPhone(e.target.value)} placeholder="(11) 99999-0000"
-                disabled={loading} className={inputCls} style={{ background: '#0d0b08' }} />
+                disabled={loading} className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
             </div>
 
             <div>
               <Label htmlFor="password">Senha</Label>
               <input id="password" type="password" required autoComplete="new-password" value={password}
                 onChange={e => setPassword(e.target.value)} placeholder="mínimo 8 caracteres"
-                disabled={loading} className={inputCls} style={{ background: '#0d0b08' }} />
+                disabled={loading} className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
               <p className="text-stone-700 text-[10px] mt-1.5">
                 Pelo menos 8 caracteres, com 1 letra e 1 número.
               </p>

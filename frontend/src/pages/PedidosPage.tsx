@@ -28,7 +28,7 @@ function OrderCard({ order, table, onClick }: {
       className="group w-full text-left rounded-2xl border border-stone-800/50 p-4
                  transition-all duration-150 relative overflow-hidden
                  hover:border-stone-700/70 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/40 active:translate-y-0"
-      style={{ background: '#161210' }}>
+      style={{ background: 'var(--color-app-surface)' }}>
 
       {/* Topo: identificação + status */}
       <div className="flex items-start justify-between gap-2 mb-2.5">
@@ -145,7 +145,7 @@ function NewOrderModal({ onClose, onCreated }: {
           {mode === 'table' && (
             <Field label="Mesa">
               <select value={tableId} onChange={e => setTableId(e.target.value)}
-                className={inputCls + ' appearance-none'} style={{ background: '#0d0b08' }}>
+                className={inputCls + ' appearance-none'} style={{ background: 'var(--color-app-bg)' }}>
                 <option value="">Selecione a mesa…</option>
                 {tables.map(t => (
                   <option key={t.id} value={t.id}>
@@ -160,7 +160,7 @@ function NewOrderModal({ onClose, onCreated }: {
               <Field label="Pessoas">
                 <input type="number" min={1} max={200} required value={guestCount}
                   onChange={e => setGuestCount(e.target.value)}
-                  className={inputCls} style={{ background: '#0d0b08' }} />
+                  className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
               </Field>
               <div />
             </div>
@@ -168,7 +168,7 @@ function NewOrderModal({ onClose, onCreated }: {
           <Field label="Cliente (opcional)">
             <input type="text" value={customerName} onChange={e => setCustomerName(e.target.value)}
               placeholder="Deixe vazio para numerar automaticamente"
-              className={inputCls} style={{ background: '#0d0b08' }} />
+              className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
           </Field>
           <div className="flex gap-2 pt-1">
             <button type="button" onClick={onClose}
@@ -247,7 +247,7 @@ export default function PedidosPage() {
 
       {/* Cabeçalho */}
       <div className="px-5 pt-5 pb-4 border-b border-stone-800/50 shrink-0"
-           style={{ background: '#0f0d0a' }}>
+           style={{ background: 'var(--color-app-surface-2)' }}>
         <div className="flex items-start justify-between gap-4 mb-4">
           <div>
             <h1 className="text-stone-100 text-lg font-bold leading-tight">Pedidos</h1>
@@ -262,7 +262,7 @@ export default function PedidosPage() {
               className="flex items-center justify-center w-9 h-9 rounded-xl
                          border border-stone-800/60 text-stone-500 hover:text-stone-300
                          hover:border-stone-700/60 disabled:opacity-40 transition-all"
-              style={{ background: '#161210' }} title="Atualizar">
+              style={{ background: 'var(--color-app-surface)' }} title="Atualizar">
               <svg className={['w-4 h-4', loading ? 'animate-spin' : ''].join(' ')}
                    fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round"
@@ -289,7 +289,7 @@ export default function PedidosPage() {
             className="w-full pl-9 pr-4 py-2.5 rounded-xl text-sm border border-stone-800/60
                        text-stone-200 placeholder-stone-600 focus:outline-none
                        focus:border-amber-500/40 focus:ring-1 focus:ring-amber-500/20 transition-all"
-            style={{ background: '#161210' }} />
+            style={{ background: 'var(--color-app-surface)' }} />
           {search && (
             <button onClick={() => setSearch('')}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-600 hover:text-stone-400">
@@ -315,7 +315,7 @@ export default function PedidosPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="rounded-2xl border border-stone-800/50 p-4 animate-pulse"
-                   style={{ background: '#161210' }}>
+                   style={{ background: 'var(--color-app-surface)' }}>
                 <div className="flex gap-3 mb-3">
                   <div className="w-10 h-10 bg-stone-800 rounded-xl" />
                   <div className="flex-1 space-y-2">

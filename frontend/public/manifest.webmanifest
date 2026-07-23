@@ -4,8 +4,8 @@
   "description": "Sistema de gestão para bares e restaurantes",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0d0b08",
-  "theme_color": "#0d0b08",
+  "background_color": "#fcf6ed",
+  "theme_color": "#743200",
   "icons": [
     {
       "src": "/icon-recanto.png",

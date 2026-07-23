@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { login } from '../lib/api'
+import { ThemeToggle } from '../components/ui'
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -26,7 +27,7 @@ export default function LoginPage() {
   return (
     <div
       className="min-h-screen flex items-center justify-center p-4"
-      style={{ background: '#0d0b08' }}
+      style={{ background: 'var(--color-app-bg)' }}
     >
       {/* Glow de fundo sutil */}
       <div
@@ -36,6 +37,8 @@ export default function LoginPage() {
             'radial-gradient(ellipse 60% 40% at 50% -10%, rgba(180,100,10,0.12) 0%, transparent 70%)',
         }}
       />
+
+      <ThemeToggle className="absolute top-4 right-4" />
 
       <div className="relative w-full max-w-[340px]">
 
@@ -55,7 +58,7 @@ export default function LoginPage() {
         {/* Card */}
         <div
           className="rounded-2xl border border-stone-800/70 p-6"
-          style={{ background: '#121009' }}
+          style={{ background: 'var(--color-app-surface-2)' }}
         >
           <p className="text-stone-300 text-sm font-semibold mb-5">Entrar na sua conta</p>
 
@@ -90,7 +93,7 @@ export default function LoginPage() {
                            border border-stone-800/80 text-stone-100 placeholder-stone-700
                            focus:outline-none focus:border-amber-500/40 focus:ring-1 focus:ring-amber-500/20
                            disabled:opacity-40 transition-all"
-                style={{ background: '#0d0b08' }}
+                style={{ background: 'var(--color-app-bg)' }}
               />
             </div>
 
@@ -112,7 +115,7 @@ export default function LoginPage() {
                            border border-stone-800/80 text-stone-100 placeholder-stone-700
                            focus:outline-none focus:border-amber-500/40 focus:ring-1 focus:ring-amber-500/20
                            disabled:opacity-40 transition-all"
-                style={{ background: '#0d0b08' }}
+                style={{ background: 'var(--color-app-bg)' }}
               />
             </div>
 

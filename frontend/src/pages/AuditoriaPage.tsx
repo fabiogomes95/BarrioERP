@@ -179,7 +179,7 @@ export default function AuditoriaPage() {
           </div>
         ) : (
           <>
-            <div className="rounded-2xl border border-stone-800/60 overflow-hidden" style={{ background: '#161210' }}>
+            <div className="rounded-2xl border border-stone-800/60 overflow-hidden" style={{ background: 'var(--color-app-surface)' }}>
               {entries.map(entry => {
                 const cfg = ACTION_CONFIG[entry.action] ?? { label: entry.action, color: 'text-stone-400', bg: 'bg-stone-500/10' }
                 const orderId = extractOrderId(entry)

@@ -32,7 +32,7 @@ function ChangePasswordCard() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 rounded-2xl border border-stone-800/60 p-5 mt-5"
-          style={{ background: '#161210' }}>
+          style={{ background: 'var(--color-app-surface)' }}>
       <h2 className="text-stone-200 text-sm font-bold">Minha senha</h2>
 
       {error && (
@@ -46,16 +46,16 @@ function ChangePasswordCard() {
 
       <Field label="Senha atual">
         <input type="password" required value={current} autoComplete="current-password"
-          onChange={e => setCurrent(e.target.value)} className={inputCls} style={{ background: '#0d0b08' }} />
+          onChange={e => setCurrent(e.target.value)} className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Nova senha">
           <input type="password" required value={next} autoComplete="new-password"
-            onChange={e => setNext(e.target.value)} className={inputCls} style={{ background: '#0d0b08' }} />
+            onChange={e => setNext(e.target.value)} className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
         </Field>
         <Field label="Confirmar nova senha">
           <input type="password" required value={confirm} autoComplete="new-password"
-            onChange={e => setConfirm(e.target.value)} className={inputCls} style={{ background: '#0d0b08' }} />
+            onChange={e => setConfirm(e.target.value)} className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
         </Field>
       </div>
       <button type="submit" disabled={saving}
@@ -138,26 +138,26 @@ export default function AdminPage() {
           <div className="text-center py-16 text-stone-600 text-sm">Carregando…</div>
         ) : (
           <form onSubmit={handleSave} className="space-y-4 rounded-2xl border border-stone-800/60 p-5"
-                style={{ background: '#161210' }}>
+                style={{ background: 'var(--color-app-surface)' }}>
             <Field label="Nome do bar">
               <input type="text" required value={name} disabled={!canEdit}
-                onChange={e => setName(e.target.value)} className={inputCls} style={{ background: '#0d0b08' }} />
+                onChange={e => setName(e.target.value)} className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
             </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Telefone">
                 <input type="tel" value={phone} disabled={!canEdit}
                   onChange={e => setPhone(e.target.value)} placeholder="(11) 99999-0000"
-                  className={inputCls} style={{ background: '#0d0b08' }} />
+                  className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
               </Field>
               <Field label="Taxa de serviço (%)" hint="Ex: 10. Aplicada a novas comandas.">
                 <input type="number" min={0} max={100} step="0.5" value={fee} disabled={!canEdit}
-                  onChange={e => setFee(e.target.value)} className={inputCls} style={{ background: '#0d0b08' }} />
+                  onChange={e => setFee(e.target.value)} className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
               </Field>
             </div>
             <Field label="Endereço">
               <input type="text" value={address} disabled={!canEdit}
                 onChange={e => setAddress(e.target.value)} placeholder="Rua, número, bairro"
-                className={inputCls} style={{ background: '#0d0b08' }} />
+                className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
             </Field>
             <p className="text-stone-700 text-[11px]">Unidade: {estName}</p>
 

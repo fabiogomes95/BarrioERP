@@ -14,10 +14,10 @@ import { inputCls, Field, ModalOverlay } from '../components/ui'
 
 const STATUS = {
   free:            { label: 'Livre',      color: 'text-green-400',  bg: 'bg-green-500/10',  border: 'border-green-500/25',  accent: '#22c55e' },
-  occupied:        { label: 'Ocupada',    color: 'text-amber-400',  bg: 'bg-amber-500/10',  border: 'border-amber-500/25',  accent: '#f59e0b' },
+  occupied:        { label: 'Ocupada',    color: 'text-amber-400',  bg: 'bg-amber-500/10',  border: 'border-amber-500/25',  accent: 'var(--color-app-accent)' },
   bill_requested:  { label: 'Conta',      color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/25', accent: '#f97316' },
   reserved:        { label: 'Reservada',  color: 'text-blue-400',   bg: 'bg-blue-500/10',   border: 'border-blue-500/25',   accent: '#3b82f6' },
-  blocked:         { label: 'Bloqueada',  color: 'text-stone-500',  bg: 'bg-stone-800/40',  border: 'border-stone-700/40',  accent: '#57534e' },
+  blocked:         { label: 'Bloqueada',  color: 'text-stone-500',  bg: 'bg-stone-800/40',  border: 'border-stone-700/40',  accent: 'var(--color-stone-500)' },
 } satisfies Record<TableStatus, { label: string; color: string; bg: string; border: string; accent: string }>
 
 const FILTERS: Array<{ value: 'all' | TableStatus; label: string }> = [
@@ -33,7 +33,7 @@ const FILTERS: Array<{ value: 'all' | TableStatus; label: string }> = [
 function SkeletonCard() {
   return (
     <div className="rounded-2xl border border-stone-800/50 p-4 animate-pulse"
-         style={{ background: '#161210' }}>
+         style={{ background: 'var(--color-app-surface)' }}>
       <div className="flex justify-between items-start mb-3">
         <div className="w-9 h-7 bg-stone-800 rounded-lg" />
         <div className="w-14 h-5 bg-stone-800 rounded-full" />
@@ -61,7 +61,7 @@ function TableCard({ table, onClick }: { table: Table; onClick: () => void }) {
           ? 'opacity-40 cursor-not-allowed'
           : 'hover:border-stone-700/70 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/40 cursor-pointer active:translate-y-0',
       ].join(' ')}
-      style={{ background: '#161210' }}
+      style={{ background: 'var(--color-app-surface)' }}
     >
       {/* Barra de acento lateral */}
       <div
@@ -349,7 +349,7 @@ export default function MesasPage() {
 
       {/* Cabeçalho */}
       <div className="px-5 pt-5 pb-4 border-b border-stone-800/50"
-           style={{ background: '#0f0d0a' }}>
+           style={{ background: 'var(--color-app-surface-2)' }}>
         <div className="flex items-start justify-between gap-4 mb-4">
           <div>
             <h1 className="text-stone-100 text-lg font-bold leading-tight">Mesas</h1>
@@ -367,7 +367,7 @@ export default function MesasPage() {
               className="flex items-center justify-center w-9 h-9 rounded-xl
                          border border-stone-800/60 text-stone-500 hover:text-stone-300
                          hover:border-stone-700/60 disabled:opacity-40 transition-all"
-              style={{ background: '#161210' }}
+              style={{ background: 'var(--color-app-surface)' }}
               title="Atualizar"
             >
               <svg className={['w-4 h-4', loading ? 'animate-spin' : ''].join(' ')}
@@ -405,7 +405,7 @@ export default function MesasPage() {
                        border border-stone-800/60 text-stone-200 placeholder-stone-600
                        focus:outline-none focus:border-amber-500/40 focus:ring-1 focus:ring-amber-500/20
                        transition-all"
-            style={{ background: '#161210' }}
+            style={{ background: 'var(--color-app-surface)' }}
           />
           {search && (
             <button onClick={() => setSearch('')}

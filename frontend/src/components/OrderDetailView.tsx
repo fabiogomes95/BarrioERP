@@ -334,7 +334,7 @@ function AddItemModal({
          onClick={onClose}>
       <div className="w-full h-[100dvh] sm:h-auto sm:max-w-md sm:max-h-[85dvh] sm:rounded-3xl
                       overflow-y-auto overscroll-contain flex flex-col p-5"
-           style={{ background: '#161210' }}
+           style={{ background: 'var(--color-app-surface)' }}
            onClick={e => e.stopPropagation()}>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-stone-100 text-base font-bold">Adicionar item</h2>
@@ -346,7 +346,7 @@ function AddItemModal({
       </div>
 
       {/* Abas */}
-      <div className="flex gap-1 p-1 rounded-xl mb-4" style={{ background: '#0d0b08' }}>
+      <div className="flex gap-1 p-1 rounded-xl mb-4" style={{ background: 'var(--color-app-bg)' }}>
         {(['menu', 'half', 'manual'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={[
@@ -370,7 +370,7 @@ function AddItemModal({
           ) : picking ? (
             /* Confirmação do item selecionado */
             <div className="space-y-3">
-              <div className="flex items-center gap-3 p-3 rounded-xl" style={{ background: '#0d0b08' }}>
+              <div className="flex items-center gap-3 p-3 rounded-xl" style={{ background: 'var(--color-app-bg)' }}>
                 <div className="flex-1 min-w-0">
                   <p className="text-stone-200 text-sm font-semibold truncate">{picking.name}</p>
                   <p className="text-amber-400 text-xs mt-0.5">{brl(picking.price)}</p>
@@ -405,7 +405,7 @@ function AddItemModal({
               <Field label="Observações (opcional)">
                 <input type="text" value={notes} onChange={e => setNotes(e.target.value)}
                   placeholder="ex: sem cebola, ao ponto"
-                  className={inputCls} style={{ background: '#0d0b08' }} />
+                  className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
               </Field>
               <div className="flex gap-2">
                 <button onClick={() => setPicking(null)}
@@ -448,7 +448,7 @@ function AddItemModal({
                   className="w-full pl-8 pr-3 py-2 rounded-xl text-sm border border-stone-800/60
                              text-stone-200 placeholder-stone-700 focus:outline-none
                              focus:border-amber-500/40 transition-all"
-                  style={{ background: '#0d0b08' }} />
+                  style={{ background: 'var(--color-app-bg)' }} />
               </div>
 
               {/* Categorias */}
@@ -505,7 +505,7 @@ function AddItemModal({
           <form onSubmit={e => { e.preventDefault(); addHalf() }} className="space-y-3">
             <Field label="Primeira metade (½)">
               <select value={half1} onChange={e => setHalf1(e.target.value)}
-                className={inputCls + ' appearance-none'} style={{ background: '#0d0b08' }}>
+                className={inputCls + ' appearance-none'} style={{ background: 'var(--color-app-bg)' }}>
                 <option value="">Escolha o sabor…</option>
                 {halfOptions.map(i => (
                   <option key={i.id} value={i.id}>{i.name} — {brl(i.price)}</option>
@@ -514,7 +514,7 @@ function AddItemModal({
             </Field>
             <Field label="Segunda metade (½)">
               <select value={half2} onChange={e => setHalf2(e.target.value)}
-                className={inputCls + ' appearance-none'} style={{ background: '#0d0b08' }}>
+                className={inputCls + ' appearance-none'} style={{ background: 'var(--color-app-bg)' }}>
                 <option value="">Escolha o sabor…</option>
                 {halfOptions.map(i => (
                   <option key={i.id} value={i.id}>{i.name} — {brl(i.price)}</option>
@@ -525,7 +525,7 @@ function AddItemModal({
             {/* Preço calculado = metade mais cara */}
             {halfItem1 && halfItem2 && (
               <div className="flex items-center justify-between rounded-xl px-3.5 py-2.5"
-                   style={{ background: '#0d0b08' }}>
+                   style={{ background: 'var(--color-app-bg)' }}>
                 <span className="text-stone-500 text-xs">Preço (metade mais cara)</span>
                 <span className="text-amber-400 text-sm font-bold">{brl(halfPrice)}</span>
               </div>
@@ -537,7 +537,7 @@ function AddItemModal({
             <Field label="Observações (opcional)">
               <input type="text" value={halfNotes} onChange={e => setHalfNotes(e.target.value)}
                 placeholder="ex: borda recheada, sem cebola"
-                className={inputCls} style={{ background: '#0d0b08' }} />
+                className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
             </Field>
             <div className="flex gap-2 mt-1">
               <button type="submit" disabled={adding || !halfItem1 || !halfItem2}
@@ -563,19 +563,19 @@ function AddItemModal({
         <form onSubmit={e => { e.preventDefault(); addManual() }} className="space-y-3">
           <Field label="Nome do item">
             <input type="text" required value={manName} onChange={e => setManName(e.target.value)}
-              placeholder="ex: Cerveja especial" className={inputCls} style={{ background: '#0d0b08' }} />
+              placeholder="ex: Cerveja especial" className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
           </Field>
           <Field label="Preço (R$)">
             <input type="text" inputMode="numeric" required value={manPrice}
               onChange={e => setManPrice(maskCurrency(e.target.value))}
-              placeholder="0,00" className={inputCls} style={{ background: '#0d0b08' }} />
+              placeholder="0,00" className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
           </Field>
           <Field label="Quantidade">
             <QtyStepper value={Number(manQty)} onChange={n => setManQty(String(n))} />
           </Field>
           <Field label="Observações (opcional)">
             <input type="text" value={manNotes} onChange={e => setManNotes(e.target.value)}
-              placeholder="ex: sem gelo" className={inputCls} style={{ background: '#0d0b08' }} />
+              placeholder="ex: sem gelo" className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
           </Field>
           <div className="flex gap-2 mt-1">
             <button type="submit" disabled={adding}
@@ -719,7 +719,7 @@ function PaymentModal({
       </div>
 
       {/* Resumo financeiro */}
-      <div className="rounded-2xl p-4 mb-4 space-y-1.5" style={{ background: '#0d0b08' }}>
+      <div className="rounded-2xl p-4 mb-4 space-y-1.5" style={{ background: 'var(--color-app-bg)' }}>
         <div className="flex justify-between text-sm">
           <span className="text-stone-500">Total da conta</span>
           <span className="text-stone-200 font-semibold">{brl(total)}</span>
@@ -746,7 +746,7 @@ function PaymentModal({
         <div className="space-y-1 mb-4">
           {payments.map(p => (
             <div key={p.id} className="flex items-center justify-between text-xs px-3 py-2 rounded-lg"
-                 style={{ background: '#0d0b08' }}>
+                 style={{ background: 'var(--color-app-bg)' }}>
               <span className="text-stone-400">{METHOD_LABEL[p.method] ?? p.method}</span>
               <div className="flex items-center gap-2">
                 {p.change_given && Number(p.change_given) > 0 && (
@@ -783,13 +783,13 @@ function PaymentModal({
             <Field label="Valor (R$)">
               <input type="text" inputMode="numeric" value={amount}
                 onChange={e => setAmount(maskCurrency(e.target.value))}
-                placeholder="0,00" className={inputCls} style={{ background: '#0d0b08' }} />
+                placeholder="0,00" className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
             </Field>
             {method === 'cash' && (
               <Field label="Recebido (R$)">
                 <input type="text" inputMode="numeric" value={tendered}
                   onChange={e => setTendered(maskCurrency(e.target.value))}
-                  placeholder="0,00" className={inputCls} style={{ background: '#0d0b08' }} />
+                  placeholder="0,00" className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
               </Field>
             )}
           </div>
@@ -804,7 +804,7 @@ function PaymentModal({
           {method !== 'cash' && (
             <Field label="Referência (opcional)">
               <input type="text" value={reference} onChange={e => setReference(e.target.value)}
-                placeholder="NSU, txid do Pix…" className={inputCls} style={{ background: '#0d0b08' }} />
+                placeholder="NSU, txid do Pix…" className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
             </Field>
           )}
 
@@ -994,7 +994,7 @@ function SplitModal({
       </div>
 
       {/* Modo de divisão */}
-      <div className="flex gap-1 p-1 rounded-xl mb-4" style={{ background: '#0d0b08' }}>
+      <div className="flex gap-1 p-1 rounded-xl mb-4" style={{ background: 'var(--color-app-bg)' }}>
         {([['equal', 'Igualmente'], ['items', 'Por item']] as const).map(([m, label]) => (
           <button key={m} onClick={() => setMode(m)}
             className={[
@@ -1007,7 +1007,7 @@ function SplitModal({
       </div>
 
       {/* Stepper de pessoas */}
-      <div className="flex items-center justify-between rounded-2xl p-4 mb-4" style={{ background: '#0d0b08' }}>
+      <div className="flex items-center justify-between rounded-2xl p-4 mb-4" style={{ background: 'var(--color-app-bg)' }}>
         <span className="text-stone-500 text-sm">Dividir entre</span>
         <div className="flex items-center gap-3">
           <button type="button" onClick={() => setCount(c => Math.max(2, c - 1))} disabled={count <= 2}
@@ -1032,7 +1032,7 @@ function SplitModal({
 
       {/* Atribuição de itens por pessoa */}
       {mode === 'items' && (
-        <div className="rounded-2xl p-3 mb-4 space-y-1" style={{ background: '#0d0b08' }}>
+        <div className="rounded-2xl p-3 mb-4 space-y-1" style={{ background: 'var(--color-app-bg)' }}>
           {activeItems.length === 0 ? (
             <p className="text-stone-600 text-xs text-center py-2">Comanda sem itens</p>
           ) : (
@@ -1068,7 +1068,7 @@ function SplitModal({
       )}
 
       {/* Resumo financeiro */}
-      <div className="rounded-2xl p-4 mb-4 space-y-1.5" style={{ background: '#0d0b08' }}>
+      <div className="rounded-2xl p-4 mb-4 space-y-1.5" style={{ background: 'var(--color-app-bg)' }}>
         <div className="flex justify-between text-sm">
           <span className="text-stone-500">Total da conta</span>
           <span className="text-stone-200 font-semibold">{brl(total)}</span>
@@ -1101,7 +1101,7 @@ function SplitModal({
           {/* Lista de parcelas por pessoa */}
           <div className="space-y-1.5 mb-2">
             {amounts.map((slotAmount, i) => (
-              <div key={i} className="rounded-xl overflow-hidden" style={{ background: '#0d0b08' }}>
+              <div key={i} className="rounded-xl overflow-hidden" style={{ background: 'var(--color-app-bg)' }}>
                 <div className="flex items-center justify-between px-3.5 py-2.5">
                   <span className="text-stone-300 text-sm font-medium">Pessoa {i + 1}</span>
                   <div className="flex items-center gap-3">
@@ -1139,13 +1139,13 @@ function SplitModal({
                       <Field label="Valor (R$)">
                         <input type="text" inputMode="numeric" value={amount}
                           onChange={e => setAmount(maskCurrency(e.target.value))}
-                          placeholder="0,00" className={inputCls} style={{ background: '#161210' }} />
+                          placeholder="0,00" className={inputCls} style={{ background: 'var(--color-app-surface)' }} />
                       </Field>
                       {method === 'cash' && (
                         <Field label="Recebido (R$)">
                           <input type="text" inputMode="numeric" value={tendered}
                             onChange={e => setTendered(maskCurrency(e.target.value))}
-                            placeholder="0,00" className={inputCls} style={{ background: '#161210' }} />
+                            placeholder="0,00" className={inputCls} style={{ background: 'var(--color-app-surface)' }} />
                         </Field>
                       )}
                     </div>
@@ -1230,7 +1230,7 @@ function DiscountModal({
         </button>
       </div>
 
-      <div className="flex gap-1 p-1 rounded-xl mb-4" style={{ background: '#0d0b08' }}>
+      <div className="flex gap-1 p-1 rounded-xl mb-4" style={{ background: 'var(--color-app-bg)' }}>
         {(['value', 'percent'] as const).map(m => (
           <button key={m} onClick={() => setMode(m)}
             className={['flex-1 py-2 rounded-lg text-xs font-semibold transition-all',
@@ -1248,13 +1248,13 @@ function DiscountModal({
         <Field label="Desconto (R$)">
           <input type="text" inputMode="numeric" value={value} autoFocus
             onChange={e => setValue(maskCurrency(e.target.value))}
-            placeholder="0,00" className={inputCls} style={{ background: '#0d0b08' }} />
+            placeholder="0,00" className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
         </Field>
       ) : (
         <Field label="Desconto (%)">
           <input type="number" min={0} max={100} value={percent} autoFocus
             onChange={e => setPercent(e.target.value)}
-            placeholder="ex: 10" className={inputCls} style={{ background: '#0d0b08' }} />
+            placeholder="ex: 10" className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
         </Field>
       )}
 
@@ -1467,7 +1467,7 @@ export function OrderDetail({
 
       {/* Header do detalhe */}
       <div className="px-5 py-4 border-b border-stone-800/50 shrink-0"
-           style={{ background: '#0f0d0a' }}>
+           style={{ background: 'var(--color-app-surface-2)' }}>
         <div className="flex items-start gap-3">
           {/* Botão voltar */}
           {onBack && (
@@ -1565,7 +1565,7 @@ export function OrderDetail({
                 ? 'border-green-500/40 text-green-400'
                 : 'border-stone-800/60 text-stone-400 hover:text-amber-400 hover:border-stone-700/60',
             ].join(' ')}
-            style={{ background: '#161210' }}>
+            style={{ background: 'var(--color-app-surface)' }}>
             {printSent ? (
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -1586,7 +1586,7 @@ export function OrderDetail({
             className="shrink-0 flex items-center justify-center w-9 h-9 rounded-xl
                        border border-stone-800/60 text-stone-400 hover:text-green-400
                        hover:border-stone-700/60 disabled:opacity-40 transition-all"
-            style={{ background: '#161210' }}>
+            style={{ background: 'var(--color-app-surface)' }}>
             {sharingWA ? (
               <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 12a8 8 0 018-8" />
@@ -1652,7 +1652,7 @@ export function OrderDetail({
 
       {/* Totais + ações */}
       <div className="border-t border-stone-800/50 shrink-0 p-4 space-y-3"
-           style={{ background: '#0f0d0a' }}>
+           style={{ background: 'var(--color-app-surface-2)' }}>
 
         {/* Totais — só quem lida com pagamento/caixa vê o valor */}
         {canSeeMoney && (
@@ -1674,7 +1674,7 @@ export function OrderDetail({
             )}
             <div className="flex justify-between pt-1 border-t border-stone-800/50">
               <span className="text-stone-200 text-sm font-bold">Total</span>
-              <span className="text-amber-400 text-base font-black">{brl(order.total)}</span>
+              <span className="text-base font-black" style={{ color: 'var(--color-app-price)' }}>{brl(order.total)}</span>
             </div>
           </div>
         )}

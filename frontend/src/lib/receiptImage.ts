@@ -4,9 +4,13 @@ function brl(v: string | number) {
   return Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
+// Cores fixas (não seguem o tema claro/escuro do app) — o recibo deve
+// sempre parecer "papel", igual ao impresso na térmica e ao cardápio físico.
 const FONT = "'Courier New', monospace"
-const INK = '#161210'
-const MUTED = '#8a8378'
+const PAPER = '#fcf6ed'
+const INK = '#231107'
+const MUTED = '#7a5c48'
+const DASH = '#c7ac8b'
 
 function loadImage(src: string): Promise<HTMLImageElement | null> {
   return new Promise(resolve => {
@@ -95,7 +99,7 @@ export async function buildReceiptImage(
   const ctx = canvas.getContext('2d')!
   ctx.scale(scale, scale)
 
-  ctx.fillStyle = '#ffffff'
+  ctx.fillStyle = PAPER
   ctx.fillRect(0, 0, W, H)
   ctx.textBaseline = 'alphabetic'
 
@@ -151,7 +155,7 @@ export async function buildReceiptImage(
           const dotsStart = PAD + nameW + 6
           const dotsEnd = W - PAD - valueW - 6
           if (dotsEnd > dotsStart) {
-            ctx.fillStyle = '#c9c2b4'
+            ctx.fillStyle = DASH
             ctx.font = `14px ${FONT}`
             let x = dotsStart
             while (x < dotsEnd) { ctx.fillText('.', x, y); x += 5 }
@@ -207,7 +211,7 @@ export async function buildReceiptImage(
 }
 
 function drawDash(ctx: CanvasRenderingContext2D, y: number, x0: number, x1: number): number {
-  ctx.strokeStyle = '#c9c2b4'
+  ctx.strokeStyle = DASH
   ctx.lineWidth = 1
   ctx.setLineDash([4, 4])
   ctx.beginPath()
