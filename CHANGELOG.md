@@ -14,22 +14,106 @@
 - **Botão do WhatsApp no recibo ainda não abre o app direto no celular** — hoje usa
   a Web Share API (`navigator.share`), que deveria abrir o menu nativo de compartilhar
   do Android/iOS, mas na prática ainda não está abrindo o WhatsApp/app nenhum no
-  celular do usuário. Precisa investigar por que o compartilhamento nativo não está
-  disparando (permissões do navegador? HTTPS obrigatório pra Web Share API em alguns
-  celulares — o acesso hoje é via `http://192.168.x.x:5173`, sem HTTPS, o que pode
-  ser a causa raiz).
+  celular do usuário. Provável causa raiz: Web Share API exige contexto seguro
+  (HTTPS) na maioria dos navegadores móveis, e o acesso hoje é `http://` puro
+  (rede local ou Tailscale). Ainda não implementado — avaliar certificado local
+  (mkcert) ou aceitar a limitação por enquanto.
 - **Imprimir direto pelo celular** — o botão de impressão (recibo térmico) hoje
   assume uma impressora conectada ao PC/navegador que abre o pop-up de impressão;
   no celular isso não funciona do mesmo jeito (sem impressora térmica pareada).
   Avaliar impressão via Bluetooth/rede local direto do celular, ou definir que
   impressão só acontece pelo PC do caixa mesmo.
-- Rodar `instalar_servicos.ps1` (PowerShell como Administrador) pra registrar o
-  BarrioERP como serviço do Windows e iniciar sozinho no boot (NSSM já instalado
-  via winget, script já pronto — só falta executar).
 - Avaliar se `kitchen` precisa de alguma visão própria simplificada (hoje usa as
   mesmas restrições do `waiter`).
-- Voltar ao tema de acesso remoto/hospedagem quando fizer sentido (documentado em
-  memória — ficou pausado por enquanto).
+- **Sem "esqueci minha senha" no login** — só um manager/owner consegue resetar a
+  senha de outro usuário (tela Equipe). Se sobrar um único owner e ele esquecer a
+  senha, não tem saída pela interface.
+- **`ARCHITECTURE.md` desatualizado** desde 2026-06-10 — cash, reports e audit já
+  existem no código mas não estão documentados lá (só o changelog está em dia).
+- Gaps de produto ainda não avaliados: controle de estoque/insumos, reservas de
+  mesa com data/hora, relatórios por período (hoje só por dia), emissão fiscal
+  (NFC-e), gestão de múltiplos estabelecimentos pela UI.
+
+---
+
+## [v0.6.0] — Frontend em produção, PWA instalável e acesso remoto via Tailscale
+
+Sessão de infraestrutura: parou de rodar o frontend como servidor de desenvolvimento,
+corrigiu ícones/manifest quebrados no build de produção, resolveu o problema de IP
+mutável do PC e habilitou acesso remoto gratuito ao sistema via Tailscale.
+
+### Backend — Correção no fallback de arquivos estáticos
+
+**Arquivo:** `app/main.py`
+
+O catch-all do SPA (`serve_spa`) devolvia `index.html` pra **qualquer** rota não
+reconhecida — inclusive `favicon.png`, `icon-recanto.png`, `favicon.svg`, `icons.svg`,
+que existem como arquivos soltos em `frontend/public/` (fora de `assets/`, o único
+diretório montado como estático). Resultado: ícones quebrados assim que o build de
+produção passou a ser servido pelo FastAPI em vez do Vite dev server.
+
+**Fix:** `serve_spa` agora verifica se `full_path` corresponde a um arquivo real
+dentro de `dist/` e serve ele diretamente; só cai no `index.html` se não existir
+(roteamento client-side do React Router). Guarda contra path traversal:
+`candidate.resolve()` precisa estar dentro de `_FRONTEND.resolve()` — testado com
+`%2e%2e` e `..%2f` codificados, ambos bloqueados corretamente.
+
+### Frontend — Fix: parcela errada ao dividir conta por pessoa
+
+**Arquivo:** `components/OrderDetailView.tsx`
+
+O botão "Receber" de cada parcela trocava `activeSlot` direto, sem passar pela
+`openSlot()` — que é quem reseta valor/troco/forma de pagamento pra aquela parcela
+específica. Bug real: abrir a parcela da Pessoa 1, fechar, abrir a da Pessoa 2 —
+o campo "Valor" ficava com o valor da Pessoa 1. Corrigido conectando o clique à
+`openSlot(i)`.
+
+### Frontend — PWA instalável (ícone + tela cheia na tela inicial)
+
+**Arquivos:** `public/manifest.webmanifest` (novo), `index.html`,
+`public/icon-recanto-512.png` (novo, copiado de `assets/icon-recanto.png` — a
+versão 512×512 já existia na raiz do projeto, só a pública em `frontend/public/`
+estava em 192×192)
+
+- Manifest com `display: standalone`, ícones 192 e 512, `name`/`short_name`
+  "BarrioERP", `theme_color`/`background_color` `#0d0b08`
+- `apple-touch-icon` (iOS ignora o manifest, usa essa tag), `apple-mobile-web-app-capable`
+  e `mobile-web-app-capable` (abre em tela cheia, sem barra do navegador)
+- Testado: "Adicionar à tela inicial" no celular já usa o ícone certo e abre como
+  app, não como atalho de aba
+
+### Infraestrutura — Build de produção substitui o Vite dev server
+
+- `frontend/dist/` gerado via `npm run build` (estava parado desde 2026-06-27
+  enquanto o serviço rodava `npm run dev` — dois processos fazendo o trabalho de um)
+- Serviço Windows `BarrioERP-Frontend` (NSSM, rodava `npm run dev` na porta 5173)
+  **removido** — o próprio `BarrioERP-Backend` agora serve API + frontend juntos
+  na porta 8000
+- Único bloqueio de build corrigido: variável `openSlot` não usada em
+  `OrderDetailView.tsx` (era o bug de parcela acima, não só um lint)
+
+### Infraestrutura — IP fixo do PC na rede do bar
+
+Problema: o IP do PC mudava (DHCP), obrigando reconfigurar o acesso toda hora.
+Reserva de IP no roteador não foi possível (rede com acesso admin bloqueado).
+mDNS (`GOMES-PC.local`) não funcionou (provável isolamento de cliente na rede).
+
+**Solução:** IP manual (`192.168.1.250`) configurado só no perfil da rede Wi-Fi
+do bar (`TP-Link_A6DE`), via Configurações do Windows — escopo por rede/SSID, não
+afeta o uso do mesmo notebook em outras redes (escola, casa).
+
+### Infraestrutura — Acesso remoto via Tailscale
+
+O notebook que roda o BarrioERP não fica fisicamente fixo no bar (uso pessoal
+fora do horário de funcionamento), então IP fixo sozinho não bastava pra acesso
+de fora da rede do bar. Cogitado subir tudo pra um servidor na nuvem, mas
+descartado por custo/complexidade desnecessários pro problema real.
+
+**Tailscale** instalado no PC (`gomes-pc`, IP Tailscale `100.109.236.99`) e no
+celular — rede privada (WireGuard) que dá um endereço fixo alcançável de
+qualquer rede, sem mexer no roteador. Testado com sucesso em rede móvel (dados).
+Regra de firewall `BarrioERP Backend 8000` já cobria os perfis Privado e Público,
+então não precisou de ajuste extra.
 
 ---
 
@@ -572,6 +656,23 @@ frontend/
 ---
 
 ## Como rodar o projeto
+
+### Produção (como roda hoje no PC do bar)
+
+Serviço Windows `BarrioERP-Backend` (NSSM) sobe `uvicorn app.main:app` na porta
+8000, que serve a API **e** o frontend (build estático de `frontend/dist/`)
+juntos. Não existe mais serviço separado de frontend.
+
+```bash
+# Gerar o build de produção sempre que mexer no frontend:
+cd frontend
+npm run build
+```
+
+Acessar: `http://192.168.1.250:8000` (IP fixo do PC na rede do bar) ou pelo
+endereço Tailscale (`gomes-pc`) de qualquer rede.
+
+### Desenvolvimento local (hot-reload)
 
 ```bash
 # Backend

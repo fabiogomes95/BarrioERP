@@ -1109,7 +1109,7 @@ function SplitModal({
                       <span className="text-green-400 text-xs font-bold">✓ Pago</span>
                     ) : (
                       <button
-                        onClick={() => setActiveSlot(activeSlot === i ? null : i)}
+                        onClick={() => (activeSlot === i ? setActiveSlot(null) : openSlot(i))}
                         className="text-xs font-bold text-amber-400 hover:text-amber-300 transition-colors px-2 py-1">
                         {activeSlot === i ? 'Fechar' : 'Receber'}
                       </button>

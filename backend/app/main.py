@@ -160,6 +160,12 @@ if _FRONTEND.exists():
 
     @app.get("/{full_path:path}", include_in_schema=False)
     async def serve_spa(full_path: str) -> FileResponse:
+        # Arquivos soltos em public/ (favicon, ícones, manifest) viram arquivos
+        # reais em dist/ — servir direto se existirem, senão cai no index.html
+        # (roteamento client-side do React Router).
+        candidate = (_FRONTEND / full_path).resolve()
+        if full_path and candidate.is_file() and _FRONTEND.resolve() in candidate.parents:
+            return FileResponse(str(candidate))
         return FileResponse(
             str(_FRONTEND / "index.html"),
             headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
