@@ -24,6 +24,16 @@
 16. [Docker e Infraestrutura](#16-docker-e-infraestrutura)
 17. [Decisões Arquiteturais](#17-decisões-arquiteturais)
 18. [Comandos do Dia-a-Dia](#18-comandos-do-dia-a-dia)
+19. [Módulo de Mesas (Tables)](#19-módulo-de-mesas-tables)
+20. [Módulo de Comandas (Orders)](#20-módulo-de-comandas-orders)
+21. [Módulo de Pagamentos (Payments)](#21-módulo-de-pagamentos-payments)
+22. [Módulo de Cardápio (Menu)](#22-módulo-de-cardápio-menu)
+23. [Arquitetura do Frontend](#23-arquitetura-do-frontend)
+24. [Usuários e RBAC](#24-usuários-e-rbac)
+25. [Módulo de Caixa (Cash)](#25-módulo-de-caixa-cash)
+26. [Relatórios e Auditoria](#26-relatórios-e-auditoria)
+27. [Fiado](#27-fiado)
+28. [Infraestrutura de Produção](#28-infraestrutura-de-produção)
 
 ---
 
@@ -129,6 +139,13 @@ BarrioERP/
                 └── endpoints/
                     └── auth.py  ← POST /auth/login, GET /auth/me
 ```
+
+> **Nota (2026-07):** esta árvore mostra só o módulo inicial (auth). O
+> sistema cresceu bastante desde então — módulos completos de Tables,
+> Orders, Payments, Menu, Users, Cash, Reports, Audit, Onboarding e
+> Notifications seguem a mesma estrutura em camadas (schema → repository →
+> service → endpoint). Ver seções 19 a 28 para cada módulo específico com
+> seus arquivos.
 
 ---
 
@@ -398,7 +415,7 @@ O Alembic precisa conhecer todos os models para comparar com o estado atual do b
 
 ---
 
-## 7. Configuração e Ambiente // PAREI AQUI
+## 7. Configuração e Ambiente
 
 ### O arquivo .env
 
@@ -1498,14 +1515,237 @@ Estado mobileItems/mobileDetail controla qual painel renderiza.
 Botão "Voltar" na view de detalhe retorna à lista.
 ```
 
-### Paleta de cores
+### Paleta de cores (atualizado 2026-07 — ver seção 28)
 
-| Token | Valor | Uso |
-|-------|-------|-----|
-| Background | `#0d0b08` | Fundo geral da aplicação |
-| Surface | `#161210` | Cards e painéis |
-| Deep | `#0f0d0a` | Sidebar, inputs |
-| Accent | `amber-500` (#F59E0B) | Item ativo, botões primários, hovers |
-| Text | `stone-100` / `stone-400` / `stone-600` | Hierarquia tipográfica |
+Identidade oficial "Recanto da Barra", extraída por amostragem de pixel do
+cardápio físico do bar. Dois temas (claro/escuro), ver `frontend/src/index.css`.
 
-*Última atualização: 2026-06-10*
+| Token | Claro | Escuro | Uso |
+|-------|-------|--------|-----|
+| `--color-app-bg` | `#FCF6ED` | `#0D0B08` | Fundo geral |
+| `--color-app-surface` | `#F5EAD9` | `#161210` | Cards e painéis |
+| `--color-app-surface-2` | `#EADCCD` | `#0F0D0A` | Sidebar, inputs |
+| `--color-app-heading` | `#743200` | `#E0A865` | Títulos |
+| `--color-app-accent` | `#8E3D00` | `#DD8A3C` | Item ativo, botões, hovers |
+| `--color-app-text` | `#231107` | `#F2E6D8` | Texto principal |
+| `--color-app-price` | `#600000` | `#FF8B6B` | Preços/valores em destaque |
+
+As escalas Tailwind `amber-*` e `stone-*` foram remapeadas pra essa paleta
+via `@theme` — todas as classes já usadas no código (`bg-amber-500`,
+`text-stone-400`, `border-stone-800/60`) herdam o tema automaticamente, sem
+precisar editar cada página. Detalhe: `stone-100` é o tom mais ESCURO no
+claro (era o texto de maior destaque, quase-branco no escuro) — a escala é
+invertida entre os temas pra manter a mesma classe funcionando nos dois.
+
+*Última atualização: 2026-07-23*
+
+---
+
+## 24. Usuários e RBAC
+
+**Arquivos:** `schemas/user.py`, `services/user_service.py`,
+`api/v1/endpoints/users.py`, `api/deps.py` (`require_roles`)
+
+### Hierarquia de cargos
+
+```
+OWNER > MANAGER > CASHIER / WAITER / KITCHEN
+```
+
+- **OWNER/MANAGER**: gerenciam equipe, cardápio, veem dinheiro e relatórios
+- **CASHIER**: opera caixa e pagamentos, vê dinheiro, não gerencia equipe/cardápio
+- **WAITER/KITCHEN**: só operação (mesas, itens, cozinha) — nunca veem valores,
+  desconto, fechamento de caixa ou relatórios
+
+### `require_roles()` — RBAC centralizado
+
+```python
+require_roles(current_user, UserRole.OWNER, UserRole.MANAGER, UserRole.CASHIER)
+```
+
+Chamado no início do endpoint, depois do `CurrentUser` já injetado. Lança
+`ForbiddenError` (403) se o cargo não estiver na lista. Esconder o botão no
+frontend é só UX — a checagem de verdade é sempre aqui, porque o frontend
+nunca é confiável (alguém pode chamar a API direto).
+
+### Regras de negócio do módulo
+
+- **Proteção do último owner**: uma empresa nunca pode ficar sem nenhum
+  OWNER ativo — `count_active_owners()` bloqueia a desativação/rebaixamento
+  do último
+- **MANAGER não mexe em OWNER**: não pode criar, editar nem desativar
+  usuários com cargo OWNER
+- **E-mail único por empresa** (não globalmente — dois bares diferentes
+  podem ter donos com o mesmo e-mail, mas o login busca sem filtro de
+  empresa e pega o primeiro match — ver nota em `onboarding_service.py`)
+- **Herança de `establishment_id`**: usuário criado pela tela de Equipe
+  herda o estabelecimento de quem criou (fix de 2026-07, v0.5.0)
+
+### Senha — regras simplificadas (v0.10.0, 2026-07)
+
+Mínimo 4 caracteres, qualquer combinação de letras/números — sem exigir
+maiúscula/símbolo/dígito obrigatório. Decisão consciente: sistema não é
+exposto na internet pública (só rede local + Tailscale), equipe pequena,
+prioridade é facilidade de uso no dia a dia. Ver seção 28 sobre recuperação
+de senha sem e-mail configurado.
+
+---
+
+## 25. Módulo de Caixa (Cash)
+
+**Arquivos:** `models/cash.py`, `schemas/cash.py`, `services/cash_service.py`,
+`api/v1/endpoints/cash.py`
+
+### Conceito: sessão de caixa
+
+Uma `CashSession` representa o turno de trabalho do caixa físico — abre com
+um fundo de troco (`opening_amount`) e fecha com a contagem real do dinheiro.
+
+```
+CashSessionStatus: OPEN → CLOSED
+CashMovementKind:  SANGRIA (retirada) | SUPRIMENTO (reforço/entrada)
+```
+
+### Fórmula do esperado em caixa
+
+```
+esperado = fundo_de_troco
+         + Σ pagamentos (method=cash, status=confirmed, entre abertura e fechamento)
+         + Σ suprimentos
+         − Σ sangrias
+
+diferença = contagem_real − esperado   (pode ser positiva ou negativa)
+```
+
+### Fluxo
+
+```
+POST /cash/open              → abre sessão com fundo de troco
+POST /cash/movements          → registra sangria ou suprimento durante o turno
+GET  /cash/current             → sessão aberta agora (ou null)
+POST /cash/close               → fecha com a contagem real, calcula diferença
+GET  /cash/history              → sessões fechadas anteriores
+```
+
+Só uma sessão `OPEN` por estabelecimento por vez — tentar abrir uma segunda
+sem fechar a anterior é bloqueado (`BusinessRuleError`).
+
+**RBAC:** todo o módulo restrito a `owner`/`manager`/`cashier` — garçom e
+cozinha não têm acesso nenhum ao Caixa (nem leitura).
+
+---
+
+## 26. Relatórios e Auditoria
+
+**Arquivos:** `models/audit_log.py`, `services/audit_service.py`,
+`schemas/report.py`, `services/order_service.py` (métodos de relatório),
+`api/v1/endpoints/reports.py`, `api/v1/endpoints/audit.py`
+
+### Auditoria — log de tudo que acontece
+
+`AuditService.log()` é chamado a partir dos services de negócio (Order,
+Payment, Cash, User) sempre que algo sensível acontece: abrir/fechar/reabrir
+comanda, cancelar item, aplicar desconto, registrar pagamento, redefinir
+senha, etc. Cada entrada guarda `before`/`after` (snapshot JSON), quem fez
+(`user_id`), de qual empresa/estabelecimento, e a ação (string tipo
+`"order.close"`, `"auth.password_recovery"`).
+
+`GET /audit` (só `owner`/`manager`) lista com filtros por ação, tipo de
+recurso e paginação — é a tela de Auditoria do frontend.
+
+### Relatórios — visão do dia e histórico
+
+| Endpoint | O que retorna |
+|---|---|
+| `GET /reports/daily` | Faturamento, nº comandas, ticket médio, faturamento por forma de pagamento, itens mais vendidos — de um dia específico |
+| `GET /reports/history` | Comandas fechadas recentes, com itens, filtrável por dia |
+| `GET /reports/fiado` | Comandas em aberto com pagamento parcial (fiado) |
+| `GET /reports/fiado/grouped` | Fiados agrupados por nome do cliente |
+
+**Limitação conhecida:** `daily` só cobre um dia por vez — não há relatório
+por intervalo de datas (semana/mês) nem comparação entre períodos. Fica
+como gap de produto em aberto (ver `CHANGELOG.md`).
+
+---
+
+## 27. Fiado
+
+**Conceito:** comanda fechada com pagamento **parcial** — o cliente ficou
+devendo. Não é uma tabela própria; é uma comanda com `status=CLOSED` (ou
+`BILL_REQUESTED`/`OPEN` ainda em aberto) onde `total_pago < total`.
+
+- **Fix importante (v0.5.0):** antes, uma comanda fechada em fiado era
+  contada como faturamento cheio do dia, igual a uma venda quitada. Corrigido
+  pra só contar no faturamento quando `total_pago >= total`.
+- **Reabertura:** `reopen_order()` permite reabrir uma comanda fechada com
+  fiado (volta pra `OPEN`) pra adicionar mais itens ou receber o resto —
+  bloqueado se já foi totalmente paga.
+- Tela **Fiado** no frontend: busca por cliente, resumo (total em fiado, nº
+  clientes, nº comandas), fiados agrupados por pessoa.
+
+---
+
+## 28. Infraestrutura de Produção
+
+Sessão de infraestrutura (2026-07) que levou o sistema de "rodando manual
+no terminal" pra um setup mais parecido com produção de verdade. Detalhes
+completos no `CHANGELOG.md` (v0.6.0 a v0.10.0) — resumo aqui:
+
+### Deploy — dois serviços Windows (NSSM)
+
+```
+BarrioERP-Backend      → uvicorn na porta 8000 (HTTP puro, fallback LAN)
+BarrioERP-Backend-TLS  → uvicorn na porta 443 (HTTPS, cert do Tailscale)
+```
+
+Ambos rodam `app.main:app` — a mesma aplicação FastAPI serve a API **e**
+o build de produção do frontend (`frontend/dist/`) junto, num único
+processo por porta. Não existe mais serviço separado de frontend (era
+`npm run dev` como serviço — trocado pelo build estático).
+
+### Acesso remoto — Tailscale, não VPS
+
+PC roda em casa, não fica fisicamente sempre no bar. Em vez de contratar
+um servidor na nuvem (custo/complexidade desnecessários pro problema real),
+**Tailscale** dá um endereço fixo (`gomes-pc.cod-aldebaran.ts.net`)
+alcançável de qualquer rede — inclusive de dados móveis — sem mexer no
+roteador. IP fixo (`192.168.1.250`) configurado só no perfil da rede
+Wi-Fi do bar, sem afetar o uso do notebook em outras redes.
+
+### HTTPS via certificado Tailscale
+
+Sem domínio público, HTTPS de verdade só é possível pro hostname que o
+Tailscale verifica. `tailscale cert` emite um certificado Let's Encrypt real
+(confiável, sem aviso no navegador) pro hostname acima — necessário pra Web
+Share API funcionar (botão de recibo por WhatsApp) e pra instalação de PWA
+completa (ver abaixo). Renovação automática via `backend/certs/renovar-cert.ps1`
+(Task Scheduler, diário).
+
+### PWA instalável
+
+`manifest.webmanifest` + `apple-touch-icon` + meta tags — instalar na tela
+inicial do celular abre em tela cheia, sem barra do navegador, como um app
+nativo. Só funciona de verdade (sem UI do Chrome) com HTTPS — daí a conexão
+com o item acima.
+
+### Notificações em tempo real (SSE + Postgres LISTEN/NOTIFY)
+
+`app/core/events.py` — barramento de eventos entre os dois processos
+(8000 e 443 não compartilham memória) usando o Postgres como intermediário.
+`PATCH /orders/{id}/request-bill` publica um evento; qualquer processo com
+`LISTEN` ativo recebe e repassa via SSE (`GET /notifications/stream`) pros
+clientes conectados daquele processo. Usado hoje para:
+
+- Toast + som quando uma comanda solicita a conta (só pra
+  owner/manager/cashier)
+- Impressão remota: celular manda `POST /notifications/print`, o PC marcado
+  como "impressora do bar" (`localStorage`, ver `lib/notifications.ts`)
+  escuta e imprime local — resolve a impressora térmica só estar ligada por
+  cabo a um único PC
+
+### Modo claro/escuro
+
+Ver seção 23 (paleta) e `frontend/src/lib/theme.ts`. Segue o tema do
+sistema por padrão; toggle sol/lua grava a escolha em `localStorage`.
+
+*Última atualização: 2026-07-23*
