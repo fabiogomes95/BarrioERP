@@ -7,10 +7,6 @@
 
 ## Próximos passos
 
-- **Notificação no PC ao solicitar conta pelo celular**: quando o garçom pedir a conta
-  (`Solicitar conta`) pelo celular, o PC do caixa deve mostrar uma notificação em tempo
-  real (som/popup), sem precisar ficar checando a tela. Provavelmente via polling mais
-  frequente na tela do Caixa/Mesas, ou WebSocket/SSE pra empurrar o evento na hora.
 - **Imprimir direto pelo celular** — o botão de impressão (recibo térmico) hoje
   assume uma impressora conectada ao PC/navegador que abre o pop-up de impressão;
   no celular isso não funciona do mesmo jeito (sem impressora térmica pareada).
@@ -26,6 +22,31 @@
 - Gaps de produto ainda não avaliados: controle de estoque/insumos, reservas de
   mesa com data/hora, relatórios por período (hoje só por dia), emissão fiscal
   (NFC-e), gestão de múltiplos estabelecimentos pela UI.
+
+---
+
+## [v0.7.0] — Notificação em tempo real ao solicitar a conta
+
+**Arquivos:** `backend/app/core/events.py` (novo), `backend/app/api/v1/endpoints/notifications.py`
+(novo), `backend/app/services/order_service.py`, `backend/app/api/deps.py`,
+`frontend/src/lib/notifications.ts` (novo), `frontend/src/components/Layout.tsx`
+
+`PATCH /orders/{id}/request-bill` substitui o antigo fluxo (que só mudava o
+status da Mesa). Motivo da mudança: comandas de balcão (sem mesa) também
+precisam pedir a conta, e o card "Contas pedidas" do Dashboard já lia
+`order.status` — nunca recebia esse valor porque só a mesa mudava antes. Agora
+a Order muda de status e, se tiver mesa vinculada, o status dela é espelhado
+junto (pro card colorir certo em Mesas).
+
+Eventos em tempo real via Server-Sent Events, usando **Postgres LISTEN/NOTIFY**
+como barramento — necessário porque o backend roda em dois processos uvicorn
+separados (HTTP:8000 e HTTPS:443, ver v0.6.0), que não compartilham memória;
+um pub/sub em memória num processo não seria visto pelo outro.
+
+Frontend: toast com som (dois bipes via Web Audio API, sem depender de arquivo
+de áudio) quando alguém solicita a conta, visível só pra quem lida com
+pagamento (`owner`/`manager`/`cashier` — garçom e cozinha não recebem). Botão
+"Ver" no toast abre a comanda direto (`/comanda/:orderId`).
 
 ---
 
