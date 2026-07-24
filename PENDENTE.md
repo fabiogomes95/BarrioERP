@@ -19,6 +19,30 @@ afetam o Recanto mas afetariam outro cliente.
 Nenhum item novo definido ainda — retomar com o dono quando surgir a
 próxima prioridade.
 
+## Próximo item técnico (não é do roadmap de produto, decidido adiar)
+
+**Impressão térmica sem confirmação manual no PC.** Hoje o celular manda
+o pedido de impressão (via SSE, `frontend/src/lib/notifications.ts`) e o
+PC marcado como "impressora do bar" abre uma aba e chama `window.print()`
+(`frontend/src/lib/print.ts`) — funciona, mas o Chrome sempre mostra o
+diálogo nativo de impressão, exigindo um clique manual no PC.
+
+Duas opções discutidas em 2026-07-24 (nenhuma implementada ainda):
+
+1. **Kiosk printing do Chrome (recomendado pra tentar primeiro)** — zero
+   código novo. Trocar como o navegador abre nesse PC por um atalho com
+   a flag `chrome.exe --kiosk-printing`, e definir a impressora térmica
+   como padrão do Windows nesse PC. Isso faz o `window.print()` que já
+   existe imprimir direto, sem diálogo.
+2. **Agente local de impressão (mais robusto, mais trabalho)** — um
+   serviço novo rodando no PC (nos moldes dos serviços NSSM que já
+   existem) que fala ESC/POS direto com a impressora (USB/rede), sem
+   passar pelo navegador. Mais confiável a longo prazo (não depende de
+   manter uma aba aberta/focada), mas é infraestrutura nova.
+
+Plano: começar pela opção 1 (sem risco, sem código); só migrar pra opção
+2 se o modo kiosk se mostrar instável na prática.
+
 **Fora do escopo (decisão do dono):**
 - Multi-estabelecimento pela UI — não vai querer
 - Emissão fiscal (NFC-e) — descartada, dono não é MEI/CNPJ
