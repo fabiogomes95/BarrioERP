@@ -58,6 +58,8 @@ from app.api.deps import CurrentUser, DBSession, require_roles
 from app.models.user import UserRole
 from app.schemas.order import (
     CustomerNameUpdate,
+    KitchenQueueItemUpdate,
+    KitchenQueueTicket,
     OrderClose,
     OrderCreate,
     OrderDiscountUpdate,
@@ -163,6 +165,26 @@ async def list_open_orders(
     return await _service(session, current_user).list_open(table_id=table_id)
 
 
+# ── GET /orders/kitchen/queue — Fila do KDS ───────────────────────────────────
+# IMPORTANTE: também precisa vir ANTES de GET /{order_id} (mesmo motivo do /open).
+
+
+@router.get(
+    "/kitchen/queue",
+    response_model=list[KitchenQueueTicket],
+    summary="Fila da cozinha (KDS)",
+    description=(
+        "Comandas abertas com itens em preparo (SENT/PREPARING/READY), "
+        "um ticket por comanda, ordenados pelo item mais antigo na fila."
+    ),
+)
+async def kitchen_queue(
+    session: DBSession,
+    current_user: CurrentUser,
+) -> list[KitchenQueueTicket]:
+    return await _service(session, current_user).list_kitchen_queue()
+
+
 # ── GET /orders/{order_id} — Detalhes da comanda ──────────────────────────────
 
 
@@ -248,6 +270,48 @@ async def update_item_quantity(
     return await _service(session, current_user).set_item_quantity(
         order_id, item_id, quantity=data.quantity
     )
+
+
+# ── PATCH /orders/{order_id}/items/{item_id}/kitchen-status — Avançar na cozinha ──
+
+
+@router.patch(
+    "/{order_id}/items/{item_id}/kitchen-status",
+    response_model=OrderResponse,
+    summary="Avançar status do item na cozinha (KDS)",
+    description="Move um item entre sent/preparing/ready. Usado pela tela da cozinha (KDS).",
+)
+async def update_kitchen_status(
+    order_id: UUID,
+    item_id: UUID,
+    data: KitchenQueueItemUpdate,
+    session: DBSession,
+    current_user: CurrentUser,
+) -> OrderResponse:
+    return await _service(session, current_user).advance_kitchen_status(
+        order_id, item_id, data.status
+    )
+
+
+# ── PATCH /orders/{order_id}/items/{item_id}/serve — Marcar como servido ──────
+
+
+@router.patch(
+    "/{order_id}/items/{item_id}/serve",
+    response_model=OrderResponse,
+    summary="Marcar item como servido",
+    description=(
+        "Marca um item como servido — ação do garçom, não da cozinha. "
+        "Aceita a partir de READY (cozinha terminou) ou PENDING (item sem preparo, ex: bebida)."
+    ),
+)
+async def serve_item(
+    order_id: UUID,
+    item_id: UUID,
+    session: DBSession,
+    current_user: CurrentUser,
+) -> OrderResponse:
+    return await _service(session, current_user).mark_item_served(order_id, item_id)
 
 
 # ── PATCH /orders/{order_id}/discount — Aplicar desconto ──────────────────────

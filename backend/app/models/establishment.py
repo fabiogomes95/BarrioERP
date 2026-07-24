@@ -49,6 +49,12 @@ class Establishment(Base, UUIDMixin, TimestampMixin, SoftDeleteMixin):
     orders: Mapped[list["Order"]] = relationship(  # noqa: F821
         back_populates="establishment", cascade="all, delete-orphan"
     )
+    stock_items: Mapped[list["StockItem"]] = relationship(  # noqa: F821
+        back_populates="establishment", cascade="all, delete-orphan"
+    )
+    reservations: Mapped[list["Reservation"]] = relationship(  # noqa: F821
+        back_populates="establishment", cascade="all, delete-orphan"
+    )
 
     __table_args__ = (
         Index("ix_establishments_company_slug", "company_id", "slug", unique=True),

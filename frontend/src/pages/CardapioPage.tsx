@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
-  type Category, type MenuItem,
+  type Category, type MenuItem, type StockItem, type StockUnit, type MenuItemIngredient,
   getUser,
   fetchCategories, fetchMenuItems,
   createCategory, updateCategory, deleteCategory,
   createMenuItem, updateMenuItem,
+  fetchStockItems, fetchMenuItemIngredients, setMenuItemIngredients,
 } from '../lib/api'
 import { maskCurrency, parseCurrency, toCurrencyInput } from '../lib/format'
 import { inputCls, Field, ModalOverlay as BaseModal, ErrorBanner } from '../components/ui'
@@ -52,13 +53,17 @@ function CategoryModal({ editing, onClose, onSaved }: {
   const [description, setDescription] = useState(editing?.description ?? '')
   const [sortOrder, setSortOrder] = useState(String(editing?.sort_order ?? 0))
   const [isActive, setIsActive] = useState(editing?.is_active ?? true)
+  const [sendsToKitchen, setSendsToKitchen] = useState(editing?.sends_to_kitchen ?? true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault(); setError(null); setLoading(true)
     try {
-      const data = { name: name.trim(), description: description.trim() || null, sort_order: Number(sortOrder) }
+      const data = {
+        name: name.trim(), description: description.trim() || null, sort_order: Number(sortOrder),
+        sends_to_kitchen: sendsToKitchen,
+      }
       const saved = editing
         ? await updateCategory(editing.id, { ...data, is_active: isActive })
         : await createCategory(data)
@@ -87,6 +92,8 @@ function CategoryModal({ editing, onClose, onSaved }: {
             onChange={e => setSortOrder(e.target.value)}
             className={inputCls} style={{ background: 'var(--color-app-bg)' }} />
         </Field>
+        <Toggle label="Vai para a cozinha" hint="Itens dessa categoria entram na fila do KDS ao serem lançados"
+          value={sendsToKitchen} onChange={setSendsToKitchen} />
         {editing && <Toggle label="Categoria ativa" value={isActive} onChange={setIsActive} />}
         <div className="flex gap-2 pt-1">
           <button type="button" onClick={onClose}
@@ -100,6 +107,116 @@ function CategoryModal({ editing, onClose, onSaved }: {
         </div>
       </form>
     </ModalOverlay>
+  )
+}
+
+// ── Receita (ingredientes) de um item ────────────────────────────────────────
+
+const STOCK_UNIT_LABEL: Record<StockUnit, string> = {
+  unit: 'un', kg: 'kg', g: 'g', l: 'L', ml: 'ml',
+}
+
+interface IngredientRow { stock_item_id: string; quantity_per_unit: string }
+
+function IngredientsSection({ menuItemId }: { menuItemId: string }) {
+  const [stockItems, setStockItems] = useState<StockItem[]>([])
+  const [rows, setRows] = useState<IngredientRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    Promise.all([fetchStockItems(), fetchMenuItemIngredients(menuItemId)])
+      .then(([stock, ingredients]: [StockItem[], MenuItemIngredient[]]) => {
+        setStockItems(stock)
+        setRows(ingredients.map(i => ({ stock_item_id: i.stock_item_id, quantity_per_unit: i.quantity_per_unit })))
+      })
+      .catch(err => setError(err instanceof Error ? err.message : 'Erro ao carregar receita'))
+      .finally(() => setLoading(false))
+  }, [menuItemId])
+
+  function addRow() {
+    const used = new Set(rows.map(r => r.stock_item_id))
+    const next = stockItems.find(s => !used.has(s.id))
+    if (!next) return
+    setRows(prev => [...prev, { stock_item_id: next.id, quantity_per_unit: '' }])
+  }
+
+  function updateRow(index: number, patch: Partial<IngredientRow>) {
+    setRows(prev => prev.map((r, i) => i === index ? { ...r, ...patch } : r))
+  }
+
+  function removeRow(index: number) {
+    setRows(prev => prev.filter((_, i) => i !== index))
+  }
+
+  async function handleSave() {
+    setError(null)
+    setSaved(false)
+    const valid = rows.filter(r => r.stock_item_id && Number(r.quantity_per_unit) > 0)
+    if (valid.length !== rows.length) { setError('Preencha a quantidade de todos os insumos, ou remova a linha.'); return }
+    setSaving(true)
+    try {
+      await setMenuItemIngredients(menuItemId, valid.map(r => ({
+        stock_item_id: r.stock_item_id, quantity_per_unit: Number(r.quantity_per_unit),
+      })))
+      setSaved(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao salvar receita')
+    } finally { setSaving(false) }
+  }
+
+  if (loading) return <p className="text-stone-600 text-xs">Carregando receita…</p>
+
+  if (stockItems.length === 0) {
+    return <p className="text-stone-600 text-xs">Nenhum insumo cadastrado no estoque ainda.</p>
+  }
+
+  return (
+    <div className="space-y-2.5">
+      {error && <p className="text-red-400 text-xs bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2">{error}</p>}
+      {rows.length === 0 && (
+        <p className="text-stone-700 text-[11px]">Sem receita — este item não deduz estoque ao ser vendido.</p>
+      )}
+      {rows.map((row, i) => {
+        const stockItem = stockItems.find(s => s.id === row.stock_item_id)
+        const usedElsewhere = new Set(rows.filter((_, j) => j !== i).map(r => r.stock_item_id))
+        return (
+          <div key={i} className="flex items-center gap-2">
+            <select value={row.stock_item_id} onChange={e => updateRow(i, { stock_item_id: e.target.value })}
+              className={inputCls + ' appearance-none flex-1'} style={{ background: 'var(--color-app-bg)' }}>
+              {stockItems.filter(s => !usedElsewhere.has(s.id) || s.id === row.stock_item_id).map(s => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+            <input type="number" min={0.001} step="0.001" value={row.quantity_per_unit}
+              onChange={e => updateRow(i, { quantity_per_unit: e.target.value })}
+              placeholder="Qtd" className={inputCls + ' w-24'} style={{ background: 'var(--color-app-bg)' }} />
+            <span className="text-stone-600 text-xs w-6 shrink-0">{stockItem ? STOCK_UNIT_LABEL[stockItem.unit] : ''}</span>
+            <button type="button" onClick={() => removeRow(i)}
+              className="text-stone-600 hover:text-red-400 p-1 shrink-0" title="Remover">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        )
+      })}
+      <div className="flex items-center gap-2 pt-1">
+        {rows.length < stockItems.length && (
+          <button type="button" onClick={addRow}
+            className="text-xs font-semibold text-amber-400 hover:text-amber-300">
+            + Adicionar insumo
+          </button>
+        )}
+        <button type="button" onClick={handleSave} disabled={saving}
+          className="ml-auto px-3 py-1.5 rounded-lg text-xs font-semibold bg-stone-800/60 text-stone-300
+                     hover:bg-stone-800 disabled:opacity-40 transition-colors">
+          {saving ? 'Salvando…' : saved ? 'Receita salva ✓' : 'Salvar receita'}
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -192,6 +309,15 @@ function ItemModal({ editing, defaultCategoryId, categories, onClose, onSaved }:
           <Toggle label="Disponível agora" hint="Desative quando o item acabar" value={isAvailable} onChange={setIsAvailable} />
           {editing && <Toggle label="Item ativo no cardápio" hint="Inativo não aparece para clientes" value={isActive} onChange={setIsActive} />}
         </div>
+
+        {editing && (
+          <div className="pt-2 border-t border-stone-800/50">
+            <Field label="Ingredientes (receita)" hint="Insumos deduzidos do estoque a cada unidade vendida. Deixe vazio se o item não afeta estoque.">
+              <IngredientsSection menuItemId={editing.id} />
+            </Field>
+          </div>
+        )}
+
         <div className="flex gap-2 pt-1">
           <button type="button" onClick={onClose}
             className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-stone-400 border border-stone-700/60 hover:bg-stone-800/50 transition-colors">

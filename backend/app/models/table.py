@@ -51,6 +51,9 @@ class Table(Base, UUIDMixin, TimestampMixin, VersionMixin):
         back_populates="table",
         foreign_keys="Order.table_id",
     )
+    reservations: Mapped[list["Reservation"]] = relationship(  # noqa: F821
+        back_populates="table", cascade="all, delete-orphan"
+    )
 
     __table_args__ = (
         Index("ix_tables_establishment_number", "establishment_id", "number", unique=True),

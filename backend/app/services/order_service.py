@@ -118,6 +118,8 @@ from app.schemas.report import (
     TopItem,
 )
 from app.schemas.order import (
+    KitchenQueueItem,
+    KitchenQueueTicket,
     OrderClose,
     OrderCreate,
     OrderItemAdd,
@@ -125,6 +127,7 @@ from app.schemas.order import (
     OrderResponse,
 )
 from app.services.base import BaseService
+from app.services.stock_service import StockService
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -150,6 +153,7 @@ class OrderService(BaseService):
         super().__init__(session, company_id, establishment_id, user_id)
         self._order_repo = OrderRepository(session)
         self._table_repo = TableRepository(session)
+        self._stock_service = StockService(session, company_id, establishment_id, user_id)
 
     # ── Helper: contexto de tenant ────────────────────────────────────────────
 
@@ -428,11 +432,20 @@ class OrderService(BaseService):
             item_name = menu_item.name
             unit_price = menu_item.price
             menu_item_id = menu_item.id
+            # Categoria marcada "vai pra cozinha" → item nasce direto em SENT
+            # (pula PENDING) e já aparece na fila do KDS. Itens sem essa marca
+            # (ex: bebida) ficam em PENDING até o garçom marcar como servido.
+            initial_status = (
+                OrderItemStatus.SENT if menu_item.category.sends_to_kitchen else OrderItemStatus.PENDING
+            )
         else:
             # Modo manual: usa dados do request (validados no schema)
             item_name = data.item_name  # type: ignore[assignment] — garantido pelo model_validator
             unit_price = data.unit_price  # type: ignore[assignment] — garantido pelo model_validator
             menu_item_id = None
+            # Sem menu_item_id não há como saber se precisa de cozinha —
+            # fica em PENDING, igual a um item sem preparo.
+            initial_status = OrderItemStatus.PENDING
 
         # Calcula o subtotal do item
         subtotal = unit_price * data.quantity
@@ -449,7 +462,7 @@ class OrderService(BaseService):
             quantity=data.quantity,
             subtotal=subtotal,
             notes=data.notes,
-            status=OrderItemStatus.PENDING,
+            status=initial_status,
         )
         order.items.append(new_item)
 
@@ -462,6 +475,13 @@ class OrderService(BaseService):
             # Dois garçons atualizaram o total simultaneamente
             # O cliente deve tentar novamente (raramente acontece)
             raise OptimisticLockError("Order")
+
+        # Deduz estoque dos insumos da receita (se o item vier do cardápio).
+        # Itens manuais (menu_item_id=None) não têm receita — não afetam estoque.
+        if menu_item_id is not None:
+            await self._stock_service.deduct_for_sale(
+                menu_item_id, data.quantity, new_item.id, establishment_id
+            )
 
         await self._log_audit(
             action="order_item.add",
@@ -714,6 +734,10 @@ class OrderService(BaseService):
 
         before_item = {"item_name": item.item_name, "status": item.status.value, "quantity": item.quantity}
 
+        # Devolve ao estoque os insumos deduzidos quando o item foi adicionado
+        if item.menu_item_id is not None:
+            await self._stock_service.restore_for_item(item.id, establishment_id)
+
         # Cancela o item — campos de auditoria registram quando e por quê
         item.status = OrderItemStatus.CANCELLED
         item.cancelled_at = datetime.now(UTC)
@@ -784,6 +808,13 @@ class OrderService(BaseService):
             )
 
         old_quantity = item.quantity
+
+        # Ajusta a diferença de estoque pela mudança de quantidade
+        if item.menu_item_id is not None:
+            await self._stock_service.adjust_for_quantity_change(
+                item.menu_item_id, item.id, old_quantity, quantity, establishment_id
+            )
+
         item.quantity = quantity
         item.subtotal = item.unit_price * quantity
         self._recalculate_total(order)
@@ -801,6 +832,133 @@ class OrderService(BaseService):
             after={"item_name": item.item_name, "quantity": quantity, "order": self._order_snapshot(order)},
         )
 
+        return await self._get_or_raise(order.id, establishment_id)
+
+    # ══════════════════════════════════════════════════════════════
+    # KDS — fila de cozinha
+    # ══════════════════════════════════════════════════════════════
+
+    _KITCHEN_STATUSES = (OrderItemStatus.SENT, OrderItemStatus.PREPARING, OrderItemStatus.READY)
+
+    async def list_kitchen_queue(self) -> list[KitchenQueueTicket]:
+        """Fila do KDS: um 'ticket' por comanda aberta com itens em preparo."""
+        establishment_id = self._require_establishment()
+        orders = await self._order_repo.list_kitchen_orders(establishment_id)
+
+        tickets = []
+        for order in orders:
+            kitchen_items = [i for i in order.items if i.status in self._KITCHEN_STATUSES]
+            if not kitchen_items:
+                continue  # defensivo — o EXISTS do repo já garante isso, mas não custa
+            kitchen_items.sort(key=lambda i: i.created_at)
+            tickets.append(
+                KitchenQueueTicket(
+                    order_id=order.id,
+                    order_type=order.order_type,
+                    table_number=order.table.number if order.table else None,
+                    table_label=order.table.label if order.table else None,
+                    customer_name=order.customer_name,
+                    guest_count=order.guest_count,
+                    opened_at=order.created_at,
+                    items=[
+                        KitchenQueueItem(
+                            id=i.id, item_name=i.item_name, quantity=i.quantity,
+                            status=i.status, notes=i.notes, created_at=i.created_at,
+                        )
+                        for i in kitchen_items
+                    ],
+                )
+            )
+        # FIFO pelo item mais antigo ainda em preparo — não pelo horário que a
+        # comanda abriu (uma mesa aberta há 2h com um item novo não deve
+        # "furar a fila" na frente de quem chegou depois, mas também não deve
+        # ficar escondida no fim só por causa da hora de abertura).
+        tickets.sort(key=lambda t: t.items[0].created_at)
+        return tickets
+
+    async def advance_kitchen_status(
+        self, order_id: UUID, item_id: UUID, status: OrderItemStatus
+    ) -> OrderResponse:
+        """
+        Move um item entre os status da cozinha (sent/preparing/ready).
+
+        Só aceita os três status "em preparo" — SERVED é feito por
+        `mark_item_served()` (ação do garçom, não da cozinha) e CANCELLED
+        por `cancel_item()`. Transição livre entre os três (não força
+        sequência estrita: a cozinha pode voltar de READY pra PREPARING
+        se marcou errado, por exemplo).
+        """
+        if status not in self._KITCHEN_STATUSES:
+            raise BusinessRuleError(
+                "Status inválido para a cozinha. Use sent, preparing ou ready."
+            )
+
+        establishment_id = self._require_establishment()
+        order = await self._get_or_raise(order_id, establishment_id)
+
+        if order.status not in (OrderStatus.OPEN, OrderStatus.BILL_REQUESTED):
+            raise BusinessRuleError(
+                f"Não é possível alterar itens de uma comanda com status '{order.status.value}'."
+            )
+
+        item = await self._order_repo.get_item(item_id, order_id)
+        if item is None:
+            raise NotFoundError("OrderItem", item_id)
+
+        if item.status not in self._KITCHEN_STATUSES:
+            raise BusinessRuleError(
+                f"O item '{item.item_name}' não está na fila da cozinha "
+                f"(status atual: '{item.status.value}')."
+            )
+
+        before_status = item.status.value
+        item.status = status
+        await self.session.flush()
+
+        await self._log_audit(
+            action="order_item.kitchen_status",
+            resource_type="order_item",
+            resource_id=str(item.id),
+            before={"status": before_status},
+            after={"status": status.value},
+        )
+        return await self._get_or_raise(order.id, establishment_id)
+
+    async def mark_item_served(self, order_id: UUID, item_id: UUID) -> OrderResponse:
+        """
+        Marca um item como servido — ação do garçom (não da cozinha).
+
+        Aceita a partir de READY (a cozinha terminou de preparar) ou
+        PENDING (item que nunca precisou de cozinha, ex: bebida — ver
+        `add_item()`/`MenuCategory.sends_to_kitchen`).
+        """
+        establishment_id = self._require_establishment()
+        order = await self._get_or_raise(order_id, establishment_id)
+
+        if order.status not in (OrderStatus.OPEN, OrderStatus.BILL_REQUESTED):
+            raise BusinessRuleError(
+                f"Não é possível alterar itens de uma comanda com status '{order.status.value}'."
+            )
+
+        item = await self._order_repo.get_item(item_id, order_id)
+        if item is None:
+            raise NotFoundError("OrderItem", item_id)
+
+        if item.status not in (OrderItemStatus.PENDING, OrderItemStatus.READY):
+            raise BusinessRuleError(
+                f"O item '{item.item_name}' não pode ser marcado como servido "
+                f"(status atual: '{item.status.value}')."
+            )
+
+        item.status = OrderItemStatus.SERVED
+        await self.session.flush()
+
+        await self._log_audit(
+            action="order_item.served",
+            resource_type="order_item",
+            resource_id=str(item.id),
+            after={"status": "served"},
+        )
         return await self._get_or_raise(order.id, establishment_id)
 
     async def set_discount(self, order_id: UUID, discount: Decimal) -> OrderResponse:
@@ -938,6 +1096,13 @@ class OrderService(BaseService):
         order.status = OrderStatus.OPEN
         order.closed_at = None
 
+        if order.table_id is not None:
+            table = await self._table_repo.get_by_establishment(
+                order.table_id, establishment_id
+            )
+            if table is not None:
+                table.status = TableStatus.OCCUPIED
+
         await self.session.flush()
 
         await self._log_audit(
@@ -959,6 +1124,7 @@ class OrderService(BaseService):
             raise BusinessRuleError("Comanda já está cancelada.")
 
         order.status = OrderStatus.CANCELLED
+        order.closed_at = datetime.now(UTC)
 
         if order.table_id is not None:
             table = await self._table_repo.get_by_establishment(

@@ -6,6 +6,14 @@ from app.models.menu import MenuCategory, MenuItem
 from app.models.order import Order, OrderItem, OrderItemStatus, OrderStatus
 from app.models.payment import Payment, PaymentMethod, PaymentStatus
 from app.models.print_job import PrintJob, PrintJobStatus, PrintJobType
+from app.models.reservation import Reservation, ReservationStatus
+from app.models.stock import (
+    MenuItemIngredient,
+    StockItem,
+    StockMovement,
+    StockMovementKind,
+    StockUnit,
+)
 from app.models.table import Table, TableStatus
 from app.models.user import User, UserRole
 
@@ -33,4 +41,11 @@ __all__ = [
     "CashSessionStatus",
     "CashMovement",
     "CashMovementKind",
+    "StockItem",
+    "StockMovement",
+    "StockMovementKind",
+    "StockUnit",
+    "MenuItemIngredient",
+    "Reservation",
+    "ReservationStatus",
 ]

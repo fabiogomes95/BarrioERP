@@ -100,7 +100,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from app.models.menu import MenuCategory, MenuItem
-from app.models.order import Order, OrderItem, OrderStatus
+from app.models.order import Order, OrderItem, OrderItemStatus, OrderStatus
 from app.models.payment import Payment, PaymentStatus
 from app.models.table import Table
 from app.repositories.base import BaseRepository
@@ -237,6 +237,30 @@ class OrderRepository(BaseRepository[Order]):
             .order_by(Order.created_at)
             .limit(limit)
             .offset(offset)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    _KITCHEN_STATUSES = (OrderItemStatus.SENT, OrderItemStatus.PREPARING, OrderItemStatus.READY)
+
+    async def list_kitchen_orders(self, establishment_id: UUID) -> list[Order]:
+        """
+        Comandas abertas com ao menos um item na fila da cozinha
+        (status SENT/PREPARING/READY). Base do KDS.
+
+        `Order.items.any(...)` gera um EXISTS — mais barato que carregar
+        todos os itens e filtrar em Python quando a maioria das comandas
+        abertas não tem nada pendente na cozinha.
+        """
+        stmt = (
+            select(Order)
+            .where(
+                Order.establishment_id == establishment_id,
+                Order.closed_at.is_(None),
+                Order.items.any(OrderItem.status.in_(self._KITCHEN_STATUSES)),
+            )
+            .options(selectinload(Order.items), selectinload(Order.table))
+            .order_by(Order.created_at)
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
@@ -392,6 +416,9 @@ class OrderRepository(BaseRepository[Order]):
                 MenuCategory.establishment_id == establishment_id,
                 MenuCategory.deleted_at.is_(None),
             )
+            # sends_to_kitchen (usado pelo OrderService.add_item() pra decidir o
+            # status inicial do OrderItem) vive em MenuCategory, não em MenuItem.
+            .options(selectinload(MenuItem.category))
         )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()

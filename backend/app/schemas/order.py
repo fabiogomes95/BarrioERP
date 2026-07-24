@@ -338,3 +338,34 @@ class OrderResponse(UUIDSchema, TimestampSchema):
     version: int                     # necessário para o próximo PATCH
     items: list[OrderItemResponse]   # itens já carregados (eager loaded)
     is_fiado: bool = False           # fechada mas com saldo em aberto — setado manualmente pelo service
+
+
+# ── Schemas do KDS (fila de cozinha) ────────────────────────────────────────
+
+
+class KitchenQueueItemUpdate(BaseSchema):
+    """Usado em: PATCH /api/v1/orders/{order_id}/items/{item_id}/kitchen-status."""
+
+    status: OrderItemStatus = Field(..., description="sent, preparing ou ready.")
+
+
+class KitchenQueueItem(BaseSchema):
+    id: UUID
+    item_name: str
+    quantity: int
+    status: OrderItemStatus
+    notes: str | None
+    created_at: datetime
+
+
+class KitchenQueueTicket(BaseSchema):
+    """Um 'ticket' na tela da cozinha — uma comanda com seus itens em preparo."""
+
+    order_id: UUID
+    order_type: OrderType
+    table_number: int | None
+    table_label: str | None
+    customer_name: str | None
+    guest_count: int
+    opened_at: datetime
+    items: list[KitchenQueueItem]

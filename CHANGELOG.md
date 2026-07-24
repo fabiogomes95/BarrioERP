@@ -7,13 +7,157 @@
 
 ## Próximos passos
 
-- Avaliar se `kitchen` precisa de alguma visão própria simplificada (hoje usa as
-  mesmas restrições do `waiter`).
-- Gaps de produto em andamento (plano de comercialização — multi-estabelecimento
-  fica de fora, o resto entra um por um): controle de estoque/insumos, reservas
-  de mesa com data/hora, tela simplificada pra cozinha (KDS).
+- Gaps de produto da leva de comercialização — **todos os 4 itens concluídos**
+  (relatório por período v0.11.0, estoque v0.12.0, reservas v0.13.0, KDS v0.14.0).
+  Sem próximo item definido ainda; retomar com o dono quando houver nova prioridade.
+- Avaliar se o polling de 8s do KDS é responsivo o suficiente na prática, ou se
+  vale a pena migrar pra SSE (ver limitação documentada em `ARCHITECTURE.md` seção 31).
 - **NFC-e descartada** — dono não é MEI/CNPJ, não há obrigação fiscal hoje.
   Revisitar só se a situação formal do negócio mudar.
+
+---
+
+## [v0.14.0] — KDS (tela da cozinha)
+
+**Arquivos:** `backend/app/models/menu.py` (`sends_to_kitchen`),
+`backend/app/schemas/order.py`, `backend/app/repositories/order_repository.py`,
+`backend/app/services/order_service.py`, `backend/app/api/v1/endpoints/orders.py`,
+`frontend/src/lib/api.ts`, `frontend/src/pages/KDSPage.tsx`,
+`frontend/src/pages/CardapioPage.tsx`, `frontend/src/components/OrderDetailView.tsx`.
+Detalhes de design em `ARCHITECTURE.md` seção 31.
+
+Último item da leva de comercialização (ver v0.11.0) — fecha o roadmap de
+produto combinado com o dono. Ativa de verdade o fluxo
+`sent → preparing → ready → served` do `OrderItemStatus`, que existia só
+no enum desde o início do projeto (confirmado por grep: zero transições
+reais antes desta versão).
+
+Três decisões confirmadas com o dono antes de implementar: item entra na
+fila da cozinha automaticamente ao ser lançado (sem botão "enviar"
+separado); a cozinha só vai até "Pronto" — quem marca "servido" é o
+garçom, na tela da comanda, não na da cozinha; e nem todo item passa pela
+cozinha (`MenuCategory.sends_to_kitchen`, default `True` — bebidas, por
+exemplo, o dono desliga manualmente).
+
+- `add_item()` decide o status inicial pela categoria do item: vai pra
+  cozinha → nasce em `SENT` (pula `PENDING`); não vai → fica em
+  `PENDING`. Item manual (sem `menu_item_id`) também fica em `PENDING`,
+  sem categoria pra consultar.
+- Efeito colateral elegante da regra acima: `PENDING`/`READY` já é
+  exatamente a condição de "pode marcar servido" — o botão "Servir" no
+  frontend não precisa saber nada sobre categorias.
+- `GET /orders/kitchen/queue` — um ticket por comanda aberta com itens
+  ativos na cozinha, ordenado pelo item mais antigo em preparo (não pela
+  hora de abertura da comanda). Precisou ser registrado ANTES de
+  `GET /orders/{order_id}` no router (mesmo cuidado já documentado pra
+  `/orders/open`).
+- Sem SSE — decisão deliberada, não esquecimento: o canal de eventos
+  existente exclui hoje os papéis `waiter`/`kitchen` (motivo: alertas de
+  "conta solicitada" não interessam a eles), e reaproveitar exigiria
+  mexer nessa exclusão. Optou-se por polling de 8s (mais curto que os 30s
+  do resto do sistema), mesmo padrão que `PedidosPage.tsx` já usa — zero
+  infraestrutura nova. Documentado como possível evolução futura.
+- Sem RBAC — operacional como Mesas/Pedidos/Reservas. O papel `kitchen`
+  existia desde o início do projeto mas nunca teve tela própria; essa é a
+  primeira feature pensada especificamente pra ele.
+- Frontend: `KDSPage.tsx` (`/cozinha`) com grade de tickets e destaque
+  visual pra pedidos com mais de 15 min de espera; toggle "vai pra
+  cozinha" no modal de categoria do Cardápio; badge de status + botão
+  "Servir" nos itens da própria tela de comanda (garçom/caixa/gerente).
+- Validado ponta a ponta contra o banco real (transação revertida):
+  categoria com/sem `sends_to_kitchen` → status inicial correto → item
+  aparece/não aparece na fila → bloqueios de transição inválida (servir
+  item ainda preparando, avançar item que nunca entrou na cozinha) →
+  avança sent→preparing→ready → some da fila → servir.
+
+---
+
+## [v0.13.0] — Reservas de mesa com data/hora
+
+**Arquivos:** `backend/app/models/reservation.py`, `backend/app/schemas/reservation.py`,
+`backend/app/repositories/reservation_repository.py`,
+`backend/app/services/reservation_service.py`, `backend/app/services/table_service.py`,
+`backend/app/api/v1/endpoints/reservations.py`, `frontend/src/lib/api.ts`,
+`frontend/src/pages/ReservasPage.tsx`, `frontend/src/pages/MesasPage.tsx`.
+Detalhes de design em `ARCHITECTURE.md` seção 30.
+
+Terceiro item da leva de comercialização (ver v0.11.0). Duas decisões
+confirmadas com o dono antes de implementar: reserva já nasce vinculada a
+uma mesa específica (não só horário + nº de pessoas), e o status da mesa
+muda sozinho perto do horário (sem trabalho manual da equipe).
+
+- `Reservation`: mesa, cliente (nome/telefone), nº de pessoas, horário,
+  status (`confirmed`/`seated`/`cancelled`/`no_show`), notas.
+- Conflito de horário: duas reservas na mesma mesa não podem cair a menos
+  de 2h uma da outra (`BLOCK_DURATION_MINUTES`).
+- **Sem scheduler novo** — o sistema só tem os dois serviços web, sem
+  processo em background. A automação (mesa vira `RESERVED` 30 min antes,
+  libera sozinha + `NO_SHOW` automático 30 min depois sem check-in) roda
+  "de carona" em `TableService.list()`, chamado a cada 30s pelo
+  auto-refresh que a tela de Mesas já tinha. Efeito colateral aceito e
+  documentado: `GET /tables` deixa de ser uma leitura pura.
+- Sem RBAC — operacional como Mesas/Pedidos, qualquer usuário autenticado
+  do estabelecimento pode reservar/reagendar/cancelar/check-in.
+- Frontend: página `/reservas` (lista do dia) + atalho "reservar" dentro
+  do próprio modal de abrir comanda de uma mesa livre, na tela de Mesas.
+- Validado ponta a ponta contra o banco real (transação revertida):
+  criar reserva → conflito detectado corretamente → sweep ativa `RESERVED`
+  numa reserva iminente → check-in libera a mesa → sweep marca `NO_SHOW`
+  numa reserva vencida e libera a mesa → reagendar → cancelar.
+  **Bug pego no processo:** `check_in()`/`reschedule()` acessavam
+  `updated_at` (coluna `onupdate=func.now()`) logo após `flush()` sem
+  recarregar o objeto — SQLAlchemy expira esse campo após o UPDATE, e
+  tentar ler implicitamente fora de um `await` quebra em `MissingGreenlet`
+  no modo async. Corrigido re-buscando o registro após o flush (mesmo
+  padrão de `_get_or_raise()` já usado em `order_service.py`).
+
+---
+
+## [v0.12.0] — Controle de estoque/insumos + fix de mesa travada
+
+**Arquivos:** `backend/app/models/stock.py`, `backend/app/schemas/stock.py`,
+`backend/app/repositories/stock_repository.py`, `backend/app/services/stock_service.py`,
+`backend/app/api/v1/endpoints/stock.py`, `backend/app/services/order_service.py`,
+`frontend/src/lib/api.ts`, `frontend/src/pages/EstoquePage.tsx`,
+`frontend/src/pages/CardapioPage.tsx`. Detalhes de design em `ARCHITECTURE.md`
+seção 29.
+
+Segundo item da leva de melhorias pra comercialização (ver v0.11.0). Modelo
+"receita"/BOM completo: um item do cardápio pode consumir vários insumos,
+cada um com quantidade própria (`MenuItemIngredient`).
+
+- `StockItem` (insumo, com `quantity_on_hand`/`min_quantity`), `StockMovement`
+  (histórico assinado: compra/ajuste/venda/perda), `MenuItemIngredient` (receita)
+- Estoque é deduzido quando o item é **adicionado** à comanda (único evento
+  confiável hoje — `OrderItemStatus` tem um fluxo `sent→preparing→ready→served`
+  no enum, mas nada o aciona ainda), revertido no **cancelamento** do item, e
+  ajustado na **mudança de quantidade**. Todos os três wired em
+  `OrderService`, mesma transação, via nova dependência `StockService`.
+  Rastreável por `StockMovement.order_item_id`.
+- Dedução **não bloqueia venda** mesmo se o estoque ficar negativo — só gera
+  alerta visual na tela de Estoque (`GET /stock/low`). Trava a operação por
+  divergência de contagem não é aceitável num bar pequeno.
+- Frontend: página `/estoque` (RBAC owner/manager) com CRUD de insumos,
+  movimentação manual e histórico; seção "Ingredientes" no modal de editar
+  item do Cardápio (receita salva separada dos campos do item — endpoint
+  `PUT` próprio).
+- Validado ponta a ponta contra o banco real (dentro de uma transação
+  revertida no final, sem persistir dado de teste): abrir comanda → adicionar
+  item com receita → mudar quantidade → cancelar item → conferir que o
+  estoque voltou exatamente ao valor inicial.
+
+**Bug encontrado e corrigido no caminho (não relacionado a estoque):**
+mesa aparecia livre mas recusava abrir comanda nova ("já possui uma comanda
+aberta"). Causa raiz: `OrderService.cancel_order()` (botão "Apagar comanda")
+marcava `status=CANCELLED` e liberava a mesa, mas nunca preenchia
+`closed_at` — e `OrderRepository.get_open_by_table()` decide "mesa ocupada"
+só por `closed_at IS NULL`, sem checar `status`. Comanda cancelada ficava
+invisível nas telas (que filtram `status != CANCELLED`) mas travava a mesa
+pra sempre. Corrigido setando `closed_at` no cancelamento (igual ao
+fechamento normal); `reopen_order()` também ganhou o fix simétrico de voltar
+a mesa pra `OCCUPIED` ao reabrir uma comanda fiado vinculada a mesa. Feito
+backfill nos dados já quebrados: 22 comandas `CANCELLED` com `closed_at
+NULL` no banco (incluindo a mesa que motivou o achado).
 
 ---
 

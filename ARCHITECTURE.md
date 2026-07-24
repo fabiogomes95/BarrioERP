@@ -34,6 +34,9 @@
 26. [Relatórios e Auditoria](#26-relatórios-e-auditoria)
 27. [Fiado](#27-fiado)
 28. [Infraestrutura de Produção](#28-infraestrutura-de-produção)
+29. [Módulo de Estoque (Stock)](#29-módulo-de-estoque-stock)
+30. [Módulo de Reservas](#30-módulo-de-reservas)
+31. [KDS — Tela da Cozinha](#31-kds--tela-da-cozinha)
 
 ---
 
@@ -1748,4 +1751,280 @@ clientes conectados daquele processo. Usado hoje para:
 Ver seção 23 (paleta) e `frontend/src/lib/theme.ts`. Segue o tema do
 sistema por padrão; toggle sol/lua grava a escolha em `localStorage`.
 
-*Última atualização: 2026-07-23*
+---
+
+## 29. Módulo de Estoque (Stock)
+
+Implementado em 2026-07-24. Primeiro módulo pensado desde o início pra
+comercialização (não só uso próprio do Recanto) — ver `PENDENTE.md` no
+histórico do repositório para o desenho original.
+
+### Modelo de dados
+
+```
+StockItem (insumo)              StockMovement (histórico de entradas/saídas)
+─────────────────────           ─────────────────────────────────────────────
+establishment_id                establishment_id, stock_item_id
+name, unit (kg/g/l/ml/unit)     kind (purchase/adjustment/sale/loss)
+quantity_on_hand (Numeric 12,3) quantity_change (assinado: + entrada, − saída)
+min_quantity                    order_item_id (se dedução automática)
+                                 user_id (null se automático)
+
+MenuItemIngredient (receita)
+─────────────────────────────
+menu_item_id, stock_item_id, quantity_per_unit
+unique(menu_item_id, stock_item_id)
+```
+
+Um `MenuItem` sem nenhuma linha em `MenuItemIngredient` não afeta estoque —
+é o caso normal para itens que não têm insumo controlado (ex: taxa de
+serviço, item manual sem `menu_item_id`).
+
+### Quando o estoque é deduzido (decisão de design)
+
+`OrderItemStatus` tem um fluxo completo no enum (`pending → sent →
+preparing → ready → served`), mas nada no sistema hoje transiciona por
+esses status automaticamente — não é um evento confiável pra gatilho de
+estoque. A dedução acontece no único evento real e garantido do fluxo
+atual: **item adicionado à comanda** (`OrderService.add_item()`).
+
+Reverte (soma de volta) quando o item é **cancelado**
+(`OrderService.cancel_item()`), e ajusta a diferença quando a quantidade
+muda (`OrderService.set_item_quantity()`). Os três pontos de wiring chamam
+`StockService` com a mesma `session` do `OrderService` — mesma transação,
+sem commit isolado.
+
+**Estoque não bloqueia venda.** Diferente do padrão do resto do sistema
+(verificações de saldo, locking otimista), a dedução de estoque nunca
+lança `BusinessRuleError`. Se ficar negativo, o garçom não é impedido de
+vender — só fica visível como alerta na tela de Estoque. Divergência de
+contagem é uma realidade operacional de bar pequeno; travar a venda por
+causa disso pararia o caixa.
+
+### Rastreabilidade via `order_item_id`
+
+Cada dedução automática de venda grava um `StockMovement` com
+`order_item_id` apontando pro item que a originou (pode ser mais de um
+movimento por item, um por insumo da receita). Isso é o que permite
+`restore_for_item()` reverter exatamente o que foi deduzido ao cancelar —
+sem precisar recalcular a receita de novo (que pode ter mudado desde a
+venda).
+
+### Camadas
+
+```
+backend/app/
+├── models/stock.py                  # StockItem, StockMovement, MenuItemIngredient
+├── schemas/stock.py                 # *Create/Update/Response
+├── repositories/stock_repository.py # StockItemRepository, StockMovementRepository, MenuItemIngredientRepository
+├── services/stock_service.py        # CRUD + deduct_for_sale/restore_for_item/adjust_for_quantity_change
+└── api/v1/endpoints/stock.py        # /stock/items, /stock/items/{id}/movements, /stock/low,
+                                      # /stock/menu-items/{id}/ingredients — RBAC owner/manager
+```
+
+`OrderService` ganhou uma dependência de `StockService` (instanciada no
+`__init__`, mesma `session`) — chamada nos três pontos citados acima.
+
+### Frontend
+
+- `EstoquePage.tsx` (`/estoque`, nav, RBAC owner/manager): lista de
+  insumos com destaque de estoque baixo, modal de criar/editar, modal de
+  movimentação manual (compra/ajuste/perda), modal de histórico.
+- `CardapioPage.tsx`: seção "Ingredientes" dentro do modal de editar item
+  (só aparece editando, não criando — precisa de um `menu_item_id` real).
+  Salvamento da receita é independente do salvamento dos campos do item
+  (endpoints `PUT` separados no backend).
+
+---
+
+## 30. Módulo de Reservas
+
+Implementado em 2026-07-24 (mesma sessão do módulo de Estoque). Terceiro
+item da leva de comercialização — ver `PENDENTE.md`.
+
+### Decisões de escopo (confirmadas com o dono antes de implementar)
+
+1. **Reserva vinculada a uma mesa específica** desde a criação (não é só
+   "horário + nº de pessoas" com mesa em aberto). Torna trivial checar
+   conflito de horário e a mesa já aparece pronta na tela de Mesas.
+2. **Status da mesa muda sozinho.** Perto do horário marcado a mesa vira
+   `RESERVED`; se ninguém aparecer, ela libera sozinha. Sem trabalho manual
+   da equipe pra sinalizar isso.
+
+### Modelo de dados
+
+```
+Reservation
+────────────────────────────────────────
+establishment_id, table_id
+customer_name, customer_phone, party_size
+reserved_at (timestamptz)
+status: confirmed | seated | cancelled | no_show
+notes, created_by
+seated_at, cancelled_at
+```
+
+Sem `VersionMixin` — reservas não sofrem edição concorrente de alta
+frequência como `Order`/`Table`. Conflito de horário é validado no
+`create()`/`reschedule()`, não por locking otimista.
+
+### Sweep "de carona" em vez de scheduler (decisão de infra)
+
+O sistema não roda nenhum processo em background — só os dois serviços web
+(uvicorn nas portas 8000/443, NSSM). Em vez de adicionar um scheduler novo
+só pra essa automação, `ReservationService.sync_table_statuses()` roda
+dentro de `TableService.list()` — toda vez que `GET /tables` é chamado, o
+que já acontece a cada 30s sozinho porque `MesasPage.tsx` tem
+auto-refresh. Efeito prático: a transição de status "atrasa" no máximo o
+intervalo entre duas leituras da tela de Mesas — aceitável pro caso de
+uso, sem precisar de infraestrutura nova.
+
+Parâmetros (constantes em `reservation_service.py`, fáceis de ajustar):
+- `LEAD_MINUTES = 30` — mesa vira `RESERVED` a partir de 30 min antes do horário
+- `GRACE_MINUTES = 30` — sem check-in até 30 min depois do horário → `NO_SHOW` automático, mesa libera
+- `BLOCK_DURATION_MINUTES = 120` — janela de conflito: duas reservas na mesma mesa não podem cair a menos de 2h uma da outra
+
+**Efeito colateral aceito:** `GET /tables` deixa de ser uma leitura pura —
+pode gravar mudanças de status como side effect. Documentado aqui
+explicitamente por ser uma exceção ao padrão REST do resto da API.
+
+### Camadas
+
+```
+backend/app/
+├── models/reservation.py                  # Reservation, ReservationStatus
+├── schemas/reservation.py                 # Create/Update/Response
+├── repositories/reservation_repository.py # list_active_overlapping (conflito),
+│                                           # list_confirmed_starting_by / list_overdue_confirmed (sweep)
+├── services/reservation_service.py        # CRUD + check_in + cancel + sync_table_statuses
+└── api/v1/endpoints/reservations.py       # /reservations — sem RBAC (operacional, como Mesas/Pedidos)
+```
+
+`TableService` ganhou uma dependência de `ReservationService` (mesma
+`session`), chamada no início de `list()`.
+
+### Frontend
+
+- `ReservasPage.tsx` (`/reservas`, nav, sem restrição de role): lista do
+  dia (seletor de data), criar/reagendar/check-in/cancelar.
+- `MesasPage.tsx`: o modal que abre pra mesa livre ("Abrir comanda") ganhou
+  um link secundário "Ou reservar esta mesa pra mais tarde" que troca pro
+  `ReserveTableModal` — reserva sem sair do fluxo natural de clicar na mesa.
+- Conversão `datetime-local` (input HTML, sem timezone) ↔ ISO/UTC (API)
+  feita manualmente nos dois arquivos (`toDatetimeLocalValue`/
+  `fromDatetimeLocalValue`) — sem biblioteca de datas no projeto.
+
+---
+
+## 31. KDS — Tela da Cozinha
+
+Implementado em 2026-07-24 (mesma sessão dos módulos de Estoque e
+Reservas). Último item da leva de comercialização — ver `PENDENTE.md`.
+Ativa de verdade o fluxo `sent → preparing → ready → served` de
+`OrderItemStatus`, que existia só no enum desde o início do projeto sem
+nenhuma transição real (confirmado por grep antes de implementar).
+
+### Decisões de escopo (confirmadas com o dono antes de implementar)
+
+1. **Item entra na fila automaticamente ao ser lançado** — sem passo
+   extra do garçom (nada de "botão enviar pra cozinha").
+2. **Cozinha só vai até "Pronto".** Quem marca "servido" é o garçom, de
+   volta na própria tela da comanda — não na tela da cozinha.
+3. **Nem todo item passa pela cozinha.** `MenuCategory` ganhou
+   `sends_to_kitchen: bool` (default `True` na migração, pra nada
+   "sumir" silenciosamente da cozinha — o dono desliga manualmente
+   categorias como Bebidas).
+
+### Como o status inicial é decidido (`OrderService.add_item()`)
+
+```
+menu_item_id informado E categoria.sends_to_kitchen = True
+    → item nasce em SENT (pula PENDING, já aparece no KDS)
+
+menu_item_id informado E categoria.sends_to_kitchen = False
+    → item nasce em PENDING (nunca entra na fila da cozinha)
+
+Item manual (sem menu_item_id, sem categoria pra consultar)
+    → item nasce em PENDING (mesmo comportamento de "sem cozinha")
+```
+
+Efeito colateral elegante dessa regra: o **status por si só** já
+distingue "item que nunca precisou de cozinha" (fica em `PENDING` pra
+sempre) de "item que passou pela cozinha e está pronto" (`READY`) — o
+botão "Servir" no frontend (`OrderDetailView.tsx`) aceita as duas
+situações (`status in (PENDING, READY)`) sem precisar saber nada sobre
+categorias. Nenhum campo novo precisou ser exposto no `OrderItemResponse`.
+
+### Transições
+
+```
+SENT ⇄ PREPARING ⇄ READY      — livre entre os três (cozinha pode "voltar"
+                                 se marcou errado), via advance_kitchen_status()
+READY ou PENDING → SERVED     — só o garçom, via mark_item_served()
+qualquer status ativo → CANCELLED — inalterado, via cancel_item() (já existia)
+```
+
+`advance_kitchen_status()` rejeita mover um item que não está em
+SENT/PREPARING/READY (ex: tentar "avançar" um item PENDING que nunca
+entrou na cozinha). `mark_item_served()` rejeita servir um item que
+ainda está em SENT/PREPARING (a cozinha não terminou).
+
+### Fila do KDS — `GET /orders/kitchen/queue`
+
+Um "ticket" por comanda **aberta** com pelo menos um item em
+SENT/PREPARING/READY (`OrderRepository.list_kitchen_orders()`, via
+`Order.items.any(...)` — gera um `EXISTS`, mais barato que carregar tudo
+e filtrar em Python). Cada ticket mostra só os itens ativos na cozinha
+(itens PENDING/SERVED/CANCELLED da mesma comanda ficam de fora).
+Ordenado pelo item mais antigo ainda em preparo — não pela hora de
+abertura da comanda (uma mesa aberta há 2h com um pedido novo não deve
+furar a fila, mas também não deve ficar escondida no fim da lista).
+
+**Sem tempo real via SSE** — decisão deliberada, não esquecimento. O
+canal SSE existente (`app/core/events.py`, ver seção 30) hoje **exclui
+explicitamente** os papéis `waiter`/`kitchen` no frontend
+(`notifications.ts`, motivo: alertas de "conta solicitada" não
+interessam a eles). Reaproveitar o canal pro KDS exigiria mexer nessa
+exclusão e adicionar um evento novo. Optou-se por polling simples a cada
+8s (mais curto que os 30s do resto do sistema, porque cozinha precisa de
+resposta mais rápida) — mesmo padrão que `PedidosPage.tsx` já usa,
+zero infraestrutura nova. Evoluir pra SSE fica documentado aqui como
+possibilidade futura se o polling não for responsivo o suficiente na
+prática.
+
+### RBAC
+
+Sem restrição de role — operacional como Mesas/Pedidos/Reservas. O papel
+`kitchen` já existia no sistema desde o início mas nunca teve nenhuma
+tela ou permissão própria (era tratado como "garçom sem acesso a
+dinheiro"); o KDS é a primeira feature pensada especificamente pra ele,
+mas não bloqueia outros papéis de acessar (ex: dono conferindo a cozinha
+do celular).
+
+### Camadas
+
+```
+backend/app/
+├── models/menu.py                    # MenuCategory.sends_to_kitchen
+├── models/order.py                   # OrderItemStatus (sem mudança — só ativado)
+├── schemas/order.py                  # KitchenQueueTicket, KitchenQueueItem, KitchenQueueItemUpdate
+├── repositories/order_repository.py  # list_kitchen_orders() + eager load de category em get_available_menu_item()
+├── services/order_service.py         # list_kitchen_queue, advance_kitchen_status, mark_item_served
+│                                      # + add_item() decide status inicial pela categoria
+└── api/v1/endpoints/orders.py        # GET /orders/kitchen/queue (ANTES de /{order_id}!),
+                                       # PATCH .../kitchen-status, PATCH .../serve
+```
+
+### Frontend
+
+- `KDSPage.tsx` (`/cozinha`, nav): grade de tickets por comanda, um
+  botão por item pra avançar o status (Iniciar preparo → Marcar pronto).
+  Destaque visual (borda vermelha) em tickets com mais de 15 min de
+  espera. Polling de 8s.
+- `CardapioPage.tsx`: toggle "Vai para a cozinha" no modal de categoria.
+- `OrderDetailView.tsx`: badge de status (Na cozinha/Preparando/Pronto)
+  ao lado do nome do item + botão "Servir" quando aplicável — visível
+  pra quem já podia editar a comanda (garçom/caixa/gerente/dono), não é
+  uma tela nova.
+
+*Última atualização: 2026-07-24*

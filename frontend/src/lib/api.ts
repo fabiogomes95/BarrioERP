@@ -315,6 +315,10 @@ export async function setOrderServiceFee(orderId: string, apply: boolean): Promi
   })
 }
 
+export async function serveOrderItem(orderId: string, itemId: string): Promise<Order> {
+  return request<Order>(`/orders/${orderId}/items/${itemId}/serve`, { method: 'PATCH' })
+}
+
 export async function cancelOrderItem(
   orderId: string,
   itemId: string,
@@ -424,6 +428,7 @@ export interface Category {
   description: string | null
   sort_order: number
   is_active: boolean
+  sends_to_kitchen: boolean
 }
 
 export interface MenuItem {
@@ -453,13 +458,14 @@ export async function createCategory(data: {
   name: string
   description?: string | null
   sort_order?: number
+  sends_to_kitchen?: boolean
 }): Promise<Category> {
   return request<Category>('/menu/categories', { method: 'POST', body: JSON.stringify(data) })
 }
 
 export async function updateCategory(
   id: string,
-  data: { name?: string; description?: string | null; sort_order?: number; is_active?: boolean },
+  data: { name?: string; description?: string | null; sort_order?: number; is_active?: boolean; sends_to_kitchen?: boolean },
 ): Promise<Category> {
   return request<Category>(`/menu/categories/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
 }
@@ -769,4 +775,201 @@ export function updateLocalCompanyName(name: string): void {
     user.company_name = name
     saveUser(user)
   }
+}
+
+// ── Reservas ──────────────────────────────────────────────────────────────────
+
+export type ReservationStatus = 'confirmed' | 'seated' | 'cancelled' | 'no_show'
+
+export interface Reservation {
+  id: string
+  establishment_id: string
+  table_id: string
+  table_number: number
+  table_label: string
+  customer_name: string
+  customer_phone: string | null
+  party_size: number
+  reserved_at: string
+  status: ReservationStatus
+  notes: string | null
+  created_by: string | null
+  seated_at: string | null
+  cancelled_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export async function fetchReservations(params: {
+  day?: string
+  status?: ReservationStatus
+  table_id?: string
+} = {}): Promise<Reservation[]> {
+  const qs = new URLSearchParams()
+  if (params.day) qs.set('day', params.day)
+  if (params.status) qs.set('status', params.status)
+  if (params.table_id) qs.set('table_id', params.table_id)
+  const suffix = qs.toString() ? `?${qs.toString()}` : ''
+  return request<Reservation[]>(`/reservations${suffix}`)
+}
+
+export async function createReservation(data: {
+  table_id: string
+  customer_name: string
+  customer_phone?: string | null
+  party_size: number
+  reserved_at: string
+  notes?: string | null
+}): Promise<Reservation> {
+  return request<Reservation>('/reservations', { method: 'POST', body: JSON.stringify(data) })
+}
+
+export async function updateReservation(
+  id: string,
+  data: {
+    table_id?: string
+    customer_name?: string
+    customer_phone?: string | null
+    party_size?: number
+    reserved_at?: string
+    notes?: string | null
+  },
+): Promise<Reservation> {
+  return request<Reservation>(`/reservations/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+}
+
+export async function checkInReservation(id: string): Promise<Reservation> {
+  return request<Reservation>(`/reservations/${id}/check-in`, { method: 'PATCH' })
+}
+
+export async function cancelReservation(id: string): Promise<void> {
+  return request<void>(`/reservations/${id}/cancel`, { method: 'PATCH' })
+}
+
+// ── Cozinha (KDS) ─────────────────────────────────────────────────────────────
+
+export type KitchenItemStatus = 'sent' | 'preparing' | 'ready'
+
+export interface KitchenQueueItem {
+  id: string
+  item_name: string
+  quantity: number
+  status: KitchenItemStatus
+  notes: string | null
+  created_at: string
+}
+
+export interface KitchenQueueTicket {
+  order_id: string
+  order_type: OrderType
+  table_number: number | null
+  table_label: string | null
+  customer_name: string | null
+  guest_count: number
+  opened_at: string
+  items: KitchenQueueItem[]
+}
+
+export async function fetchKitchenQueue(): Promise<KitchenQueueTicket[]> {
+  return request<KitchenQueueTicket[]>('/orders/kitchen/queue')
+}
+
+export async function updateKitchenItemStatus(
+  orderId: string, itemId: string, status: KitchenItemStatus,
+): Promise<Order> {
+  return request<Order>(`/orders/${orderId}/items/${itemId}/kitchen-status`, {
+    method: 'PATCH', body: JSON.stringify({ status }),
+  })
+}
+
+// ── Estoque ───────────────────────────────────────────────────────────────────
+
+export type StockUnit = 'unit' | 'kg' | 'g' | 'l' | 'ml'
+export type StockMovementKind = 'purchase' | 'adjustment' | 'sale' | 'loss'
+
+export interface StockItem {
+  id: string
+  establishment_id: string
+  name: string
+  unit: StockUnit
+  quantity_on_hand: string
+  min_quantity: string
+  is_active: boolean
+  notes: string | null
+  is_low: boolean
+}
+
+export interface StockMovement {
+  id: string
+  stock_item_id: string
+  kind: StockMovementKind
+  quantity_change: string
+  reason: string | null
+  order_item_id: string | null
+  user_id: string | null
+  created_at: string
+}
+
+export interface MenuItemIngredient {
+  id: string
+  menu_item_id: string
+  stock_item_id: string
+  quantity_per_unit: string
+  stock_item_name: string
+  stock_item_unit: StockUnit
+}
+
+export async function fetchStockItems(activeOnly = true): Promise<StockItem[]> {
+  return request<StockItem[]>(`/stock/items?active_only=${activeOnly}`)
+}
+
+export async function fetchLowStock(): Promise<StockItem[]> {
+  return request<StockItem[]>('/stock/low')
+}
+
+export async function createStockItem(data: {
+  name: string
+  unit: StockUnit
+  quantity_on_hand?: number
+  min_quantity?: number
+  notes?: string | null
+}): Promise<StockItem> {
+  return request<StockItem>('/stock/items', { method: 'POST', body: JSON.stringify(data) })
+}
+
+export async function updateStockItem(
+  id: string,
+  data: { name?: string; unit?: StockUnit; min_quantity?: number; is_active?: boolean; notes?: string | null },
+): Promise<StockItem> {
+  return request<StockItem>(`/stock/items/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+}
+
+export async function deleteStockItem(id: string): Promise<void> {
+  return request<void>(`/stock/items/${id}`, { method: 'DELETE' })
+}
+
+export async function createStockMovement(
+  stockItemId: string,
+  data: { kind: StockMovementKind; quantity: number; is_negative_adjustment?: boolean; reason?: string | null },
+): Promise<StockMovement> {
+  return request<StockMovement>(`/stock/items/${stockItemId}/movements`, {
+    method: 'POST', body: JSON.stringify(data),
+  })
+}
+
+export async function fetchStockMovements(stockItemId: string): Promise<StockMovement[]> {
+  return request<StockMovement[]>(`/stock/items/${stockItemId}/movements`)
+}
+
+export async function fetchMenuItemIngredients(menuItemId: string): Promise<MenuItemIngredient[]> {
+  return request<MenuItemIngredient[]>(`/stock/menu-items/${menuItemId}/ingredients`)
+}
+
+export async function setMenuItemIngredients(
+  menuItemId: string,
+  ingredients: { stock_item_id: string; quantity_per_unit: number }[],
+): Promise<MenuItemIngredient[]> {
+  return request<MenuItemIngredient[]>(`/stock/menu-items/${menuItemId}/ingredients`, {
+    method: 'PUT', body: JSON.stringify({ ingredients }),
+  })
 }

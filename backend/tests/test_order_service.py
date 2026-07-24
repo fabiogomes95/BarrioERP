@@ -66,6 +66,7 @@ def make_item(**kwargs) -> MagicMock:
     defaults = dict(
         id=UUID("00000000-0000-0000-0000-000000000007"),
         order_id=UUID("00000000-0000-0000-0000-000000000005"),
+        menu_item_id=None,
         item_name="Item Teste", unit_price=Decimal("10"),
         quantity=2, subtotal=Decimal("20"),
         status=OrderItemStatus.PENDING,
@@ -141,6 +142,7 @@ class TestAddItem:
         service._order_repo.get_available_menu_item = AsyncMock(
             return_value=make_menu_item()
         )
+        service._stock_service.deduct_for_sale = AsyncMock()
 
         data = OrderItemAdd(
             menu_item_id="00000000-0000-0000-0000-000000000006",
@@ -150,6 +152,7 @@ class TestAddItem:
 
         assert order.items[0].item_name == "Hamburguer"
         assert order.items[0].quantity == 2
+        service._stock_service.deduct_for_sale.assert_awaited_once()
 
     async def test_add_item_order_closed(self, service, order_id):
         order = make_order(status=OrderStatus.CLOSED)

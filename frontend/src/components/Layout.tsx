@@ -102,6 +102,33 @@ function IconHistory() {
   )
 }
 
+function IconKitchen() {
+  return (
+    <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round"
+        d="M4 13h16M4 13a8 8 0 0116 0M4 13v6a1 1 0 001 1h14a1 1 0 001-1v-6M9 6V4m3 2V4m3 2V4" />
+    </svg>
+  )
+}
+
+function IconCalendar() {
+  return (
+    <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round"
+        d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+    </svg>
+  )
+}
+
+function IconBox() {
+  return (
+    <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round"
+        d="M20 7L12 3 4 7m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+    </svg>
+  )
+}
+
 // ── Itens de navegação ────────────────────────────────────────────────────────
 
 // roles: undefined = visível pra todos; senão, só pros roles listados
@@ -109,9 +136,12 @@ const NAV = [
   { to: '/dashboard',  label: 'Início',        Icon: IconHome },
   { to: '/mesas',      label: 'Mesas',         Icon: IconTable },
   { to: '/pedidos',    label: 'Pedidos',       Icon: IconClipboard },
+  { to: '/reservas',   label: 'Reservas',      Icon: IconCalendar },
+  { to: '/cozinha',    label: 'Cozinha',       Icon: IconKitchen },
   { to: '/caixa',      label: 'Caixa',         Icon: IconCash,    roles: ['owner', 'manager', 'cashier'] },
   { to: '/fiado',      label: 'Fiado',         Icon: IconFiado },
   { to: '/cardapio',   label: 'Cardápio',      Icon: IconBook },
+  { to: '/estoque',    label: 'Estoque',       Icon: IconBox,     roles: ['owner', 'manager'] },
   { to: '/auditoria',  label: 'Auditoria',     Icon: IconHistory, roles: ['owner', 'manager'] },
   { to: '/admin',      label: 'Administração', Icon: IconCog,     roles: ['owner', 'manager'] },
 ]

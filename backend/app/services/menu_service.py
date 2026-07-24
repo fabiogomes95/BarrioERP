@@ -165,6 +165,7 @@ class MenuService(BaseService):
             description=data.description,
             sort_order=data.sort_order,
             is_active=True,
+            sends_to_kitchen=data.sends_to_kitchen,
         )
         category = await self._category_repo.add(category)
         return CategoryResponse.model_validate(category)

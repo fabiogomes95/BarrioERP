@@ -133,6 +133,10 @@ class CategoryCreate(BaseSchema):
         le=9999,
         description="Posição na interface. Menor número = aparece primeiro.",
     )
+    sends_to_kitchen: bool = Field(
+        default=True,
+        description="Se True, itens dessa categoria entram na fila do KDS ao serem lançados na comanda.",
+    )
 
     @field_validator("name")
     @classmethod
@@ -157,6 +161,7 @@ class CategoryUpdate(BaseSchema):
     description: str | None = Field(default=None, max_length=500)
     sort_order: int | None = Field(default=None, ge=0, le=9999)
     is_active: bool | None = None
+    sends_to_kitchen: bool | None = None
 
 
 class CategoryResponse(UUIDSchema, TimestampSchema):
@@ -173,6 +178,7 @@ class CategoryResponse(UUIDSchema, TimestampSchema):
     description: str | None
     sort_order: int
     is_active: bool
+    sends_to_kitchen: bool
 
 
 # ══════════════════════════════════════════════════════════════

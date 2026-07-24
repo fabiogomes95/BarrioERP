@@ -7,6 +7,7 @@ import {
   createTable,
   createOrder,
   fetchOpenOrders,
+  createReservation,
 } from '../lib/api'
 import { inputCls, Field, ModalOverlay } from '../components/ui'
 
@@ -187,9 +188,10 @@ interface OpenOrderModalProps {
   table: Table
   onClose: () => void
   onOpened: (orderId: string) => void
+  onReserve: () => void
 }
 
-function OpenOrderModal({ table, onClose, onOpened }: OpenOrderModalProps) {
+function OpenOrderModal({ table, onClose, onOpened, onReserve }: OpenOrderModalProps) {
   const [guestCount, setGuestCount] = useState('1')
   const [customerName, setCustomerName] = useState('')
   const [loading, setLoading] = useState(false)
@@ -258,6 +260,110 @@ function OpenOrderModal({ table, onClose, onOpened }: OpenOrderModalProps) {
             {loading ? 'Abrindo…' : 'Abrir comanda'}
           </button>
         </div>
+        <button type="button" onClick={onReserve}
+          className="w-full text-center text-xs text-stone-500 hover:text-amber-400 transition-colors pt-1">
+          Ou reservar esta mesa pra mais tarde →
+        </button>
+      </form>
+    </ModalOverlay>
+  )
+}
+
+// ── Modal: Reservar mesa ─────────────────────────────────────────────────────
+
+function toDatetimeLocalValue(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+interface ReserveTableModalProps {
+  table: Table
+  onClose: () => void
+  onReserved: () => void
+}
+
+function ReserveTableModal({ table, onClose, onReserved }: ReserveTableModalProps) {
+  const [reservedAt, setReservedAt] = useState(() => toDatetimeLocalValue(new Date(Date.now() + 60 * 60 * 1000)))
+  const [customerName, setCustomerName] = useState('')
+  const [customerPhone, setCustomerPhone] = useState('')
+  const [partySize, setPartySize] = useState(String(table.capacity))
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    setLoading(true)
+    try {
+      await createReservation({
+        table_id: table.id,
+        customer_name: customerName.trim(),
+        customer_phone: customerPhone.trim() || null,
+        party_size: Number(partySize),
+        reserved_at: new Date(reservedAt).toISOString(),
+      })
+      onReserved()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao reservar mesa')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <ModalOverlay onClose={onClose}>
+      <div className="flex items-center gap-3 mb-5">
+        <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20
+                        flex items-center justify-center">
+          <span className="text-lg font-black text-amber-400">{table.number}</span>
+        </div>
+        <div>
+          <h2 className="text-stone-100 text-base font-bold leading-tight">{table.label}</h2>
+          <p className="text-stone-500 text-xs mt-0.5">Reservar mesa</p>
+        </div>
+      </div>
+
+      {error && (
+        <p className="text-red-400 text-xs bg-red-500/10 border border-red-500/20
+                       rounded-xl px-3 py-2.5 mb-4">{error}</p>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-3.5">
+        <Field label="Data e hora">
+          <input type="datetime-local" required value={reservedAt}
+            onChange={e => setReservedAt(e.target.value)} className={inputCls} />
+        </Field>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Nome do cliente">
+            <input type="text" required value={customerName} onChange={e => setCustomerName(e.target.value)}
+              placeholder="ex: João Silva" className={inputCls} />
+          </Field>
+          <Field label="Nº de pessoas">
+            <input type="number" min={1} max={100} required value={partySize}
+              onChange={e => setPartySize(e.target.value)} className={inputCls} />
+          </Field>
+        </div>
+
+        <Field label="Telefone (opcional)">
+          <input type="tel" value={customerPhone} onChange={e => setCustomerPhone(e.target.value)}
+            placeholder="(11) 99999-9999" className={inputCls} />
+        </Field>
+
+        <div className="flex gap-2 pt-1">
+          <button type="button" onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold
+                       text-stone-400 border border-stone-700/60 hover:bg-stone-800/50
+                       transition-colors">
+            Cancelar
+          </button>
+          <button type="submit" disabled={loading}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold
+                       bg-amber-500 hover:bg-amber-400 text-stone-900
+                       disabled:opacity-40 transition-colors">
+            {loading ? 'Reservando…' : 'Reservar'}
+          </button>
+        </div>
       </form>
     </ModalOverlay>
   )
@@ -270,6 +376,7 @@ function OpenOrderModal({ table, onClose, onOpened }: OpenOrderModalProps) {
 type Modal =
   | { type: 'new-table' }
   | { type: 'open-order'; table: Table }
+  | { type: 'reserve-table'; table: Table }
 
 export default function MesasPage() {
   const navigate = useNavigate()
@@ -497,6 +604,15 @@ export default function MesasPage() {
           table={modal.table}
           onClose={() => setModal(null)}
           onOpened={orderId => { setModal(null); navigate(`/comanda/${orderId}`) }}
+          onReserve={() => setModal({ type: 'reserve-table', table: modal.table })}
+        />
+      )}
+
+      {modal?.type === 'reserve-table' && (
+        <ReserveTableModal
+          table={modal.table}
+          onClose={() => setModal(null)}
+          onReserved={() => { setModal(null); load() }}
         />
       )}
     </div>

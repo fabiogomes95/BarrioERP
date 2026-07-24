@@ -31,6 +31,8 @@ from app.api.v1.endpoints import (
     orders,
     payments,
     reports,
+    reservations,
+    stock,
     tables,
     users,
 )
@@ -107,4 +109,16 @@ api_router.include_router(
     notifications.router,
     prefix="/notifications",
     tags=["notifications"],
+)
+
+api_router.include_router(
+    stock.router,
+    prefix="/stock",
+    tags=["stock"],
+)
+
+api_router.include_router(
+    reservations.router,
+    prefix="/reservations",
+    tags=["reservations"],
 )

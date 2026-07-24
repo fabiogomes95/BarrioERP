@@ -24,6 +24,10 @@ class MenuCategory(Base, UUIDMixin, TimestampMixin, SoftDeleteMixin):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
+    # Itens dessa categoria entram na fila do KDS ao serem lançados na comanda.
+    # Default True: nada "desaparece" silenciosamente da cozinha após a migração —
+    # o dono desliga manualmente as categorias que não precisam (ex: Bebidas).
+    sends_to_kitchen: Mapped[bool] = mapped_column(default=True, nullable=False, server_default="true")
 
     establishment: Mapped["Establishment"] = relationship(back_populates="menu_categories")  # noqa: F821
     items: Mapped[list["MenuItem"]] = relationship(
@@ -66,6 +70,9 @@ class MenuItem(Base, UUIDMixin, TimestampMixin, SoftDeleteMixin):
 
     category: Mapped[MenuCategory] = relationship(back_populates="items")
     order_items: Mapped[list["OrderItem"]] = relationship(back_populates="menu_item")  # noqa: F821
+    ingredients: Mapped[list["MenuItemIngredient"]] = relationship(  # noqa: F821
+        back_populates="menu_item", cascade="all, delete-orphan"
+    )
 
     __table_args__ = (
         Index("ix_menu_items_category_active", "category_id", "is_active"),

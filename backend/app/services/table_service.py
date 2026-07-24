@@ -100,6 +100,7 @@ from app.repositories.table_repository import TableRepository
 from app.schemas.common import PaginatedResponse
 from app.schemas.table import TableCreate, TableResponse, TableUpdate
 from app.services.base import BaseService
+from app.services.reservation_service import ReservationService
 
 
 class TableService(BaseService):
@@ -127,6 +128,7 @@ class TableService(BaseService):
         super().__init__(session, company_id, establishment_id, user_id)
         # Criamos o Repository com a mesma sessão — mesma transação
         self._repo = TableRepository(session)
+        self._reservation_service = ReservationService(session, company_id, establishment_id, user_id)
 
     # ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -240,6 +242,10 @@ class TableService(BaseService):
         """
         establishment_id = self._require_establishment()
         offset = (page - 1) * page_size
+
+        # Ativa/libera mesas com base em reservas próximas ou vencidas antes
+        # de montar a resposta — ver docstring de sync_table_statuses().
+        await self._reservation_service.sync_table_statuses(establishment_id)
 
         tables = await self._repo.list_by_establishment(
             establishment_id,

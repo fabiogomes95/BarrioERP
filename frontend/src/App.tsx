@@ -14,6 +14,9 @@ import CardapioPage from './pages/CardapioPage'
 import EquipePage from './pages/EquipePage'
 import FiadoPage from './pages/FiadoPage'
 import AuditoriaPage from './pages/AuditoriaPage'
+import EstoquePage from './pages/EstoquePage'
+import ReservasPage from './pages/ReservasPage'
+import KDSPage from './pages/KDSPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   if (!getToken()) return <Navigate to="/login" replace />
@@ -47,6 +50,8 @@ export default function App() {
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="mesas"    element={<MesasPage />} />
+          <Route path="reservas" element={<ReservasPage />} />
+          <Route path="cozinha" element={<KDSPage />} />
           <Route path="pedidos"  element={<PedidosPage />} />
           <Route path="comanda/:orderId" element={<ComandaPage />} />
           <Route path="caixa"    element={<RequireRole roles={['owner', 'manager', 'cashier']}><CaixaPage /></RequireRole>} />
@@ -55,6 +60,7 @@ export default function App() {
           <Route path="equipe"   element={<RequireRole roles={['owner', 'manager']}><EquipePage /></RequireRole>} />
           <Route path="fiado"    element={<FiadoPage />} />
           <Route path="auditoria" element={<RequireRole roles={['owner', 'manager']}><AuditoriaPage /></RequireRole>} />
+          <Route path="estoque"  element={<RequireRole roles={['owner', 'manager']}><EstoquePage /></RequireRole>} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
