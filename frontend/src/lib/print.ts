@@ -1,4 +1,9 @@
-import { type Order, type Table } from './api'
+import { type Order, type Table, type Payment } from './api'
+
+const METHOD_LABEL: Record<string, string> = {
+  cash: 'Dinheiro', credit_card: 'Crédito', debit_card: 'Débito',
+  pix: 'Pix', voucher: 'Voucher', other: 'Outro',
+}
 
 export interface KitchenItem {
   name: string
@@ -69,7 +74,9 @@ function esc(s: string) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
-export function printComanda(order: Order, table: Table | undefined, barName: string) {
+export function printComanda(
+  order: Order, table: Table | undefined, barName: string, payments: Payment[] = [],
+) {
   // Abre em janela com largura de 72mm em pixels (72 * 96/25.4 ≈ 272px)
   const win = window.open('', '_blank', 'width=304,height=700')
   if (!win) {
@@ -99,6 +106,19 @@ export function printComanda(order: Order, table: Table | undefined, barName: st
     ? `<tr><td>Taxa de servico (${order.service_fee_percent}%)</td><td class="val">${brl(order.service_fee)}</td></tr>` : ''
   const discRow = Number(order.discount) > 0
     ? `<tr><td>Desconto</td><td class="val">-${brl(order.discount)}</td></tr>` : ''
+
+  const confirmedPayments = payments.filter(p => p.status === 'confirmed')
+  const paidSoFar = confirmedPayments.reduce((sum, p) => sum + Number(p.amount), 0)
+  const remaining = Math.max(0, Math.round((Number(order.total) - paidSoFar) * 100) / 100)
+
+  const paymentRows = confirmedPayments.map(p => `
+    <tr>
+      <td>Pago (${esc(METHOD_LABEL[p.method] ?? p.method)})</td>
+      <td class="val">-${brl(p.amount)}</td>
+    </tr>
+  `).join('')
+  const remainingRow = paidSoFar > 0
+    ? `<tr class="total-row"><td>FALTA PAGAR</td><td class="val">${brl(remaining)}</td></tr>` : ''
 
   // Não usa @page size para não conflitar com o driver da impressora POS-80C.
   // Largura 72mm = área imprimível (80mm − 2×4mm margens).
@@ -135,6 +155,7 @@ export function printComanda(order: Order, table: Table | undefined, barName: st
   <table>
     ${subRow}${feeRow}${discRow}
     <tr class="total-row"><td>TOTAL</td><td class="val">${brl(order.total)}</td></tr>
+    ${paymentRows}${remainingRow}
   </table>
   <div class="hr"></div>
   <div class="foot">Obrigado pela preferencia!</div>

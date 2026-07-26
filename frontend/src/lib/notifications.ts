@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { getToken, getUser, fetchOrder, fetchTables } from './api'
+import { getToken, getUser, fetchOrder, fetchTables, fetchOrderPayments } from './api'
 import { printComanda } from './print'
 
 export interface BillRequestAlert {
@@ -61,10 +61,12 @@ function beep() {
 
 async function handleRemotePrint(orderId: string) {
   try {
-    const [order, tables] = await Promise.all([fetchOrder(orderId), fetchTables()])
+    const [order, tables, payments] = await Promise.all([
+      fetchOrder(orderId), fetchTables(), fetchOrderPayments(orderId),
+    ])
     const table = tables.find(t => t.id === order.table_id)
     const barName = getUser()?.company_name ?? 'BarrioERP'
-    printComanda(order, table, barName)
+    printComanda(order, table, barName, payments)
   } catch {
     // Se a comanda não existir mais (foi fechada nesse meio tempo, etc.),
     // simplesmente não imprime — não há usuário esperando um retorno aqui.

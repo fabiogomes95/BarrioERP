@@ -5,7 +5,7 @@ import {
   fetchCategories, fetchMenuItems,
   addOrderItem, cancelOrderItem, cancelOrder, setItemQuantity, setOrderDiscount, setOrderServiceFee, closeOrder, requestBill,
   serveOrderItem,
-  fetchOrderPayments, registerPayment, finishOrder, updateOrderCustomerName, getUser, requestRemotePrint,
+  fetchOrderPayments, registerPayment, voidPayment, finishOrder, updateOrderCustomerName, getUser, requestRemotePrint,
 } from '../lib/api'
 import { maskCurrency, parseCurrency, toCurrencyInput } from '../lib/format'
 import { printComanda, printCozinha, type KitchenItem } from '../lib/print'
@@ -654,7 +654,7 @@ function PaymentModal({
   order: Order
   onClose: () => void
   onFinished: (orderId: string) => void
-  onPaidUpdate?: (paid: number) => void
+  onPaidUpdate?: (payments: Payment[]) => void
 }) {
   const [payments, setPayments] = useState<Payment[]>([])
   const [loading, setLoading] = useState(true)
@@ -665,6 +665,8 @@ function PaymentModal({
   const [saving, setSaving] = useState(false)
   const [finishing, setFinishing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [confirmVoidId, setConfirmVoidId] = useState<string | null>(null)
+  const [voiding, setVoiding] = useState(false)
 
   const total = Number(order.total)
   const paid = payments
@@ -691,21 +693,40 @@ function PaymentModal({
     refreshPayments().finally(() => setLoading(false))
   }, [refreshPayments])
 
-  // Notifica o pai com o valor já pago sempre que a lista de pagamentos muda
+  // Notifica o pai com a lista de pagamentos sempre que ela muda
   useEffect(() => {
-    onPaidUpdate?.(paid)
-  }, [paid, onPaidUpdate])
+    onPaidUpdate?.(payments)
+  }, [payments, onPaidUpdate])
 
   // Ao mudar o saldo devedor, pré-preenche o valor com o restante
   useEffect(() => {
     if (!loading) setAmount(remaining > 0 ? toCurrencyInput(remaining) : '')
   }, [remaining, loading])
 
+  async function handleVoidPayment(paymentId: string) {
+    setError(null)
+    setVoiding(true)
+    try {
+      await voidPayment(paymentId)
+      await refreshPayments()
+      setConfirmVoidId(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao estornar pagamento')
+    } finally {
+      setVoiding(false)
+    }
+  }
+
   async function handleAddPayment(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
     const value = parseCurrency(amount)
     if (isNaN(value) || value <= 0) { setError('Informe um valor válido'); return }
+
+    // Fecha o teclado virtual do celular antes de trocar de tela — senão o
+    // teclado fica aberto cobrindo o botão "Finalizar comanda" que aparece
+    // no lugar do formulário, e parece que nada aconteceu ao registrar.
+    ;(document.activeElement as HTMLElement | null)?.blur()
 
     setSaving(true)
     try {
@@ -775,19 +796,43 @@ function PaymentModal({
       )}
 
       {/* Pagamentos já registrados */}
-      {payments.length > 0 && (
+      {payments.filter(p => p.status === 'confirmed').length > 0 && (
         <div className="space-y-1 mb-4">
-          {payments.map(p => (
-            <div key={p.id} className="flex items-center justify-between text-xs px-3 py-2 rounded-lg"
-                 style={{ background: 'var(--color-app-bg)' }}>
-              <span className="text-stone-400">{METHOD_LABEL[p.method] ?? p.method}</span>
-              <div className="flex items-center gap-2">
-                {p.change_given && Number(p.change_given) > 0 && (
-                  <span className="text-stone-600">troco {brl(p.change_given)}</span>
-                )}
-                <span className="text-stone-300 font-semibold">{brl(p.amount)}</span>
+          {payments.filter(p => p.status === 'confirmed').map(p => (
+            confirmVoidId === p.id ? (
+              <div key={p.id} className="flex items-center justify-between text-xs px-3 py-2 rounded-lg
+                                          bg-red-500/10 border border-red-500/20">
+                <span className="text-red-300">Estornar este pagamento?</span>
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={() => setConfirmVoidId(null)} disabled={voiding}
+                    className="px-2 py-1 rounded-md text-stone-400 hover:text-stone-200 disabled:opacity-40">
+                    Não
+                  </button>
+                  <button type="button" onClick={() => handleVoidPayment(p.id)} disabled={voiding}
+                    className="px-2 py-1 rounded-md font-semibold text-red-400 hover:text-red-300 disabled:opacity-40">
+                    {voiding ? 'Estornando…' : 'Sim, estornar'}
+                  </button>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div key={p.id} className="flex items-center justify-between text-xs px-3 py-2 rounded-lg"
+                   style={{ background: 'var(--color-app-bg)' }}>
+                <span className="text-stone-400">{METHOD_LABEL[p.method] ?? p.method}</span>
+                <div className="flex items-center gap-2">
+                  {p.change_given && Number(p.change_given) > 0 && (
+                    <span className="text-stone-600">troco {brl(p.change_given)}</span>
+                  )}
+                  <span className="text-stone-300 font-semibold">{brl(p.amount)}</span>
+                  <button type="button" onClick={() => setConfirmVoidId(p.id)}
+                    title="Estornar pagamento (corrigir erro de lançamento)"
+                    className="text-stone-600 hover:text-red-400 transition-colors">
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            )
           ))}
         </div>
       )}
@@ -895,7 +940,7 @@ function SplitModal({
   order: Order
   onClose: () => void
   onFinished: (orderId: string) => void
-  onPaidUpdate?: (paid: number) => void
+  onPaidUpdate?: (payments: Payment[]) => void
 }) {
   const [mode, setMode] = useState<'equal' | 'items'>('equal')
   const [count, setCount] = useState(2)
@@ -965,8 +1010,8 @@ function SplitModal({
   }, [refreshPayments])
 
   useEffect(() => {
-    onPaidUpdate?.(paid)
-  }, [paid, onPaidUpdate])
+    onPaidUpdate?.(payments)
+  }, [payments, onPaidUpdate])
 
   function openSlot(i: number) {
     setError(null)
@@ -981,6 +1026,10 @@ function SplitModal({
     setError(null)
     const value = parseCurrency(amount)
     if (isNaN(value) || value <= 0) { setError('Informe um valor válido'); return }
+
+    // Fecha o teclado virtual antes de trocar de tela (mesmo motivo do
+    // PaymentModal — senão o teclado cobre o que aparece no lugar do formulário).
+    ;(document.activeElement as HTMLElement | null)?.blur()
 
     setSaving(true)
     try {
@@ -1341,21 +1390,19 @@ export function OrderDetail({
   const [actionError, setActionError] = useState<string | null>(null)
   const [kitchenMode, setKitchenMode] = useState(false)
   const [kitchenSelected, setKitchenSelected] = useState<Set<string>>(new Set())
-  const [paidSoFar, setPaidSoFar] = useState(0)
+  const [payments, setPayments] = useState<Payment[]>([])
   const [sharingWA, setSharingWA] = useState(false)
   const [waHint, setWaHint] = useState<string | null>(null)
+  const paidSoFar = payments
+    .filter(p => p.status === 'confirmed')
+    .reduce((sum, p) => sum + Number(p.amount), 0)
   const remaining = Math.max(0, Math.round((Number(order.total) - paidSoFar) * 100) / 100)
 
   // Carrega pagamentos do servidor ao abrir ou trocar de comanda
   useEffect(() => {
     fetchOrderPayments(order.id)
-      .then(ps => {
-        const total = ps
-          .filter(p => p.status === 'confirmed')
-          .reduce((sum, p) => sum + Number(p.amount), 0)
-        setPaidSoFar(total)
-      })
-      .catch(() => setPaidSoFar(0))
+      .then(setPayments)
+      .catch(() => setPayments([]))
   }, [order.id])
 
   const kitchenWhere = table
@@ -1423,7 +1470,7 @@ export function OrderDetail({
     // A impressora térmica só está ligada (por cabo) a um PC específico.
     // Se este dispositivo não é ele, manda a impressão pra quem tem.
     if (isPrintStation()) {
-      printComanda(order, table, getUser()?.company_name ?? 'BarrioERP')
+      printComanda(order, table, getUser()?.company_name ?? 'BarrioERP', payments)
       return
     }
     setPrintSent(true)
@@ -1481,7 +1528,7 @@ export function OrderDetail({
     setWaHint(null)
     setSharingWA(true)
     try {
-      const result = await shareReceiptWhatsApp(order, table, getUser()?.company_name ?? 'BarrioERP')
+      const result = await shareReceiptWhatsApp(order, table, getUser()?.company_name ?? 'BarrioERP', payments)
       if (result === 'downloaded') {
         setWaHint('Imagem baixada — anexe no WhatsApp Web que abriu em outra aba')
         setTimeout(() => setWaHint(null), 6000)
@@ -1849,7 +1896,7 @@ export function OrderDetail({
           order={order}
           onClose={() => setShowPayment(false)}
           onFinished={id => { setShowPayment(false); onClosed(id) }}
-          onPaidUpdate={setPaidSoFar}
+          onPaidUpdate={setPayments}
         />
       )}
 
@@ -1858,7 +1905,7 @@ export function OrderDetail({
           order={order}
           onClose={() => setShowSplit(false)}
           onFinished={id => { setShowSplit(false); onClosed(id) }}
-          onPaidUpdate={setPaidSoFar}
+          onPaidUpdate={setPayments}
         />
       )}
 

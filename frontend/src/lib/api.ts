@@ -399,6 +399,11 @@ export async function registerPayment(data: {
   return request<Payment>('/payments', { method: 'POST', body: JSON.stringify(data) })
 }
 
+export async function voidPayment(paymentId: string): Promise<Payment> {
+  // Estorna (não deleta) um pagamento lançado por engano — vira REFUNDED
+  return request<Payment>(`/payments/${paymentId}/void`, { method: 'POST' })
+}
+
 export async function finishOrder(orderId: string, version: number): Promise<Order> {
   // Fecha a comanda APENAS se o total pago cobrir o total da conta
   return request<Order>(`/orders/${orderId}/finish`, {

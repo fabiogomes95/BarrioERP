@@ -1,4 +1,9 @@
-import { type Order, type Table } from './api'
+import { type Order, type Table, type Payment } from './api'
+
+const METHOD_LABEL: Record<string, string> = {
+  cash: 'Dinheiro', credit_card: 'Crédito', debit_card: 'Débito',
+  pix: 'Pix', voucher: 'Voucher', other: 'Outro',
+}
 
 function brl(v: string | number) {
   return Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -40,7 +45,7 @@ function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number)
 
 /** Gera uma imagem PNG do recibo, com a mesma cara do impresso — pra compartilhar (WhatsApp etc). */
 export async function buildReceiptImage(
-  order: Order, table: Table | undefined, barName: string,
+  order: Order, table: Table | undefined, barName: string, payments: Payment[] = [],
 ): Promise<Blob> {
   const active = order.items.filter(i => i.status !== 'cancelled')
   const typeLabel = order.order_type === 'delivery'
@@ -78,6 +83,10 @@ export async function buildReceiptImage(
     totalsRows.push({ lines: ['Desconto'], value: `-${brl(order.discount)}`, muted: true })
   }
 
+  const confirmedPayments = payments.filter(p => p.status === 'confirmed')
+  const paidSoFar = confirmedPayments.reduce((sum, p) => sum + Number(p.amount), 0)
+  const remaining = Math.max(0, Math.round((Number(order.total) - paidSoFar) * 100) / 100)
+
   const LOGO_SIZE = 56
   const HEADER_H = (logo ? LOGO_SIZE + 14 : 0) + 34 + 24 + 22 + 20   // logo + nome do bar + subtítulo + data + respiro
   const DASH_H = 22
@@ -85,12 +94,15 @@ export async function buildReceiptImage(
   const ITEM_ROW_GAP = 10
   const TOTALS_ROW_H = 24
   const TOTAL_ROW_H = 46
+  // uma linha por pagamento confirmado + a linha "Falta pagar"
+  const PAID_BLOCK_H = confirmedPayments.length > 0
+    ? confirmedPayments.length * TOTALS_ROW_H + 34 : 0
   const FOOTER_H = 50
 
   const itemsH = itemRows.reduce((h, r) => h + r.lines.length * ITEM_ROW_LINE_H + ITEM_ROW_GAP, 0)
   const totalsH = totalsRows.length * TOTALS_ROW_H
 
-  const H = PAD + HEADER_H + DASH_H + itemsH + DASH_H + totalsH + TOTAL_ROW_H + DASH_H + FOOTER_H + PAD
+  const H = PAD + HEADER_H + DASH_H + itemsH + DASH_H + totalsH + TOTAL_ROW_H + PAID_BLOCK_H + DASH_H + FOOTER_H + PAD
 
   const canvas = document.createElement('canvas')
   const scale = 2 // retina, fica nítido no zoom do WhatsApp
@@ -198,6 +210,26 @@ export async function buildReceiptImage(
   ctx.textAlign = 'right'
   ctx.fillText(brl(order.total), W - PAD, y)
 
+  if (confirmedPayments.length > 0) {
+    for (const p of confirmedPayments) {
+      y += 24
+      ctx.font = `14px ${FONT}`
+      ctx.fillStyle = MUTED
+      ctx.textAlign = 'left'
+      ctx.fillText(`Pago (${METHOD_LABEL[p.method] ?? p.method})`, PAD, y)
+      ctx.textAlign = 'right'
+      ctx.fillText(`-${brl(p.amount)}`, W - PAD, y)
+    }
+
+    y += 30
+    ctx.font = `bold 16px ${FONT}`
+    ctx.fillStyle = INK
+    ctx.textAlign = 'left'
+    ctx.fillText('FALTA PAGAR', PAD, y)
+    ctx.textAlign = 'right'
+    ctx.fillText(brl(remaining), W - PAD, y)
+  }
+
   y += 20
   y = drawDash(ctx, y, PAD, W - PAD)
 
@@ -228,9 +260,9 @@ function drawDash(ctx: CanvasRenderingContext2D, y: number, x0: number, x1: numb
  * Sem suporte: baixa a imagem e abre o WhatsApp Web, pra anexar manualmente.
  */
 export async function shareReceiptWhatsApp(
-  order: Order, table: Table | undefined, barName: string,
+  order: Order, table: Table | undefined, barName: string, payments: Payment[] = [],
 ): Promise<'shared' | 'downloaded'> {
-  const blob = await buildReceiptImage(order, table, barName)
+  const blob = await buildReceiptImage(order, table, barName, payments)
   const file = new File([blob], `comanda-${order.id.slice(0, 8)}.png`, { type: 'image/png' })
 
   const nav = navigator as Navigator & { canShare?: (data: { files: File[] }) => boolean }

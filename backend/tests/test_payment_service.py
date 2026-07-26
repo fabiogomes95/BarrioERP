@@ -257,3 +257,73 @@ class TestFinish:
                 order_id=UUID("00000000-0000-0000-0000-000000000005"),
                 method="cash", amount=Decimal("10.00"),
             ))
+
+
+class TestVoid:
+    async def test_void_success(self, service, mock_session):
+        order = make_order(total=Decimal("100.00"), status=OrderStatus.OPEN)
+        payment = make_payment(amount=Decimal("15.00"), method="cash")
+
+        svc = service
+        svc._payment_repo.get = AsyncMock(return_value=payment)
+        svc._order_repo.get_with_items = AsyncMock(return_value=order)
+        svc._payment_repo.sum_confirmed_by_order = AsyncMock(return_value=Decimal("50.00"))
+        mock_session.flush = AsyncMock()
+
+        result = await svc.void(payment.id)
+        assert result.status == PaymentStatus.REFUNDED
+        assert payment.status == PaymentStatus.REFUNDED
+
+    async def test_void_payment_not_found(self, service, mock_session):
+        svc = service
+        svc._payment_repo.get = AsyncMock(return_value=None)
+
+        with pytest.raises(NotFoundError):
+            await svc.void(UUID("00000000-0000-0000-0000-000000000099"))
+
+    async def test_void_other_tenant_order(self, service, mock_session):
+        payment = make_payment()
+        svc = service
+        svc._payment_repo.get = AsyncMock(return_value=payment)
+        svc._order_repo.get_with_items = AsyncMock(return_value=None)
+
+        with pytest.raises(NotFoundError):
+            await svc.void(payment.id)
+
+    async def test_void_already_refunded(self, service, mock_session):
+        order = make_order()
+        payment = make_payment(status=PaymentStatus.REFUNDED)
+        svc = service
+        svc._payment_repo.get = AsyncMock(return_value=payment)
+        svc._order_repo.get_with_items = AsyncMock(return_value=order)
+
+        with pytest.raises(BusinessRuleError, match="não pode ser estornado"):
+            await svc.void(payment.id)
+
+    async def test_void_blocked_when_closed_and_fully_paid(self, service, mock_session):
+        # Comanda fechada via finish() com pagamento exato — estornar quebraria
+        # a invariante "fechada ⇒ paga integralmente".
+        order = make_order(total=Decimal("100.00"), status=OrderStatus.CLOSED)
+        payment = make_payment(amount=Decimal("100.00"))
+        svc = service
+        svc._payment_repo.get = AsyncMock(return_value=payment)
+        svc._order_repo.get_with_items = AsyncMock(return_value=order)
+        svc._payment_repo.sum_confirmed_by_order = AsyncMock(return_value=Decimal("100.00"))
+
+        with pytest.raises(BusinessRuleError, match="Reabra a comanda"):
+            await svc.void(payment.id)
+
+    async def test_void_allowed_when_closed_fiado_already_underpaid(self, service, mock_session):
+        # Comanda fechada em fiado (override do gerente) — já estava com saldo
+        # devedor antes do estorno, então estornar mais um pagamento é só mais
+        # dívida em aberto, não quebra nenhuma invariante nova.
+        order = make_order(total=Decimal("100.00"), status=OrderStatus.CLOSED)
+        payment = make_payment(amount=Decimal("15.00"))
+        svc = service
+        svc._payment_repo.get = AsyncMock(return_value=payment)
+        svc._order_repo.get_with_items = AsyncMock(return_value=order)
+        svc._payment_repo.sum_confirmed_by_order = AsyncMock(return_value=Decimal("50.00"))
+        mock_session.flush = AsyncMock()
+
+        result = await svc.void(payment.id)
+        assert result.status == PaymentStatus.REFUNDED

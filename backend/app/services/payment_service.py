@@ -303,6 +303,80 @@ class PaymentService(BaseService):
 
         return PaymentResponse.model_validate(payment)
 
+    async def void(self, payment_id: UUID) -> PaymentResponse:
+        """
+        Estorna um pagamento registrado por engano (ex: forma de pagamento errada).
+
+        Não é um DELETE físico — vira ESTORNO (status=REFUNDED). O registro
+        original continua no banco pra auditoria (quem lançou, quando, valor
+        errado). Como `sum_confirmed_by_order` só soma CONFIRMED, o valor
+        estornado some do total pago automaticamente.
+
+        GUARDA — não deixa quebrar comanda já fechada e quitada:
+            Se a comanda está CLOSED e hoje está com pagamento suficiente,
+            estornar um pagamento poderia deixá-la fechada mas sem cobrir
+            o total (viola a invariante "fechada ⇒ paga integralmente").
+            Nesse caso, pede pra reabrir a comanda antes (fluxo de Fiado).
+            Comandas OPEN/BILL_REQUESTED ou já em fiado (CLOSED com saldo
+            devedor) não têm essa restrição.
+
+        LANÇA:
+            NotFoundError (404)     → pagamento não existe ou é de outro tenant
+            BusinessRuleError (422) → pagamento já estornado/não confirmado
+            BusinessRuleError (422) → estornaria uma comanda fechada e quitada
+        """
+        establishment_id = self._require_establishment()
+
+        payment = await self._payment_repo.get(payment_id)
+        if payment is None:
+            raise NotFoundError("Payment", payment_id)
+
+        order = await self._order_repo.get_with_items(payment.order_id, establishment_id)
+        if order is None:
+            # Comanda de outro tenant — trata como se o pagamento não existisse
+            raise NotFoundError("Payment", payment_id)
+
+        if payment.status != PaymentStatus.CONFIRMED:
+            raise BusinessRuleError(
+                f"Este pagamento já está '{payment.status.value}' e não pode ser estornado."
+            )
+
+        total_pago = await self._payment_repo.sum_confirmed_by_order(order.id)
+        if (
+            order.status == OrderStatus.CLOSED
+            and total_pago >= order.total
+            and (total_pago - payment.amount) < order.total
+        ):
+            raise BusinessRuleError(
+                "Não é possível estornar: a comanda já está fechada e totalmente paga. "
+                "Reabra a comanda (tela de Fiado) antes de corrigir este pagamento."
+            )
+
+        old_status = payment.status
+        payment.status = PaymentStatus.REFUNDED
+
+        try:
+            await self.session.flush()
+        except StaleDataError:
+            raise OptimisticLockError("Payment")
+        await self.session.refresh(payment)
+
+        await self._log_audit(
+            action="payment.void",
+            resource_type="payment",
+            resource_id=str(payment.id),
+            before={
+                "status": old_status.value,
+                "order_id": str(order.id),
+                "customer_name": order.customer_name,
+                "method": payment.method.value if hasattr(payment.method, "value") else str(payment.method),
+                "amount": str(payment.amount),
+            },
+            after={"status": PaymentStatus.REFUNDED.value},
+        )
+
+        return PaymentResponse.model_validate(payment)
+
     async def list_for_order(self, order_id: UUID) -> list[PaymentResponse]:
         """
         Lista todos os pagamentos de uma comanda.

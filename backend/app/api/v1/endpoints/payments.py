@@ -156,6 +156,34 @@ async def list_payments(
     return await _service(session, current_user).list_for_order(order_id)
 
 
+# ── POST /payments/{payment_id}/void — Estornar pagamento ─────────────────────
+
+
+@router.post(
+    "/payments/{payment_id}/void",
+    response_model=PaymentResponse,
+    summary="Estornar pagamento",
+    description=(
+        "Estorna um pagamento lançado por engano (ex: forma de pagamento errada). "
+        "Não deleta o registro — marca como REFUNDED, que some da soma de "
+        "pagamentos confirmados. Pra corrigir, estorne o errado e registre um novo."
+    ),
+)
+async def void_payment(
+    payment_id: UUID,
+    session: DBSession,
+    current_user: CurrentUser,
+) -> PaymentResponse:
+    """
+    Estorna (soft) um pagamento CONFIRMED, virando REFUNDED.
+
+    Bloqueado se a comanda já estiver fechada e totalmente quitada — nesse
+    caso é preciso reabrir a comanda (fiado) antes de corrigir o pagamento.
+    """
+    require_roles(current_user, UserRole.OWNER, UserRole.MANAGER, UserRole.CASHIER)
+    return await _service(session, current_user).void(payment_id)
+
+
 # ── PATCH /orders/{order_id}/finish — Finalizar comanda ───────────────────────
 
 

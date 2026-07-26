@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   type FiadoCustomerGroup, type Order,
-  fetchFiadoGrouped, fetchOrderPayments, registerPayment, reopenOrder, fetchOrder,
+  fetchFiadoGrouped, fetchOrderPayments, registerPayment, voidPayment, reopenOrder, fetchOrder,
   type Payment, type PaymentMethod,
 } from '../lib/api'
 import { maskCurrency, parseCurrency, toCurrencyInput } from '../lib/format'
@@ -48,6 +48,8 @@ function FiadoPaymentModal({
   const [tendered, setTendered] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [confirmVoidId, setConfirmVoidId] = useState<string | null>(null)
+  const [voiding, setVoiding] = useState(false)
 
   const [livePaid, setLivePaid] = useState(Number(entry.paid))
   const total = Number(entry.total)
@@ -83,11 +85,29 @@ function FiadoPaymentModal({
     return () => document.removeEventListener('keydown', h)
   }, [onClose])
 
+  async function handleVoidPayment(paymentId: string) {
+    setError(null)
+    setVoiding(true)
+    try {
+      await voidPayment(paymentId)
+      await refresh()
+      setConfirmVoidId(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao estornar pagamento')
+    } finally {
+      setVoiding(false)
+    }
+  }
+
   async function handlePay(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
     const value = parseCurrency(amount)
     if (isNaN(value) || value <= 0) { setError('Informe um valor válido'); return }
+
+    // Fecha o teclado virtual do celular antes de trocar de tela — senão ele
+    // fica cobrindo o que aparece no lugar do formulário (ex: "Conta quitada!").
+    ;(document.activeElement as HTMLElement | null)?.blur()
 
     setSaving(true)
     try {
@@ -151,14 +171,40 @@ function FiadoPaymentModal({
           </p>
         )}
 
-        {payments.length > 0 && (
+        {payments.filter(p => p.status === 'confirmed').length > 0 && (
           <div className="space-y-1 mb-4">
-            {payments.map(p => (
-              <div key={p.id} className="flex items-center justify-between text-xs px-3 py-2 rounded-lg"
-                   style={{ background: 'var(--color-app-bg)' }}>
-                <span className="text-stone-400">{METHOD_LABEL[p.method] ?? p.method}</span>
-                <span className="text-stone-300 font-semibold">{brl(p.amount)}</span>
-              </div>
+            {payments.filter(p => p.status === 'confirmed').map(p => (
+              confirmVoidId === p.id ? (
+                <div key={p.id} className="flex items-center justify-between text-xs px-3 py-2 rounded-lg
+                                            bg-red-500/10 border border-red-500/20">
+                  <span className="text-red-300">Estornar este pagamento?</span>
+                  <div className="flex items-center gap-2">
+                    <button type="button" onClick={() => setConfirmVoidId(null)} disabled={voiding}
+                      className="px-2 py-1 rounded-md text-stone-400 hover:text-stone-200 disabled:opacity-40">
+                      Não
+                    </button>
+                    <button type="button" onClick={() => handleVoidPayment(p.id)} disabled={voiding}
+                      className="px-2 py-1 rounded-md font-semibold text-red-400 hover:text-red-300 disabled:opacity-40">
+                      {voiding ? 'Estornando…' : 'Sim, estornar'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div key={p.id} className="flex items-center justify-between text-xs px-3 py-2 rounded-lg"
+                     style={{ background: 'var(--color-app-bg)' }}>
+                  <span className="text-stone-400">{METHOD_LABEL[p.method] ?? p.method}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-stone-300 font-semibold">{brl(p.amount)}</span>
+                    <button type="button" onClick={() => setConfirmVoidId(p.id)}
+                      title="Estornar pagamento (corrigir erro de lançamento)"
+                      className="text-stone-600 hover:text-red-400 transition-colors">
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              )
             ))}
           </div>
         )}
