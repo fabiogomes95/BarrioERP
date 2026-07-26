@@ -10,7 +10,7 @@ from fastapi import APIRouter, Query
 
 from app.api.deps import CurrentUser, DBSession, require_roles
 from app.models.user import UserRole
-from app.schemas.order import OrderResponse
+from app.schemas.order import OrderHistoryResponse
 from app.schemas.report import DailyReport, FiadoCustomerGroup, FiadoEntry, PeriodReport
 from app.services.order_service import OrderService
 
@@ -95,9 +95,9 @@ async def period_report(
 
 @router.get(
     "/history",
-    response_model=list[OrderResponse],
+    response_model=list[OrderHistoryResponse],
     summary="Histórico de comandas fechadas",
-    description="Lista as comandas fechadas mais recentes (com itens). Use `day` para filtrar por data.",
+    description="Lista as comandas fechadas mais recentes (com itens e pagamentos). Use `day` para filtrar por data.",
 )
 async def history(
     session: DBSession,
@@ -105,6 +105,6 @@ async def history(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     day: date | None = Query(default=None, description="Filtrar por data (YYYY-MM-DD)."),
-) -> list[OrderResponse]:
+) -> list[OrderHistoryResponse]:
     require_roles(current_user, UserRole.OWNER, UserRole.MANAGER, UserRole.CASHIER)
     return await _service(session, current_user).list_history(limit=limit, offset=offset, day=day)

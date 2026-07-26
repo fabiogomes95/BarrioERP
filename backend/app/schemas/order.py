@@ -85,6 +85,7 @@ from pydantic import Field, model_validator
 
 from app.models.order import OrderItemStatus, OrderStatus, OrderType
 from app.schemas.common import BaseSchema, TimestampSchema, UUIDSchema
+from app.schemas.payment import PaymentResponse
 
 
 # ── Schemas de OrderItem ──────────────────────────────────────────────────────
@@ -338,6 +339,20 @@ class OrderResponse(UUIDSchema, TimestampSchema):
     version: int                     # necessário para o próximo PATCH
     items: list[OrderItemResponse]   # itens já carregados (eager loaded)
     is_fiado: bool = False           # fechada mas com saldo em aberto — setado manualmente pelo service
+
+
+class OrderHistoryResponse(OrderResponse):
+    """
+    Variante do OrderResponse usada só pelo histórico (`GET /reports/history`).
+
+    Inclui `payments` — o único endpoint cujo repository já carrega essa
+    relação (selectinload em list_closed()). Os demais endpoints que
+    retornam OrderResponse (abrir comanda, listar abertas, etc.) NÃO
+    carregam `order.payments`, então incluir esse campo na classe-base
+    causava 500 (MissingGreenlet) em toda tela que lista comandas abertas.
+    """
+
+    payments: list[PaymentResponse]
 
 
 # ── Schemas do KDS (fila de cozinha) ────────────────────────────────────────

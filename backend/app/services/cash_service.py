@@ -158,6 +158,7 @@ class CashService(BaseService):
         if data.notes:
             s.notes = data.notes
         await self.session.flush()
+        await self.session.refresh(s)
         return await self._to_response(s)
 
     async def history(self, *, limit: int = 30) -> list[CashSessionResponse]:

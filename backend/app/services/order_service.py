@@ -122,6 +122,7 @@ from app.schemas.order import (
     KitchenQueueTicket,
     OrderClose,
     OrderCreate,
+    OrderHistoryResponse,
     OrderItemAdd,
     OrderItemResponse,
     OrderResponse,
@@ -1038,7 +1039,7 @@ class OrderService(BaseService):
         limit: int = 50,
         offset: int = 0,
         day: date | None = None,
-    ) -> list[OrderResponse]:
+    ) -> list[OrderHistoryResponse]:
         """Histórico de comandas fechadas (mais recentes primeiro)."""
         establishment_id = self._require_establishment()
         start = end = None
@@ -1055,7 +1056,7 @@ class OrderService(BaseService):
                 (p.amount for p in order.payments if p.status == PaymentStatus.CONFIRMED),
                 Decimal("0.00"),
             )
-            resp = OrderResponse.model_validate(order)
+            resp = OrderHistoryResponse.model_validate(order)
             resp.is_fiado = paid_total < order.total
             responses.append(resp)
         return responses
