@@ -1,0 +1,48 @@
+# Blueprint do Render (render.com) — sobe Postgres + o app inteiro (API +
+# frontend, no mesmo container) com um clique, lendo este arquivo.
+# Como usar: Render → New → Blueprint → selecionar este repo.
+databases:
+  - name: barrio-db
+    plan: starter
+    databaseName: barrio
+    user: barrio
+
+services:
+  - type: web
+    name: barrio-erp
+    runtime: docker
+    dockerfilePath: ./Dockerfile.prod
+    dockerContext: .
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ONBOARDING_SECRET
+        generateValue: true
+      - key: PASSWORD_RECOVERY_CODE
+        generateValue: true
+      - key: POSTGRES_HOST
+        fromDatabase:
+          name: barrio-db
+          property: host
+      - key: POSTGRES_PORT
+        fromDatabase:
+          name: barrio-db
+          property: port
+      - key: POSTGRES_USER
+        fromDatabase:
+          name: barrio-db
+          property: user
+      - key: POSTGRES_PASSWORD
+        fromDatabase:
+          name: barrio-db
+          property: password
+      - key: POSTGRES_DB
+        fromDatabase:
+          name: barrio-db
+          property: database

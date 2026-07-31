@@ -1,0 +1,42 @@
+# Dockerfile de produção — imagem única que builda o frontend (React/Vite)
+# e serve tudo (API + estático) de um único processo FastAPI, igual ao setup
+# atual do NSSM no Windows (ver ARCHITECTURE.md, secao 28), mas empacotado
+# pra rodar em qualquer host com Docker (Render, Fly.io, VPS, etc).
+#
+# Build a partir da RAIZ do repo:
+#   docker build -f Dockerfile.prod -t barrio-erp .
+
+# ── Estágio 1: build do frontend ──────────────────────────────────────────
+FROM node:20-alpine AS frontend-build
+WORKDIR /app/frontend
+COPY frontend/package*.json ./
+RUN npm ci
+COPY frontend/ .
+RUN npm run build
+
+# ── Estágio 2: backend + runtime ──────────────────────────────────────────
+FROM python:3.12-slim
+WORKDIR /app/backend
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app/backend
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY backend/ .
+# app/main.py espera o build do frontend em ../../frontend/dist relativo a
+# si mesmo — ou seja, /app/frontend/dist (irmão de /app/backend). Mantém a
+# mesma estrutura de pastas do repo dentro da imagem.
+COPY --from=frontend-build /app/frontend/dist /app/frontend/dist
+
+RUN chmod +x docker-entrypoint.sh
+
+EXPOSE 8000
+ENTRYPOINT ["./docker-entrypoint.sh"]
