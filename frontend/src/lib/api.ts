@@ -47,6 +47,26 @@ function decodeToken(token: string): LocalUser {
 
 // ── Request helper autenticado ────────────────────────────────────────────────
 
+// Erro de API com o `code` que o backend manda em `body.error` (ex: "OPTIMISTIC_LOCK"),
+// além da mensagem legível. Continua sendo um Error normal (err.message funciona
+// em todo lugar que já existia), só que quem precisar diferenciar o motivo do
+// erro (ex: conflito de versão) pode checar `err.code` sem parsear a mensagem.
+export class ApiError extends Error {
+  status: number
+  code: string | null
+  constructor(message: string, status: number, code: string | null) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.code = code
+  }
+}
+
+/** Conflito de versão (locking otimista) — o recurso foi alterado por outra requisição. */
+export function isConflictError(err: unknown): boolean {
+  return err instanceof ApiError && (err.status === 409 || err.code === 'OPTIMISTIC_LOCK')
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken()
   const res = await fetch(`${BASE}${path}`, {
@@ -69,7 +89,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     const msg = body.detail ?? body.message ?? `Erro ${res.status}`
-    throw new Error(Array.isArray(msg) ? msg.map((e: { msg: string }) => e.msg).join(', ') : msg)
+    throw new ApiError(
+      Array.isArray(msg) ? msg.map((e: { msg: string }) => e.msg).join(', ') : msg,
+      res.status,
+      body.error ?? null,
+    )
   }
 
   return res.json() as Promise<T>
@@ -226,6 +250,8 @@ export interface OrderItem {
   status: string
   cancelled_at: string | null
   cancelled_reason: string | null
+  created_at: string
+  updated_at: string
 }
 
 export type OrderType = 'counter' | 'delivery' | 'pickup'

@@ -56,6 +56,13 @@ class Settings(BaseSettings):
     # Timezone
     TIMEZONE: str = "America/Sao_Paulo"
 
+    # Cardápio público (app.public_menu — serviço separado do ERP, ver docstring)
+    # Número que recebe os pedidos via WhatsApp (formato: 55DDDNUMERO, só dígitos).
+    PUBLIC_MENU_WHATSAPP: str | None = None
+    # Nome exibido na página pública. Pode divergir de Establishment.name
+    # (ex: "Matriz" é o nome interno/tenant, não o nome fantasia do bar).
+    PUBLIC_MENU_DISPLAY_NAME: str | None = None
+
     @property
     def database_url(self) -> str:
         return (

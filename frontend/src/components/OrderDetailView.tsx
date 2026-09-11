@@ -4,7 +4,7 @@ import {
   type Payment, type PaymentMethod,
   fetchCategories, fetchMenuItems,
   addOrderItem, cancelOrderItem, cancelOrder, setItemQuantity, setOrderDiscount, setOrderServiceFee, closeOrder, requestBill,
-  serveOrderItem,
+  serveOrderItem, fetchOrder, isConflictError,
   fetchOrderPayments, registerPayment, voidPayment, finishOrder, updateOrderCustomerName, getUser, requestRemotePrint,
 } from '../lib/api'
 import { maskCurrency, parseCurrency, toCurrencyInput } from '../lib/format'
@@ -27,6 +27,39 @@ export function timeAgo(iso: string) {
   const h = Math.floor(m / 60)
   if (h < 24) return `${h}h`
   return `${Math.floor(h / 24)}d`
+}
+
+/** Hora (HH:mm) do último lançamento do item — quantidade incrementada conta como novo lançamento. */
+export function itemTime(item: OrderItem) {
+  return new Date(item.updated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+}
+
+/**
+ * Fecha/finaliza uma comanda tolerando o conflito de versão mais comum em
+ * produção: outro dispositivo (garçom, outro caixa) mexeu na comanda — um
+ * item novo, desconto, etc. — entre a tela ter carregado e o clique em
+ * "Fechar"/"Finalizar". Isso bate o version local contra um version mais
+ * novo no banco e o backend responde 409 (OPTIMISTIC_LOCK).
+ *
+ * Antes disso o usuário via só "Erro ao fechar comanda" e precisava sair e
+ * reabrir a comanda manualmente pra pegar a versão atual e tentar de novo.
+ * Aqui, no primeiro 409 buscamos a comanda fresca e tentamos UMA vez a mais
+ * com o version certo — o mesmo que o usuário faria manualmente. Se ainda
+ * assim falhar (ex: comanda foi cancelada nesse meio tempo), o erro real
+ * sobe normalmente pra tela.
+ */
+async function closeOrFinish(
+  orderId: string,
+  currentVersion: number,
+  action: (orderId: string, version: number) => Promise<Order>,
+): Promise<Order> {
+  try {
+    return await action(orderId, currentVersion)
+  } catch (err) {
+    if (!isConflictError(err)) throw err
+    const fresh = await fetchOrder(orderId)
+    return action(orderId, fresh.version)
+  }
 }
 
 export const ORDER_STATUS = {
@@ -123,6 +156,9 @@ function OrderItemRow({
             )}
             <span className={['text-stone-200 text-sm leading-tight', isCancelled ? 'line-through' : ''].join(' ')}>
               {item.item_name}
+            </span>
+            <span className="shrink-0 text-stone-600 text-[10px] tabular-nums" title="Horário do último lançamento">
+              {itemTime(item)}
             </span>
             {(item.status === 'sent' || item.status === 'preparing' || item.status === 'ready') && (
               <span className={[
@@ -752,7 +788,7 @@ function PaymentModal({
     setError(null)
     setFinishing(true)
     try {
-      await finishOrder(order.id, order.version)
+      await closeOrFinish(order.id, order.version, finishOrder)
       onFinished(order.id)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao finalizar comanda')
@@ -1055,7 +1091,7 @@ function SplitModal({
     setError(null)
     setFinishing(true)
     try {
-      await finishOrder(order.id, order.version)
+      await closeOrFinish(order.id, order.version, finishOrder)
       onFinished(order.id)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao finalizar comanda')
@@ -1487,7 +1523,7 @@ export function OrderDetail({
     setActionError(null)
     setClosing(true)
     try {
-      await closeOrder(order.id, order.version)
+      await closeOrFinish(order.id, order.version, closeOrder)
       onClosed(order.id)
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Erro ao fechar comanda')
