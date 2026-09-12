@@ -403,8 +403,14 @@ export default function Layout() {
     refreshCompanyName().catch(() => {})
   }, [])
 
+  // h-dvh, não h-screen (=100vh): no celular (barra de endereço do Chrome/
+  // Samsung Internet aparece/some ao rolar), 100vh é calculado pela altura
+  // com a barra ESCONDIDA — maior que a área realmente visível na maior
+  // parte do tempo. Resultado: o rodapé de ações (Receber/Cozinha na tela
+  // de comanda) ficava cortado, exigindo rolar pra ver — dvh acompanha a
+  // altura visível de verdade.
   return (
-    <div className="flex flex-col h-screen" style={{ background: 'var(--color-app-bg)' }}>
+    <div className="flex flex-col h-dvh" style={{ background: 'var(--color-app-bg)' }}>
       {/* Barra superior com o menu hambúrguer */}
       <TopBar onMenu={() => setOpen(true)} />
 

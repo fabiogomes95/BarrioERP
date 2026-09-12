@@ -18,7 +18,7 @@ export default class ErrorBoundary extends Component<Props, State> {
     if (!this.state.error) return this.props.children
 
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-stone-950 text-stone-300 p-6">
+      <div className="flex flex-col items-center justify-center min-h-dvh bg-stone-950 text-stone-300 p-6">
         <div className="max-w-md text-center">
           <h1 className="text-2xl font-bold text-red-400 mb-3">Algo deu errado</h1>
           <p className="text-sm text-stone-500 mb-6 break-all font-mono">

@@ -43,7 +43,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'var(--color-app-bg)' }}>
+    <div className="min-h-dvh flex items-center justify-center p-4" style={{ background: 'var(--color-app-bg)' }}>
       {/* Glow de fundo sutil */}
       <div className="absolute inset-0 pointer-events-none"
         style={{ background: 'radial-gradient(ellipse 60% 40% at 50% -10%, rgba(180,100,10,0.12) 0%, transparent 70%)' }} />
