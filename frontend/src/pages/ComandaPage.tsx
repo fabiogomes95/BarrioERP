@@ -28,6 +28,26 @@ export default function ComandaPage() {
 
   useEffect(() => { load() }, [load])
 
+  // Auto-refresh silencioso — sem isso, uma comanda fechada/alterada em
+  // outro aparelho (o garçom no celular, outro caixa) só aparecia aqui
+  // depois de um F5 manual. 15s (mais rápido que o padrão de 30s do resto
+  // do app) porque essa é a tela onde dinheiro troca de mão — vale a pena
+  // ela ficar um pouco mais em dia com a realidade.
+  useEffect(() => {
+    if (!orderId) return
+    const id = setInterval(async () => {
+      try {
+        const [o, ts] = await Promise.all([fetchOrder(orderId), fetchTables()])
+        setOrder(o)
+        setTable(ts.find(t => t.id === o.table_id))
+      } catch {
+        // Silencioso de propósito: um erro passageiro de rede aqui não deve
+        // atrapalhar quem já está com a comanda aberta na tela.
+      }
+    }, 15_000)
+    return () => clearInterval(id)
+  }, [orderId])
+
   function goBack() {
     // Volta para a tela anterior (Mesas ou Pedidos); se não houver, vai para Pedidos
     if (window.history.length > 1) navigate(-1)
