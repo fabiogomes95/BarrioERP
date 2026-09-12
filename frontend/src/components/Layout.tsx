@@ -219,11 +219,11 @@ function SideDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
         {/* Marca + fechar */}
         <div className="px-5 py-5 border-b border-stone-800/50 flex items-center gap-3">
           <div className="w-9 h-9 rounded-full overflow-hidden shrink-0 ring-1 ring-amber-500/20">
-            <img src="/icon-recanto.png" alt="" className="w-full h-full object-cover" />
+            <img src="/icon-barrio-192.png" alt="" className="w-full h-full object-cover" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-stone-100 text-sm font-semibold leading-tight truncate">{user?.company_name ?? 'BarrioERP'}</p>
-            <p className="text-stone-600 text-[11px] mt-0.5">Gestão do bar</p>
+            <p className="text-stone-100 text-sm font-semibold leading-tight truncate">Barrio</p>
+            <p className="text-stone-600 text-[11px] mt-0.5">Gestão de bares e restaurantes</p>
           </div>
           <button onClick={onClose}
             className="text-stone-600 hover:text-stone-300 transition-colors p-1 -mr-1" title="Fechar">
@@ -300,7 +300,7 @@ const QUICK = [
   { to: '/pedidos', label: 'Pedidos', Icon: IconClipboard },
 ]
 
-function TopBar({ onMenu, barName }: { onMenu: () => void; barName: string }) {
+function TopBar({ onMenu }: { onMenu: () => void }) {
   return (
     <header
       className="relative flex items-center gap-2 sm:gap-3 px-2 sm:px-4 h-14 shrink-0 border-b border-stone-800/50"
@@ -317,12 +317,12 @@ function TopBar({ onMenu, barName }: { onMenu: () => void; barName: string }) {
 
       {/* Marca: no mobile fica no fluxo normal (ícone só, ao lado do menu) pra nunca disputar espaço
           com os atalhos da direita. A partir de sm sobra espaço e ela vira centralizada com o nome. */}
-      <img src="/icon-recanto.png" alt={barName}
+      <img src="/icon-barrio-192.png" alt="Barrio"
            className="sm:hidden w-8 h-8 rounded-full shrink-0 object-cover" />
       <div className="hidden sm:flex absolute left-1/2 -translate-x-1/2 items-center gap-2
                       pointer-events-none max-w-[55%]">
-        <img src="/icon-recanto.png" alt="" className="w-7 h-7 rounded-full shrink-0 object-cover" />
-        <span className="text-stone-100 text-sm font-bold tracking-tight truncate">{barName}</span>
+        <img src="/icon-barrio-192.png" alt="" className="w-7 h-7 rounded-full shrink-0 object-cover" />
+        <span className="text-stone-100 text-sm font-bold tracking-tight truncate">Barrio</span>
       </div>
 
       {/* Atalhos: Mesas e Pedidos */}
@@ -395,17 +395,18 @@ function BillRequestToasts() {
 
 export default function Layout() {
   const [open, setOpen] = useState(false)
-  const [barName, setBarName] = useState(getUser()?.company_name ?? 'BarrioERP')
 
-  // Busca o nome do bar do backend (funciona mesmo com token antigo sem o nome)
+  // O topo/menu não mostram mais o nome do bar (só a marca "Barrio") — mas o
+  // recibo/impressão em outras telas ainda usa getUser()?.company_name direto
+  // do localStorage, então mantemos ele atualizado aqui mesmo sem exibir.
   useEffect(() => {
-    refreshCompanyName().then(name => { if (name) setBarName(name) }).catch(() => {})
+    refreshCompanyName().catch(() => {})
   }, [])
 
   return (
     <div className="flex flex-col h-screen" style={{ background: 'var(--color-app-bg)' }}>
       {/* Barra superior com o menu hambúrguer */}
-      <TopBar onMenu={() => setOpen(true)} barName={barName} />
+      <TopBar onMenu={() => setOpen(true)} />
 
       {/* Drawer lateral recolhível */}
       <SideDrawer open={open} onClose={() => setOpen(false)} />

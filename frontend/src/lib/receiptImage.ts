@@ -56,7 +56,7 @@ export async function buildReceiptImage(
   const where = table ? `Mesa ${table.number}` : typeLabel
   const subtitle = where + (order.customer_name ? ` — ${order.customer_name}` : '')
   const now = new Date().toLocaleString('pt-BR')
-  const logo = await loadImage('/icon-recanto.png')
+  const logo = await loadImage('/icon-barrio-192.png')
 
   const W = 440
   const PAD = 28

@@ -166,7 +166,7 @@ export function printDailyReport(
     <tbody>${historyRows}</tbody>
   </table>
 
-  <div class="foot">Gerado em ${new Date().toLocaleString('pt-BR')} · BarrioERP</div>
+  <div class="foot">Gerado em ${new Date().toLocaleString('pt-BR')} · Barrio</div>
   <script>
     window.onload = function () { window.print(); };
   </script>

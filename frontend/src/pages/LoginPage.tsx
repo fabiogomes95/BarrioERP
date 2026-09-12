@@ -170,7 +170,7 @@ export default function LoginPage() {
           >
             🍺
           </div>
-          <h1 className="text-xl font-bold text-stone-100 tracking-tight">BarrioERP</h1>
+          <h1 className="text-xl font-bold text-stone-100 tracking-tight">Barrio</h1>
           <p className="text-stone-600 text-xs mt-1">Gestão de bares e restaurantes</p>
         </div>
 

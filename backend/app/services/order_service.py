@@ -408,17 +408,23 @@ class OrderService(BaseService):
 
         LANÇA:
             NotFoundError (404)      → comanda não encontrada
-            BusinessRuleError (422)  → comanda não está aberta
+            BusinessRuleError (422)  → comanda não está aberta nem com conta solicitada
             NotFoundError (404)      → item do cardápio não encontrado/indisponível
             OptimisticLockError (409) → conflito de concorrência no total
+
+        POR QUE BILL_REQUESTED TAMBÉM ACEITA ITEM NOVO:
+            Cliente pede a conta e, antes dela chegar, resolve pedir mais uma
+            rodada — cenário comum no dia a dia do bar. Bloquear isso obrigaria
+            o garçom a cancelar o pedido de conta só pra lançar um item, sem
+            motivo real (a conta ainda não foi fechada/paga, só sinalizada).
         """
         establishment_id = self._require_establishment()
         order = await self._get_or_raise(order_id, establishment_id)
 
-        if order.status != OrderStatus.OPEN:
+        if order.status not in (OrderStatus.OPEN, OrderStatus.BILL_REQUESTED):
             raise BusinessRuleError(
                 f"Não é possível adicionar itens a uma comanda com status '{order.status.value}'. "
-                "Apenas comandas ABERTAS aceitam novos itens."
+                "Apenas comandas ABERTAS ou com CONTA SOLICITADA aceitam novos itens."
             )
 
         # Resolve nome e preço do item

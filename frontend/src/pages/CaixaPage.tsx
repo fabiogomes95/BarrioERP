@@ -551,7 +551,7 @@ export default function CaixaPage() {
                       CSV
                     </button>
                     <button
-                      onClick={() => printDailyReport(report, history, tables, day, getUser()?.company_name ?? 'BarrioERP')}
+                      onClick={() => printDailyReport(report, history, tables, day, getUser()?.company_name ?? 'Barrio')}
                       title="Exportar PDF (imprimir e salvar como PDF)"
                       className="px-3 py-2 rounded-xl text-xs font-semibold border transition-colors
                                  text-stone-300 border-stone-700/60 hover:bg-stone-800/50 hover:border-stone-600">

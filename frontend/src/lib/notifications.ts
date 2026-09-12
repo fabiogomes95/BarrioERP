@@ -65,7 +65,7 @@ async function handleRemotePrint(orderId: string) {
       fetchOrder(orderId), fetchTables(), fetchOrderPayments(orderId),
     ])
     const table = tables.find(t => t.id === order.table_id)
-    const barName = getUser()?.company_name ?? 'BarrioERP'
+    const barName = getUser()?.company_name ?? 'Barrio'
     printComanda(order, table, barName, payments)
   } catch {
     // Se a comanda não existir mais (foi fechada nesse meio tempo, etc.),

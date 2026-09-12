@@ -134,9 +134,9 @@ function OrderItemRow({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             {editable ? (
-              <div className="flex items-center gap-1.5 shrink-0">
+              <div className="flex items-center rounded-lg border border-stone-700/60 shrink-0 overflow-hidden">
                 <button onClick={() => changeQty(-1)} disabled={qtyLoading || item.quantity <= 1}
-                  className="w-6 h-6 flex items-center justify-center rounded-lg border border-stone-700/60
+                  className="w-6 h-6 flex items-center justify-center
                              text-stone-300 hover:bg-stone-800/60 disabled:opacity-30 transition-colors">
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                     <path strokeLinecap="round" d="M5 12h14" />
@@ -144,7 +144,7 @@ function OrderItemRow({
                 </button>
                 <span className="text-stone-200 text-sm font-bold w-5 text-center tabular-nums">{item.quantity}</span>
                 <button onClick={() => changeQty(1)} disabled={qtyLoading || item.quantity >= 99}
-                  className="w-6 h-6 flex items-center justify-center rounded-lg border border-stone-700/60
+                  className="w-6 h-6 flex items-center justify-center
                              text-stone-300 hover:bg-stone-800/60 disabled:opacity-30 transition-colors">
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                     <path strokeLinecap="round" d="M12 5v14M5 12h14" />
@@ -157,19 +157,21 @@ function OrderItemRow({
             <span className={['text-stone-200 text-sm leading-tight', isCancelled ? 'line-through' : ''].join(' ')}>
               {item.item_name}
             </span>
-            <span className="shrink-0 text-stone-600 text-[10px] tabular-nums" title="Horário do último lançamento">
-              {itemTime(item)}
-            </span>
+          </div>
+          {/* Horário + status na mesma linha, discreto — era um badge de texto
+              grande ("NA COZINHA") competindo com o nome do item; agora é só
+              um ponto colorido, sem perder a informação. */}
+          <div className="flex items-center gap-1.5 pl-0.5 mt-0.5">
             {(item.status === 'sent' || item.status === 'preparing' || item.status === 'ready') && (
               <span className={[
-                'shrink-0 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full border',
-                item.status === 'ready' ? 'text-green-400 bg-green-500/10 border-green-500/25'
-                  : item.status === 'preparing' ? 'text-amber-400 bg-amber-500/10 border-amber-500/25'
-                  : 'text-blue-400 bg-blue-500/10 border-blue-500/25',
-              ].join(' ')}>
-                {item.status === 'ready' ? 'Pronto' : item.status === 'preparing' ? 'Preparando' : 'Na cozinha'}
-              </span>
+                'w-1.5 h-1.5 rounded-full shrink-0',
+                item.status === 'ready' ? 'bg-green-400' : item.status === 'preparing' ? 'bg-amber-400' : 'bg-blue-400',
+              ].join(' ')} />
             )}
+            <span className="text-stone-600 text-[10px] tabular-nums">
+              {item.status === 'ready' ? 'Pronto · ' : item.status === 'preparing' ? 'Preparando · ' : item.status === 'sent' ? 'Na cozinha · ' : ''}
+              {itemTime(item)}
+            </span>
           </div>
           {item.notes && (
             <p className="text-stone-600 text-xs mt-0.5 pl-5 italic">{item.notes}</p>
@@ -197,10 +199,16 @@ function OrderItemRow({
           ) : (
             <>
               {canServe && (
-                <button onClick={handleServe} disabled={serving}
-                  className="px-2 py-1 rounded-lg text-[11px] font-semibold text-green-400
+                <button onClick={handleServe} disabled={serving} title="Marcar como servido" aria-label="Marcar como servido"
+                  className="w-6 h-6 flex items-center justify-center rounded-lg text-green-400
                              border border-green-500/30 hover:bg-green-500/10 disabled:opacity-40 transition-colors">
-                  {serving ? '…' : 'Servir'}
+                  {serving ? (
+                    <span className="text-[10px]">…</span>
+                  ) : (
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
                 </button>
               )}
               {canCancel && !isCancelled && item.status !== 'served' && (
@@ -755,6 +763,14 @@ function PaymentModal({
 
   async function handleAddPayment(e: React.FormEvent) {
     e.preventDefault()
+    // Guarda de reentrância síncrona: num toque duplo rápido (comum no
+    // celular), o segundo clique pode disparar antes do React re-renderizar
+    // o botão com disabled=true. Sem isso, os dois submits chegavam ao
+    // backend — o primeiro registrava o pagamento, o segundo era barrado
+    // pela proteção "comanda já paga" do servidor, e a tela ficava travada
+    // mostrando esse erro em vez do botão de finalizar (ver correção no
+    // catch abaixo também).
+    if (saving) return
     setError(null)
     const value = parseCurrency(amount)
     if (isNaN(value) || value <= 0) { setError('Informe um valor válido'); return }
@@ -779,6 +795,13 @@ function PaymentModal({
       setReference('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao registrar pagamento')
+      // Mesmo quando ESTE registro falhou, busca o estado real da comanda:
+      // se o erro foi "já está totalmente paga" (ex: clique duplo, ou outro
+      // caixa registrou ao mesmo tempo), isso atualiza `payments` e o modal
+      // troca sozinho pro botão "Finalizar" — sem isso, a tela ficava presa
+      // mostrando "não pago" mesmo com o pagamento já garantido no banco,
+      // obrigando a sair e voltar pra ver que já tinha dado certo.
+      await refreshPayments().catch(() => {})
     } finally {
       setSaving(false)
     }
@@ -1059,6 +1082,8 @@ function SplitModal({
 
   async function handlePaySlot(e: React.FormEvent) {
     e.preventDefault()
+    // Guarda de reentrância — ver comentário equivalente no PaymentModal.
+    if (saving) return
     setError(null)
     const value = parseCurrency(amount)
     if (isNaN(value) || value <= 0) { setError('Informe um valor válido'); return }
@@ -1082,6 +1107,9 @@ function SplitModal({
       setTendered('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao registrar pagamento')
+      // Mesmo comentário do PaymentModal: se o erro foi "já paga" (clique
+      // duplo etc.), isso puxa o estado real e a tela se corrige sozinha.
+      await refreshPayments().catch(() => {})
     } finally {
       setSaving(false)
     }
@@ -1420,6 +1448,7 @@ export function OrderDetail({
   const [printSent, setPrintSent] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [showMoreActions, setShowMoreActions] = useState(false)
   const [editingName, setEditingName] = useState(false)
   const [nameInput, setNameInput] = useState('')
   const [savingName, setSavingName] = useState(false)
@@ -1479,7 +1508,7 @@ export function OrderDetail({
 
   const cfg = ORDER_STATUS[order.status] ?? ORDER_STATUS.open
   const canEdit = order.status === 'open' || order.status === 'bill_requested'
-  const canAddItem = order.status === 'open'
+  const canAddItem = order.status === 'open' || order.status === 'bill_requested'
   const canRequestBill = order.status === 'open'
   const canClose = order.status === 'open' || order.status === 'bill_requested'
   // Garçom/cozinha não veem valores nem mexem em fechamento — só quem atende o caixa.
@@ -1488,6 +1517,7 @@ export function OrderDetail({
 
   const activeItems = order.items.filter(i => i.status !== 'cancelled')
   const cancelledItems = order.items.filter(i => i.status === 'cancelled')
+  const hasUnservedItems = activeItems.some(i => i.status !== 'served')
 
   async function handleRequestBill() {
     setActionError(null)
@@ -1506,7 +1536,7 @@ export function OrderDetail({
     // A impressora térmica só está ligada (por cabo) a um PC específico.
     // Se este dispositivo não é ele, manda a impressão pra quem tem.
     if (isPrintStation()) {
-      printComanda(order, table, getUser()?.company_name ?? 'BarrioERP', payments)
+      printComanda(order, table, getUser()?.company_name ?? 'Barrio', payments)
       return
     }
     setPrintSent(true)
@@ -1564,7 +1594,7 @@ export function OrderDetail({
     setWaHint(null)
     setSharingWA(true)
     try {
-      const result = await shareReceiptWhatsApp(order, table, getUser()?.company_name ?? 'BarrioERP', payments)
+      const result = await shareReceiptWhatsApp(order, table, getUser()?.company_name ?? 'Barrio', payments)
       if (result === 'downloaded') {
         setWaHint('Imagem baixada — anexe no WhatsApp Web que abriu em outra aba')
         setTimeout(() => setWaHint(null), 6000)
@@ -1816,107 +1846,123 @@ export function OrderDetail({
                 </button>
               </div>
             </div>
-          ) : (
-            <div className="space-y-2">
+          ) : showDeleteConfirm ? (
+            <div className="flex items-center justify-between gap-2 pt-0.5
+                            rounded-xl px-3 py-2 border border-red-500/20 bg-red-500/5">
+              <p className="text-xs text-red-400 font-medium">Apagar esta comanda?</p>
               <div className="flex gap-2">
-                {canAddItem && (
-                  <button onClick={() => setShowAddItem(true)}
-                    className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-semibold
-                               text-stone-300 border border-stone-700/60 hover:bg-stone-800/50 transition-colors">
-                    <span className="text-base leading-none">+</span>
-                    Item
-                  </button>
-                )}
-                {activeItems.some(i => i.status !== 'served') && (
-                  <button onClick={enterKitchenMode}
-                    className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-semibold
-                               text-stone-300 border border-stone-700/60 hover:bg-stone-800/50 transition-colors">
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-                      <path strokeLinecap="round" strokeLinejoin="round"
-                        d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a1 1 0 001-1v-4a1 1 0 00-1-1H9a1 1 0 00-1 1v4a1 1 0 001 1zm8-12V5a2 2 0 00-2-2H7a2 2 0 00-2 2v4h14z" />
-                    </svg>
-                    Cozinha
-                  </button>
-                )}
-                {canRequestBill && (
-                  <button onClick={handleRequestBill} disabled={requestingBill}
-                    className="flex-1 py-2.5 rounded-xl text-sm font-semibold
-                               text-orange-400 border border-orange-500/30 bg-orange-500/8
-                               hover:bg-orange-500/15 disabled:opacity-40 transition-colors">
-                    {requestingBill ? '…' : 'Solicitar conta'}
-                  </button>
-                )}
-                {canSeeMoney && (
-                  <button onClick={() => setShowPayment(true)}
-                    className="flex-1 py-2.5 rounded-xl text-sm font-semibold
-                               bg-amber-500 hover:bg-amber-400 text-stone-900 transition-colors">
-                    Receber {brl(remaining > 0 ? remaining : order.total)}
-                  </button>
-                )}
+                <button onClick={() => setShowDeleteConfirm(false)}
+                  className="text-[11px] text-stone-500 hover:text-stone-300 transition-colors py-1 px-2">
+                  Cancelar
+                </button>
+                <button onClick={handleDelete} disabled={deleting}
+                  className="text-[11px] font-bold text-red-400 hover:text-red-300
+                             disabled:opacity-40 transition-colors py-1 px-2">
+                  {deleting ? 'Apagando…' : 'Sim, apagar'}
+                </button>
               </div>
-              {!canSeeMoney ? null : showDeleteConfirm ? (
-                <div className="flex items-center justify-between gap-2 pt-0.5
-                                rounded-xl px-3 py-2 border border-red-500/20 bg-red-500/5">
-                  <p className="text-xs text-red-400 font-medium">Apagar esta comanda?</p>
-                  <div className="flex gap-2">
-                    <button onClick={() => setShowDeleteConfirm(false)}
-                      className="text-[11px] text-stone-500 hover:text-stone-300 transition-colors py-1 px-2">
-                      Cancelar
-                    </button>
-                    <button onClick={handleDelete} disabled={deleting}
-                      className="text-[11px] font-bold text-red-400 hover:text-red-300
-                                 disabled:opacity-40 transition-colors py-1 px-2">
-                      {deleting ? 'Apagando…' : 'Sim, apagar'}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex flex-wrap items-center gap-2 pt-1">
-                  <button onClick={() => setShowDiscount(true)}
-                    className="px-3 py-2 rounded-lg text-xs font-semibold border transition-colors
-                               text-stone-300 border-stone-700/60 hover:bg-stone-800/50 hover:border-stone-600">
-                    {Number(order.discount) > 0 ? `Desconto: ${brl(order.discount)}` : '+ Desconto'}
-                  </button>
-                  <button
-                    onClick={async () => {
-                      setTogglingFee(true)
-                      try {
-                        const updated = await setOrderServiceFee(order.id, Number(order.service_fee_percent) === 0)
-                        onUpdated(updated)
-                      } catch (err) {
-                        setActionError(err instanceof Error ? err.message : 'Erro')
-                      } finally {
-                        setTogglingFee(false)
-                      }
-                    }}
-                    disabled={togglingFee}
-                    className="px-3 py-2 rounded-lg text-xs font-semibold border transition-colors
-                               text-stone-300 border-stone-700/60 hover:bg-stone-800/50 hover:border-stone-600
-                               disabled:opacity-40">
-                    {togglingFee ? '…' : Number(order.service_fee_percent) > 0 ? `− Taxa ${order.service_fee_percent}%` : '+ Taxa de serviço'}
-                  </button>
-                  <button onClick={() => setShowSplit(true)}
-                    className="px-3 py-2 rounded-lg text-xs font-semibold border transition-colors
-                               text-amber-400 border-amber-500/30 bg-amber-500/8 hover:bg-amber-500/15">
-                    Dividir conta
-                  </button>
-                  <button onClick={handleClose} disabled={closing}
-                    className="px-3 py-2 rounded-lg text-xs font-semibold border transition-colors
-                               text-amber-400 border-amber-500/30 bg-amber-500/8 hover:bg-amber-500/15
-                               disabled:opacity-40">
-                    {closing ? 'Salvando…' : 'Fiado'}
-                  </button>
-                  <button onClick={() => setShowDeleteConfirm(true)}
-                    className="ml-auto px-3 py-2 rounded-lg text-xs font-semibold border transition-colors
-                               text-red-400 border-red-500/25 hover:bg-red-500/10">
-                    Apagar
-                  </button>
-                </div>
+            </div>
+          ) : (
+            // Rodapé enxuto: "+ Item" e "Cozinha" ficam sempre visíveis (só
+            // como ícone, pra não pesar) porque são usados o tempo todo —
+            // testamos escondê-los atrás do "Mais" e atrapalhou o fluxo real
+            // do garçom. O que sobra no "Mais" é só o que é usado bem menos
+            // (desconto, taxa, dividir conta, fiado, apagar) — eram 9 botões
+            // de texto sempre visíveis, viravam poluição principalmente no
+            // celular; isso continua fora do caminho principal.
+            <div className="flex gap-2">
+              {canAddItem && (
+                <button onClick={() => setShowAddItem(true)} title="Adicionar item" aria-label="Adicionar item"
+                  className="w-11 shrink-0 flex items-center justify-center rounded-xl text-xl font-bold leading-none
+                             text-stone-300 border border-stone-700/60 hover:bg-stone-800/50 transition-colors">
+                  +
+                </button>
+              )}
+              {hasUnservedItems && (
+                <button onClick={enterKitchenMode} title="Imprimir cozinha" aria-label="Imprimir cozinha"
+                  className="w-11 shrink-0 flex items-center justify-center rounded-xl
+                             text-stone-300 border border-stone-700/60 hover:bg-stone-800/50 transition-colors">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                    <path strokeLinecap="round" strokeLinejoin="round"
+                      d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a1 1 0 001-1v-4a1 1 0 00-1-1H9a1 1 0 00-1 1v4a1 1 0 001 1zm8-12V5a2 2 0 00-2-2H7a2 2 0 00-2 2v4h14z" />
+                  </svg>
+                </button>
+              )}
+              {canRequestBill && (
+                <button onClick={handleRequestBill} disabled={requestingBill}
+                  className="py-2.5 px-4 rounded-xl text-sm font-semibold
+                             text-orange-400 border border-orange-500/30 bg-orange-500/8
+                             hover:bg-orange-500/15 disabled:opacity-40 transition-colors">
+                  {requestingBill ? '…' : 'Conta'}
+                </button>
+              )}
+              {canSeeMoney && (
+                <button onClick={() => setShowPayment(true)}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold
+                             bg-amber-500 hover:bg-amber-400 text-stone-900 transition-colors">
+                  Receber {brl(remaining > 0 ? remaining : order.total)}
+                </button>
+              )}
+              {canSeeMoney && (
+                <button onClick={() => setShowMoreActions(true)} aria-label="Mais opções"
+                  className="w-11 shrink-0 rounded-xl text-lg font-bold leading-none
+                             text-stone-300 border border-stone-700/60 hover:bg-stone-800/50 transition-colors">
+                  ⋯
+                </button>
               )}
             </div>
           )
         )}
       </div>
+
+      {/* Sheet "Mais opções" — só o que é usado com pouca frequência (ver
+          comentário acima; "+ Item" e "Cozinha" ficaram sempre visíveis). */}
+      {showMoreActions && (
+        <ModalOverlay title="Mais opções" onClose={() => setShowMoreActions(false)}>
+          <div className="flex flex-col -mx-1">
+            {canSeeMoney && (
+              <>
+                <button onClick={() => { setShowMoreActions(false); setShowDiscount(true) }}
+                  className="text-left px-3 py-3 rounded-xl text-sm font-medium text-stone-200 hover:bg-stone-800/50 transition-colors">
+                  {Number(order.discount) > 0 ? `Desconto: ${brl(order.discount)}` : 'Desconto'}
+                </button>
+                <button
+                  onClick={async () => {
+                    setTogglingFee(true)
+                    try {
+                      const updated = await setOrderServiceFee(order.id, Number(order.service_fee_percent) === 0)
+                      onUpdated(updated)
+                      setShowMoreActions(false)
+                    } catch (err) {
+                      setActionError(err instanceof Error ? err.message : 'Erro')
+                    } finally {
+                      setTogglingFee(false)
+                    }
+                  }}
+                  disabled={togglingFee}
+                  className="text-left px-3 py-3 rounded-xl text-sm font-medium text-stone-200 hover:bg-stone-800/50
+                             disabled:opacity-40 transition-colors">
+                  {togglingFee ? '…' : Number(order.service_fee_percent) > 0 ? `Remover taxa de serviço (${order.service_fee_percent}%)` : 'Taxa de serviço'}
+                </button>
+                <button onClick={() => { setShowMoreActions(false); setShowSplit(true) }}
+                  className="text-left px-3 py-3 rounded-xl text-sm font-medium text-stone-200 hover:bg-stone-800/50 transition-colors">
+                  Dividir conta
+                </button>
+                <button onClick={() => { setShowMoreActions(false); handleClose() }} disabled={closing}
+                  className="text-left px-3 py-3 rounded-xl text-sm font-medium text-stone-200 hover:bg-stone-800/50
+                             disabled:opacity-40 transition-colors">
+                  {closing ? 'Salvando…' : 'Fiado (fechar sem cobrar agora)'}
+                </button>
+                <div className="border-t border-stone-800/60 my-1.5" />
+                <button onClick={() => { setShowMoreActions(false); setShowDeleteConfirm(true) }}
+                  className="text-left px-3 py-3 rounded-xl text-sm font-medium text-red-400 hover:bg-red-500/10 transition-colors">
+                  Apagar comanda
+                </button>
+              </>
+            )}
+          </div>
+        </ModalOverlay>
+      )}
 
       {showAddItem && (
         <AddItemModal
