@@ -1,5 +1,8 @@
 # BarrioERP
 
+> **Operação no Recanto da Barra** (serviços, cardápio online, pedidos online,
+> impressão direta, WhatsApp): veja [README-OPERACAO.md](README-OPERACAO.md).
+
 Sistema SaaS de gestão de restaurantes com arquitetura multi-tenancy, onde múltiplos estabelecimentos operam no mesmo sistema com dados completamente isolados.
 
 ## Visão Geral
