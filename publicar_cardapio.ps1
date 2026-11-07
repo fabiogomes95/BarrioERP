@@ -39,7 +39,7 @@ if ($LASTEXITCODE -ne 0) {
 Move-Item $tmp "$site\menu.json" -Force
 
 Copy-Item "$root\public_menu_static\index.html" "$site\index.html" -Force
-Copy-Item "$root\public_menu_static\logo.png"   "$site\logo.png"   -Force
+Copy-Item "$root\public_menu_static\*.png" $site -Force   # logo + ícones (aba / tela inicial)
 if (-not (Test-Path "$site\.nojekyll")) { New-Item "$site\.nojekyll" -ItemType File | Out-Null }
 
 git -C $site add -A
