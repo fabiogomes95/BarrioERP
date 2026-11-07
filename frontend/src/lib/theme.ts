@@ -19,8 +19,17 @@ export function getEffectiveTheme(): Theme {
   return getStoredTheme() ?? (systemPrefersDark() ? 'dark' : 'light')
 }
 
+// Cor das barras do celular (status/navegação) — mesmo fundo do app em cada
+// tema (--color-app-bg em index.css). Sem isso, com o app no escuro e o
+// celular no claro, a barra de status ficava creme em cima do app escuro.
+const BAR_COLOR: Record<Theme, string> = { light: '#fbeedf', dark: '#1c140e' }
+
 export function applyTheme(theme: Theme): void {
   document.documentElement.setAttribute('data-theme', theme)
+  document.querySelectorAll('meta[name="theme-color"]').forEach(m => {
+    m.setAttribute('content', BAR_COLOR[theme])
+    m.removeAttribute('media')
+  })
 }
 
 export function setTheme(theme: Theme): void {

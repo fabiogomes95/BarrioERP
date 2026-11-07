@@ -4,8 +4,8 @@
   "description": "Sistema de gestão para bares e restaurantes",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#eef1f4",
-  "theme_color": "#171b21",
+  "background_color": "#fbeedf",
+  "theme_color": "#1c140e",
   "icons": [
     {
       "src": "/icon-barrio-192.png",
