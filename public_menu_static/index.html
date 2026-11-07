@@ -311,11 +311,30 @@
           <button type="button" data-kind="delivery" role="radio" aria-checked="false">🛵 Entrega</button>
           <button type="button" data-kind="pickup" role="radio" aria-checked="false">🏖️ Retirada</button>
         </div>
-        <p class="hint" id="kind-hint" hidden>Entregamos só aqui na Praia de Barra do Rio. Se precisar, a gente te chama no WhatsApp pra combinar o local.</p>
+        <p class="hint" id="kind-hint" hidden>Entregamos só aqui na Praia de Barra do Rio.</p>
+      </div>
+      <div class="field" id="f-where" hidden>
+        <label for="c-where">Onde entregar? <span style="text-transform:none;letter-spacing:0;font-weight:500;color:var(--muted)">(opcional)</span></label>
+        <input id="c-where" maxlength="200" autocomplete="off" placeholder="Ex.: barraca 3, casa azul perto da igreja">
+        <p class="hint">Se não souber explicar, a gente te chama no WhatsApp pra combinar.</p>
+      </div>
+      <div class="field" id="f-pay">
+        <span class="label">Como vai pagar?</span>
+        <div class="seg">
+          <button type="button" data-pay="cash">Dinheiro</button>
+          <button type="button" data-pay="pix">Pix</button>
+          <button type="button" data-pay="credit">Crédito</button>
+          <button type="button" data-pay="debit">Débito</button>
+        </div>
+        <p class="hint" id="pix-hint" hidden>A gente te manda a chave Pix no WhatsApp.</p>
+        <div id="f-change" hidden style="margin-top:10px">
+          <label for="c-change">Troco para quanto? <span style="text-transform:none;letter-spacing:0;font-weight:500;color:var(--muted)">(opcional)</span></label>
+          <input id="c-change" inputmode="decimal" maxlength="10" placeholder="Ex.: 100">
+        </div>
       </div>
       <div class="field">
         <label for="obs">Observações <span style="text-transform:none;letter-spacing:0;font-weight:500;color:var(--muted)">(opcional)</span></label>
-        <textarea id="obs" maxlength="500" placeholder="Sem cebola, troco pra R$ 50, ponto de referência…"></textarea>
+        <textarea id="obs" maxlength="500" placeholder="Sem cebola, bem passado…"></textarea>
       </div>
 
       <p class="form-error" id="form-error" hidden></p>
@@ -369,6 +388,7 @@
   var order = [];      // ordem em que os itens entraram no carrinho
   var DATA = null;
   var fulfillment = null;
+  var payment = null;  // cash | pix | credit | debit (obrigatório)
   var sending = false;
 
   // ── Ícones (traço fino, no estilo do impresso) ─────────────────────
@@ -569,12 +589,28 @@
   }
 
   // ── Envio ───────────────────────────────────────────────────────────
+  var PAY_LABEL = { cash: 'Dinheiro', pix: 'Pix', credit: 'Crédito', debit: 'Débito' };
+  // "100", "100,50", "R$ 100" → 100.5; vazio/ inválido → null
+  function changeFor() {
+    var v = document.getElementById('c-change').value.replace(/[^\d,.]/g, '').replace(/\.(?=\d{3}(\D|$))/g, '').replace(',', '.');
+    var n = parseFloat(v);
+    return isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : null;
+  }
+  function paymentText() {
+    var t = PAY_LABEL[payment] || payment;
+    var c = payment === 'cash' ? changeFor() : null;
+    return c ? t + ' (troco para ' + money(c) + ')' : t;
+  }
+
   function buildWhatsAppMessage(number, name, kind) {
     var lines = [];
     lines.push(number ? '*Pedido #' + number + '* - cardápio digital' : 'Olá! Vim pelo cardápio digital e queria fazer esse pedido:');
     lines.push('Nome: ' + name);
     // Sem emoji: o WhatsApp Desktop estraga emoji vindo de link wa.me (vira "�")
     lines.push(kind === 'delivery' ? 'Entrega aqui na praia' : 'Vou retirar');
+    var where = kind === 'delivery' ? document.getElementById('c-where').value.trim() : '';
+    if (where) lines.push('Entregar em: ' + where);
+    if (payment) lines.push('Pagamento: ' + paymentText());
     lines.push('');
     var byCategory = {}, cats = [];
     order.forEach(function (k) {
@@ -611,14 +647,15 @@
     if (!isOpenNow()) { showError(closedText() + '.'); updateOpenState(); return; }
     var name = document.getElementById('c-name').value.replace(/\s+/g, ' ').trim();
     var phone = phoneDigits(document.getElementById('c-phone').value);
-    var badName = name.length < 2, badPhone = phone.length < 10 || phone.length > 13, badKind = !fulfillment;
-    setInvalid('f-name', badName); setInvalid('f-phone', badPhone); setInvalid('f-kind', badKind);
-    if (badName || badPhone || badKind) {
-      showError(badName ? 'Informe seu nome.' : badPhone ? 'Informe seu WhatsApp com DDD.' : 'Escolha entrega ou retirada.');
+    var badName = name.length < 2, badPhone = phone.length < 10 || phone.length > 13, badKind = !fulfillment, badPay = !payment;
+    setInvalid('f-name', badName); setInvalid('f-phone', badPhone); setInvalid('f-kind', badKind); setInvalid('f-pay', badPay);
+    if (badName || badPhone || badKind || badPay) {
+      showError(badName ? 'Informe seu nome.' : badPhone ? 'Informe seu WhatsApp com DDD.' : badKind ? 'Escolha entrega ou retirada.' : 'Escolha como vai pagar.');
       return;
     }
     showError(null);
     remember('name', name); remember('phone', phone);
+    remember('where', document.getElementById('c-where').value.trim());
 
     // PC fora do ar: não tem como registrar no Barrio — segue só pelo WhatsApp
     // (síncrono, dentro do toque, então o navegador não bloqueia a nova aba)
@@ -632,6 +669,9 @@
       customer_phone: phone,
       fulfillment: fulfillment,
       notes: document.getElementById('obs').value.trim() || null,
+      delivery_location: fulfillment === 'delivery' ? (document.getElementById('c-where').value.trim() || null) : null,
+      payment_method: payment,
+      change_for: payment === 'cash' ? changeFor() : null,
       items: order.map(function (k) {
         var l = registry[k].line;
         return { menu_item_id: l.menu_item_id, quantity: cart[k], complemento: l.complemento || null, half_with: l.half_with || null };
@@ -983,6 +1023,19 @@
     var addBtn = e.target.closest('[data-combo-add]');
     if (addBtn) { addCombo(addBtn.getAttribute('data-combo-add')); return; }
 
+    var pay = e.target.closest('[data-pay]');
+    if (pay) {
+      var v = pay.getAttribute('data-pay');
+      payment = v;
+      setInvalid('f-pay', false);
+      document.querySelectorAll('[data-pay]').forEach(function (b) {
+        b.classList.toggle('on', b.getAttribute('data-pay') === payment);
+      });
+      document.getElementById('pix-hint').hidden = payment !== 'pix';
+      document.getElementById('f-change').hidden = payment !== 'cash';
+      return;
+    }
+
     var kind = e.target.closest('[data-kind]');
     if (kind) {
       fulfillment = kind.getAttribute('data-kind');
@@ -992,6 +1045,7 @@
         b.setAttribute('aria-checked', on ? 'true' : 'false');
       });
       document.getElementById('kind-hint').hidden = fulfillment !== 'delivery';
+      document.getElementById('f-where').hidden = fulfillment !== 'delivery';
       setInvalid('f-kind', false);
       return;
     }
@@ -1012,6 +1066,7 @@
   document.getElementById('new-order').addEventListener('click', closeAll);
   document.getElementById('c-name').value = recall('name');
   document.getElementById('c-phone').value = recall('phone') ? formatPhone(recall('phone')) : '';
+  document.getElementById('c-where').value = recall('where');
 
   function fetchJson(url, ms) {
     var ctrl = 'AbortController' in window ? new AbortController() : null;

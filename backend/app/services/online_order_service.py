@@ -33,6 +33,16 @@ def format_phone(digits: str) -> str:
     return f"({d[:2]}) {d[2:-4]}-{d[-4:]}"
 
 
+PAYMENT_LABELS = {"cash": "Dinheiro", "pix": "Pix", "credit": "Crédito", "debit": "Débito"}
+
+
+def payment_label(method: str, change_for: Decimal | None = None) -> str:
+    label = PAYMENT_LABELS.get(method, method)
+    if method == "cash" and change_for:
+        label += f" (troco p/ R$ {change_for:.2f})".replace(".", ",")
+    return label
+
+
 class OnlineOrderService(BaseService):
 
     def _require_establishment(self) -> UUID:
@@ -75,6 +85,10 @@ class OnlineOrderService(BaseService):
 
         kind = "Entrega" if online_order.fulfillment == OrderType.DELIVERY else "Retirada"
         notes = f"Pedido online #{online_order.number} · {kind} · Tel {format_phone(online_order.customer_phone)}"
+        if online_order.delivery_location:
+            notes += f" · Entregar em: {online_order.delivery_location}"
+        if online_order.payment_method:
+            notes += f" · Pagamento: {payment_label(online_order.payment_method, online_order.change_for)}"
         if online_order.notes:
             notes += f" · Obs: {online_order.notes}"
 

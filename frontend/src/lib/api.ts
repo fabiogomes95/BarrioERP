@@ -310,6 +310,9 @@ export interface OnlineOrder {
   customer_name: string
   customer_phone: string
   notes: string | null
+  delivery_location: string | null
+  payment_method: 'cash' | 'pix' | 'credit' | 'debit' | null
+  change_for: string | null
   items: { menu_item_id: string | null; item_name: string; unit_price: string; quantity: number }[]
   total: string
   order_id: string | null

@@ -22,6 +22,9 @@ class OnlineOrderResponse(BaseSchema):
     customer_name: str
     customer_phone: str
     notes: str | None
+    delivery_location: str | None
+    payment_method: str | None
+    change_for: Decimal | None
     items: list[OnlineOrderLine]
     total: Decimal
     order_id: UUID | None

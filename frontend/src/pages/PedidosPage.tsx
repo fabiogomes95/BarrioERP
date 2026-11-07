@@ -275,6 +275,8 @@ function formatPhone(digits: string) {
   return d.length < 10 ? d : `(${d.slice(0, 2)}) ${d.slice(2, -4)}-${d.slice(-4)}`
 }
 
+const PAYMENT_LABEL = { cash: 'Dinheiro', pix: 'Pix', credit: 'Crédito', debit: 'Débito' } as const
+
 function OnlineOrderCard({ oo, onAccept, onReject }: {
   oo: OnlineOrder
   onAccept: () => Promise<void>
@@ -324,8 +326,18 @@ function OnlineOrderCard({ oo, onAccept, onReject }: {
           </li>
         ))}
       </ul>
+      {oo.payment_method && (
+        <p className="text-xs text-stone-200 bg-stone-800/60 rounded-lg px-2.5 py-1.5 mb-2">
+          💳 Pagamento: <b>{PAYMENT_LABEL[oo.payment_method]}</b>
+          {oo.payment_method === 'cash' && oo.change_for && ` · troco p/ ${brl(oo.change_for)}`}
+          {oo.payment_method === 'pix' && ' · mandar a chave no WhatsApp'}
+        </p>
+      )}
+      {oo.delivery_location && (
+        <p className="text-xs text-stone-200 bg-emerald-500/10 rounded-lg px-2.5 py-1.5 mb-2">📍 Entregar em: {oo.delivery_location}</p>
+      )}
       {oo.notes && (
-        <p className="text-xs text-amber-300/90 bg-amber-500/10 rounded-lg px-2.5 py-1.5 mb-2">Obs: {oo.notes}</p>
+        <p className="text-xs text-stone-200 bg-amber-500/10 rounded-lg px-2.5 py-1.5 mb-2">Obs: {oo.notes}</p>
       )}
 
       <div className="flex items-center justify-between pt-2.5 border-t border-stone-800/50 mt-auto">

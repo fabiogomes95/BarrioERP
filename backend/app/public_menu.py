@@ -30,6 +30,7 @@ USO (local, pra testar):
 
 import re
 from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 from zoneinfo import ZoneInfo
 from typing import Literal
@@ -212,6 +213,10 @@ class OnlineOrderIn(BaseModel):
     customer_phone: str = Field(max_length=30)
     fulfillment: Literal["delivery", "pickup"]
     notes: str | None = Field(default=None, max_length=500)
+    delivery_location: str | None = Field(default=None, max_length=200)  # opcional, só entrega
+    # Obrigatório, só informativo (vai na mensagem e no pedido). Pix: a casa manda a chave no WhatsApp.
+    payment_method: Literal["cash", "pix", "credit", "debit"]
+    change_for: Decimal | None = Field(default=None, gt=0, le=10000)  # dinheiro: troco pra quanto
     items: list[CartLineIn] = Field(min_length=1, max_length=40)
 
     @field_validator("customer_name")
@@ -231,7 +236,7 @@ class OnlineOrderIn(BaseModel):
             raise ValueError("Informe um telefone com DDD.")
         return digits
 
-    @field_validator("notes")
+    @field_validator("notes", "delivery_location")
     @classmethod
     def _blank_notes(cls, v: str | None) -> str | None:
         return v.strip() or None if v else None
@@ -281,6 +286,15 @@ async def create_online_order(slug: str, data: OnlineOrderIn, request: Request) 
         except CartError as e:
             raise HTTPException(status_code=422, detail=str(e))
 
+        total = sum((l.subtotal for l in lines), start=Decimal("0"))
+        change_for = data.change_for if data.payment_method == "cash" else None
+        if change_for is not None and change_for < total:
+            raise HTTPException(
+                status_code=422,
+                detail=f"O troco precisa ser pra um valor maior que o total (R$ {total:.2f})."
+                .replace(f"{total:.2f}", f"{total:.2f}".replace(".", ",")),
+            )
+
         online_order = OnlineOrder(
             establishment_id=establishment.id,
             status=OnlineOrderStatus.PENDING,
@@ -288,8 +302,11 @@ async def create_online_order(slug: str, data: OnlineOrderIn, request: Request) 
             customer_name=data.customer_name,
             customer_phone=data.customer_phone,
             notes=data.notes,
+            delivery_location=data.delivery_location if data.fulfillment == "delivery" else None,
+            payment_method=data.payment_method,
+            change_for=change_for,
             items=[l.as_json() for l in lines],
-            total=sum((l.subtotal for l in lines), start=0),
+            total=total,
             client_ip=_client_ip(request),
         )
         session.add(online_order)

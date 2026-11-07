@@ -64,6 +64,12 @@ class OnlineOrder(Base, UUIDMixin, TimestampMixin):
     customer_name: Mapped[str] = mapped_column(String(80), nullable=False)
     customer_phone: Mapped[str] = mapped_column(String(20), nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Entrega: onde, descrito pelo cliente (opcional — "barraca 3", "casa azul perto da igreja")
+    delivery_location: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # Como o cliente vai pagar (cash/pix/credit/debit) — só informativo; o
+    # pagamento de verdade é registrado na comanda. Pix: a casa manda a chave no WhatsApp.
+    payment_method: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    change_for: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)  # dinheiro: troco pra quanto
     items: Mapped[list[dict]] = mapped_column(JSONB, nullable=False)
     total: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     client_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)

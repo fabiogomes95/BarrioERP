@@ -87,7 +87,11 @@ PUBLIC_MENU_HOURS={"qui":"18:00-","sex":"18:00-","sab":"18:00-","dom":"18:00-"}
 
 **Cliente:** monta o pedido (inclui **pizza meio a meio** — cobra a metade
 mais cara — e escolhe o **sabor do churrasco**), preenche nome, WhatsApp e
-**entrega ou retirada** (entrega só na Praia de Barra do Rio, sem endereço).
+**entrega ou retirada** (entrega só na Praia de Barra do Rio). Opcionais:
+**onde entregar** ("barraca 3, casa azul perto da igreja") e **como vai pagar**
+(Dinheiro — com "troco para quanto?" —, Pix, Crédito ou Débito). Tudo isso vai
+na mensagem do WhatsApp, no card do pedido e na nota da comanda. **Pix:** a
+casa manda a chave pelo WhatsApp (o sistema não guarda nem gera chave).
 Ao tocar em **Enviar pedido**: o pedido entra no Barrio **e** o WhatsApp do
 bar abre com a mensagem pronta (ele envia se quiser).
 
@@ -137,6 +141,10 @@ Reinicie `BarrioERP-Backend` depois de mudar.
 ---
 
 ## 6. Comandas — novidades
+
+- **Tema** na mesma linha do cardápio ("Areia & Terracota": papel pêssego,
+  terracota nos botões, títulos em Cormorant, texto em Poppins), claro e escuro.
+  Tudo em `frontend/src/index.css` — trocar a paleta muda o app inteiro.
 
 - **Receber/fechar conta sem precisar atualizar a página.** Causa corrigida:
   o servidor respondia "OK" antes de gravar no banco (FastAPI ≥ 0.118); agora
