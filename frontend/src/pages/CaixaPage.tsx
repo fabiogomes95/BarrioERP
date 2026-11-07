@@ -1,14 +1,15 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  type DailyReport, type Order, type Table, type CashSession, type PeriodReport,
-  fetchDailyReport, fetchHistory, fetchTables, fetchCurrentCash, fetchPeriodReport,
+  type DailyReport, type Order, type Table, type CashSession, type PeriodReport, type ShiftReport,
+  fetchDailyReport, fetchHistory, fetchTables, fetchCurrentCash, fetchPeriodReport, fetchShiftReport,
   openCash, addCashMovement, closeCash, getUser,
 } from '../lib/api'
 import { brl } from '../components/OrderDetailView'
 import { maskCurrency, parseCurrency } from '../lib/format'
 import { inputCls } from '../components/ui'
 import { exportDailyReportCSV, printDailyReport } from '../lib/reportExport'
+import OnlineOrdersReport from '../components/OnlineOrdersReport'
 
 const METHOD_LABEL: Record<string, string> = {
   cash: 'Dinheiro', credit_card: 'Crédito', debit_card: 'Débito',
@@ -37,6 +38,31 @@ function firstDayOfMonthISO() {
 
 function fmtDatePt(iso: string) {
   return new Date(iso + 'T12:00:00').toLocaleDateString('pt-BR')
+}
+
+// Formato aceito por <input type="datetime-local">: "YYYY-MM-DDTHH:mm" (hora local).
+function toDateTimeLocal(d: Date) {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+// Turno padrão: "ontem às 16h" até "hoje às 06h" — cobre o horário típico de
+// um bar que fecha de madrugada. O usuário ajusta livremente nos campos.
+function defaultShiftStart() {
+  const d = new Date()
+  d.setDate(d.getDate() - 1)
+  d.setHours(16, 0, 0, 0)
+  return toDateTimeLocal(d)
+}
+
+function defaultShiftEnd() {
+  const d = new Date()
+  d.setHours(6, 0, 0, 0)
+  return toDateTimeLocal(d)
+}
+
+function fmtDateTimePt(iso: string) {
+  return new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
 }
 
 function timeOf(iso: string | null) {
@@ -383,10 +409,12 @@ function CashPanel({ session, onRefresh }: { session: CashSession | null; onRefr
 function PeriodView({ report }: { report: PeriodReport }) {
   return (
     <>
-      <div className="grid grid-cols-3 gap-3 mb-5">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
         <StatCard label="Faturado" value={brl(report.revenue_total)} accent="green" />
         <StatCard label="Comandas" value={String(report.orders_count)} accent="stone" />
         <StatCard label="Ticket médio" value={brl(report.average_ticket)} accent="amber" />
+        <StatCard label="10% Garçom" value={brl(report.service_fee_total)} accent="amber"
+          hint="Taxa de serviço" />
       </div>
 
       <div className="rounded-2xl border border-stone-800/60 overflow-hidden mb-5"
@@ -458,16 +486,83 @@ function PeriodView({ report }: { report: PeriodReport }) {
   )
 }
 
+// ── Relatório por turno (intervalo exato de data/hora) ──────────────────────────
+
+function ShiftView({ report }: { report: ShiftReport }) {
+  return (
+    <>
+      <p className="text-stone-500 text-xs mb-4">
+        Turno de {fmtDateTimePt(report.start)} até {fmtDateTimePt(report.end)}
+      </p>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+        <StatCard label="Faturado" value={brl(report.revenue_total)} accent="green" />
+        <StatCard label="Comandas" value={String(report.orders_count)} accent="stone" />
+        <StatCard label="Ticket médio" value={brl(report.average_ticket)} accent="amber" />
+        <StatCard label="10% Garçom" value={brl(report.service_fee_total)} accent="amber"
+          hint="Taxa de serviço" />
+      </div>
+
+      <div className="rounded-2xl border border-stone-800/60 overflow-hidden mb-5"
+           style={{ background: 'var(--color-app-surface)' }}>
+        <div className="px-4 py-3 border-b border-stone-800/50">
+          <h2 className="text-stone-200 text-sm font-bold">Por forma de pagamento</h2>
+        </div>
+        {report.by_payment_method.length === 0 ? (
+          <p className="text-stone-600 text-xs px-4 py-4">Nenhum pagamento registrado no turno</p>
+        ) : (
+          report.by_payment_method.map(m => (
+            <div key={m.method} className="flex items-center justify-between px-4 py-2.5
+                                            border-b border-stone-800/30 last:border-0">
+              <span className="text-stone-300 text-sm">{METHOD_LABEL[m.method] ?? m.method}
+                <span className="text-stone-600 text-xs ml-2">({m.count})</span>
+              </span>
+              <span className="text-stone-200 text-sm font-semibold">{brl(m.total)}</span>
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className="rounded-2xl border border-stone-800/60 overflow-hidden"
+           style={{ background: 'var(--color-app-surface)' }}>
+        <div className="px-4 py-3 border-b border-stone-800/50">
+          <h2 className="text-stone-200 text-sm font-bold">Itens mais vendidos</h2>
+        </div>
+        {report.top_items.length === 0 ? (
+          <p className="text-stone-600 text-xs px-4 py-4">Nada vendido no turno</p>
+        ) : (
+          report.top_items.map((it, i) => (
+            <div key={it.name} className="flex items-center justify-between gap-3 px-4 py-2.5
+                                          border-b border-stone-800/30 last:border-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="text-stone-600 text-xs font-bold w-4 shrink-0">{i + 1}</span>
+                <span className="text-stone-300 text-sm truncate">{it.name}</span>
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                <span className="text-amber-400 text-sm font-bold">{it.quantity}×</span>
+                <span className="text-stone-500 text-xs w-20 text-right">{brl(it.total)}</span>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </>
+  )
+}
+
 // ── Página Caixa ──────────────────────────────────────────────────────────────
 
 export default function CaixaPage() {
   const navigate = useNavigate()
-  const [scope, setScope] = useState<'day' | 'period'>('day')
+  const [scope, setScope] = useState<'day' | 'period' | 'shift'>('day')
   const [day, setDay] = useState(todayISO())
   const [periodStart, setPeriodStart] = useState(daysAgoISO(6))
   const [periodEnd, setPeriodEnd] = useState(todayISO())
+  const [shiftStart, setShiftStart] = useState(defaultShiftStart())
+  const [shiftEnd, setShiftEnd] = useState(defaultShiftEnd())
   const [report, setReport] = useState<DailyReport | null>(null)
   const [periodReport, setPeriodReport] = useState<PeriodReport | null>(null)
+  const [shiftReport, setShiftReport] = useState<ShiftReport | null>(null)
   const [history, setHistory] = useState<Order[]>([])
   const [tables, setTables] = useState<Table[]>([])
   const [cashSession, setCashSession] = useState<CashSession | null | undefined>(undefined)
@@ -494,6 +589,11 @@ export default function CaixaPage() {
         setTables(ts)
         return
       }
+      if (scope === 'shift') {
+        const rep = await fetchShiftReport(shiftStart, shiftEnd)
+        setShiftReport(rep)
+        return
+      }
       const [rep, hist, ts, cash] = await Promise.all([
         fetchDailyReport(day), fetchHistory(100, day), fetchTables(), fetchCurrentCash(),
       ])
@@ -506,7 +606,7 @@ export default function CaixaPage() {
     } finally {
       setLoading(false)
     }
-  }, [scope, day, periodStart, periodEnd])
+  }, [scope, day, periodStart, periodEnd, shiftStart, shiftEnd])
 
   useEffect(() => { load() }, [load])
 
@@ -521,7 +621,7 @@ export default function CaixaPage() {
             <p className="text-stone-500 text-sm mt-1">Faturamento e histórico de comandas</p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Dia único x Período */}
+            {/* Dia único x Período x Turno */}
             <div className="flex gap-1 p-1 rounded-xl" style={{ background: 'var(--color-app-bg)' }}>
               <button onClick={() => setScope('day')}
                 className={['px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors',
@@ -533,9 +633,29 @@ export default function CaixaPage() {
                   scope === 'period' ? 'bg-amber-500/15 text-amber-400' : 'text-stone-500 hover:text-stone-300'].join(' ')}>
                 Período
               </button>
+              <button onClick={() => setScope('shift')}
+                title="Intervalo exato de data/hora — ex.: turno de bar que vira a madrugada"
+                className={['px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors',
+                  scope === 'shift' ? 'bg-amber-500/15 text-amber-400' : 'text-stone-500 hover:text-stone-300'].join(' ')}>
+                Turno
+              </button>
             </div>
 
-            {scope === 'day' ? (
+            {scope === 'shift' ? (
+              <>
+                <input type="datetime-local" value={shiftStart}
+                  onChange={e => setShiftStart(e.target.value)}
+                  className="rounded-xl px-3 py-2 text-sm border border-stone-800/60 text-stone-200
+                             focus:outline-none focus:border-amber-500/40 transition-all"
+                  style={{ background: 'var(--color-app-surface)' }} />
+                <span className="text-stone-600 text-xs">até</span>
+                <input type="datetime-local" value={shiftEnd}
+                  onChange={e => setShiftEnd(e.target.value)}
+                  className="rounded-xl px-3 py-2 text-sm border border-stone-800/60 text-stone-200
+                             focus:outline-none focus:border-amber-500/40 transition-all"
+                  style={{ background: 'var(--color-app-surface)' }} />
+              </>
+            ) : scope === 'day' ? (
               <>
                 <input type="date" value={day} max={todayISO()} onChange={e => setDay(e.target.value)}
                   className="rounded-xl px-3 py-2 text-sm border border-stone-800/60 text-stone-200
@@ -611,13 +731,17 @@ export default function CaixaPage() {
           <div className="text-center py-16 text-stone-600 text-sm">Carregando…</div>
         ) : scope === 'period' ? (
           periodReport && <PeriodView report={periodReport} />
+        ) : scope === 'shift' ? (
+          shiftReport && <ShiftView report={shiftReport} />
         ) : report && (
           <>
             {/* Métricas do dia */}
-            <div className="grid grid-cols-3 gap-3 mb-5">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
               <StatCard label="Faturado" value={brl(report.revenue_total)} accent="green" />
               <StatCard label="Comandas" value={String(report.orders_count)} accent="stone" />
               <StatCard label="Ticket médio" value={brl(report.average_ticket)} accent="amber" />
+              <StatCard label="10% Garçom" value={brl(report.service_fee_total)} accent="amber"
+                hint="Taxa de serviço" />
             </div>
 
             {/* Por forma de pagamento */}
@@ -711,7 +835,22 @@ export default function CaixaPage() {
             </div>
           </>
         )}
+
+        {/* Pedidos do cardápio online — mesmo intervalo do relatório acima */}
+        <OnlineOrdersReport {...onlineRange(scope, day, periodStart, periodEnd, shiftStart, shiftEnd)} />
       </div>
     </div>
   )
+}
+
+/** Intervalo [start, end) no formato datetime-local, conforme o modo do relatório. */
+function onlineRange(
+  scope: 'day' | 'period' | 'shift',
+  day: string, periodStart: string, periodEnd: string, shiftStart: string, shiftEnd: string,
+): { start: string; end: string } {
+  if (scope === 'shift') return { start: shiftStart, end: shiftEnd }
+  const first = scope === 'day' ? day : periodStart
+  const last = new Date((scope === 'day' ? day : periodEnd) + 'T00:00')
+  last.setDate(last.getDate() + 1)
+  return { start: `${first}T00:00`, end: toDateTimeLocal(last) }
 }

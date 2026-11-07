@@ -353,13 +353,41 @@ function TopBar({ onMenu }: { onMenu: () => void }) {
 // ── Layout principal ──────────────────────────────────────────────────────────
 
 function BillRequestToasts() {
-  const { alerts, dismiss } = useBillRequestAlerts()
+  const { alerts, dismiss, onlineAlerts, dismissOnline } = useBillRequestAlerts()
   const navigate = useNavigate()
 
-  if (alerts.length === 0) return null
+  if (alerts.length === 0 && onlineAlerts.length === 0) return null
 
   return (
     <div className="fixed top-3 right-3 z-[100] flex flex-col gap-2 w-[calc(100%-1.5rem)] max-w-sm">
+      {onlineAlerts.map(a => (
+        <div key={a.id}
+          className="flex items-center gap-3 rounded-xl border border-emerald-500/30 shadow-lg px-3.5 py-3"
+          style={{ background: 'var(--color-app-surface)' }}>
+          <div className="w-9 h-9 rounded-full bg-emerald-500/15 flex items-center justify-center shrink-0 text-lg">
+            {a.fulfillment === 'delivery' ? '🛵' : '📦'}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-stone-100 text-sm font-semibold">Pedido online #{a.number}</p>
+            <p className="text-stone-400 text-xs truncate">
+              {a.customerName} · {a.fulfillment === 'delivery' ? 'Entrega' : 'Retirada'} · R$ {Number(a.total).toFixed(2).replace('.', ',')}
+            </p>
+          </div>
+          <button
+            onClick={() => { dismissOnline(a.id); navigate('/pedidos') }}
+            className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 px-2 py-1 shrink-0">
+            Ver
+          </button>
+          <button
+            onClick={() => dismissOnline(a.id)}
+            aria-label="Dispensar"
+            className="text-stone-500 hover:text-stone-300 shrink-0">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      ))}
       {alerts.map(a => (
         <div key={a.id}
           className="flex items-center gap-3 rounded-xl border border-orange-500/30 shadow-lg px-3.5 py-3"

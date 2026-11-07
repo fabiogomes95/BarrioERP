@@ -28,6 +28,7 @@ from app.api.v1.endpoints import (
     menu,
     notifications,
     onboarding,
+    online_orders,
     orders,
     payments,
     reports,
@@ -61,6 +62,12 @@ api_router.include_router(
     orders.router,
     prefix="/orders",
     tags=["orders"],
+)
+
+api_router.include_router(
+    online_orders.router,
+    prefix="/online-orders",
+    tags=["online-orders"],
 )
 
 # Payments usa rotas mistas (/payments e /orders/{id}/...) — sem prefix
