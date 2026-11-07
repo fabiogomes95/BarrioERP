@@ -60,7 +60,16 @@ from app.models.user import User, UserRole
 
 # Tipo anotado que injeta uma AsyncSession via get_db()
 # Uso: async def handler(session: DBSession)
-DBSession = Annotated[AsyncSession, Depends(get_db)]
+#
+# scope="function" é OBRIGATÓRIO: sem ele (padrão "request", FastAPI >= 0.118)
+# o commit() do get_db só roda DEPOIS que a resposta já saiu pro navegador.
+# A tela recebia "201 OK" do pagamento, buscava a lista de pagamentos na mesma
+# hora e às vezes lia o banco ANTES do commit — continuava mostrando "Falta
+# R$ X", o caixa registrava de novo e levava "comanda já está totalmente paga",
+# e o botão de finalizar só aparecia depois de atualizar a página.
+# Com "function", o commit acontece antes da resposta: quem recebe OK já
+# encontra o dado gravado.
+DBSession = Annotated[AsyncSession, Depends(get_db, scope="function")]
 
 # ── OAuth2 Scheme ─────────────────────────────────────────────────────────────
 
