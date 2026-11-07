@@ -2,11 +2,12 @@ import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   type FiadoCustomerGroup, type Order,
-  fetchFiadoGrouped, fetchOrderPayments, registerPayment, voidPayment, reopenOrder, fetchOrder,
+  fetchFiadoGrouped, fetchOrderPayments, registerPayment, voidPayment, reopenOrder, fetchOrder, getUser,
   type Payment, type PaymentMethod,
 } from '../lib/api'
 import { maskCurrency, parseCurrency, toCurrencyInput } from '../lib/format'
 import { inputCls, ErrorBanner, Spinner, ModalOverlay } from '../components/ui'
+import { shareFiadoStatementWhatsApp } from '../lib/receiptImage'
 
 function brl(v: string | number) {
   return Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -422,14 +423,41 @@ function CustomerGroup({
   reopeningId?: string | null
 }) {
   const [collapsed, setCollapsed] = useState(true)
+  const [sharing, setSharing] = useState(false)
+  const [shareHint, setShareHint] = useState<string | null>(null)
+  const [shareError, setShareError] = useState<string | null>(null)
   const count = group.entries.length
+
+  async function handleShareWhatsApp(e: React.MouseEvent) {
+    e.stopPropagation()
+    setShareError(null)
+    setShareHint(null)
+    setSharing(true)
+    try {
+      const result = await shareFiadoStatementWhatsApp(
+        group.customer_name, group.entries, getUser()?.company_name ?? 'Barrio',
+      )
+      if (result === 'downloaded') {
+        setShareHint('Imagem baixada — anexe no WhatsApp Web que abriu em outra aba')
+        setTimeout(() => setShareHint(null), 6000)
+      }
+    } catch (err) {
+      if (err instanceof Error && err.name !== 'AbortError') {
+        setShareError('Erro ao gerar extrato para o WhatsApp')
+      }
+    } finally {
+      setSharing(false)
+    }
+  }
 
   return (
     <div className="rounded-2xl border border-stone-800/60 overflow-hidden"
          style={{ background: 'var(--color-app-surface-2)' }}>
       {/* Header do grupo */}
-      <button onClick={() => setCollapsed(!collapsed)}
-        className="w-full flex items-center justify-between px-5 py-4 hover:bg-stone-800/30 transition-colors text-left">
+      <div role="button" tabIndex={0}
+        onClick={() => setCollapsed(!collapsed)}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCollapsed(!collapsed) } }}
+        className="w-full flex items-center justify-between px-5 py-4 hover:bg-stone-800/30 transition-colors text-left cursor-pointer">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-stone-800 flex items-center justify-center text-sm font-bold text-amber-400">
             {group.customer_name.charAt(0).toUpperCase()}
@@ -442,7 +470,26 @@ function CustomerGroup({
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleShareWhatsApp}
+            disabled={sharing}
+            title="Enviar toda a dívida do cliente pelo WhatsApp"
+            className="shrink-0 flex items-center justify-center w-9 h-9 rounded-xl
+                       border border-stone-700/60 text-stone-400 hover:text-green-400
+                       hover:border-stone-600/60 disabled:opacity-40 transition-all">
+            {sharing ? (
+              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 004.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.86 9.86 0 0012.04 2zm0 18.13h-.01a8.2 8.2 0 01-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.22 8.22 0 01-1.26-4.36c0-4.54 3.7-8.24 8.26-8.24 2.2 0 4.27.86 5.83 2.42a8.18 8.18 0 012.41 5.82c0 4.55-3.7 8.24-8.25 8.24zm4.52-6.17c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.17.24-.64.8-.78.97-.14.16-.29.18-.53.06-.25-.12-1.05-.39-1.99-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.24-.02-.38.11-.5.11-.11.25-.29.37-.43.12-.15.16-.24.24-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43-.14-.01-.31-.01-.48-.01a.92.92 0 00-.67.31c-.23.24-.87.85-.87 2.08 0 1.22.89 2.41 1.01 2.57.12.16 1.75 2.67 4.24 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.55.1.47-.07 1.47-.6 1.68-1.18.21-.58.21-1.07.14-1.18-.06-.1-.22-.16-.47-.28z" />
+              </svg>
+            )}
+          </button>
           <div className="text-right">
             <p className="text-[10px] text-stone-600 uppercase tracking-wider">Débito total</p>
             <p className="text-amber-400 font-black text-lg">{brl(group.total_remaining)}</p>
@@ -452,7 +499,14 @@ function CustomerGroup({
             <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
           </svg>
         </div>
-      </button>
+      </div>
+
+      {(shareHint || shareError) && (
+        <div className="px-5 -mt-1 pb-2">
+          {shareHint && <p className="text-green-400 text-xs">{shareHint}</p>}
+          {shareError && <p className="text-red-400 text-xs">{shareError}</p>}
+        </div>
+      )}
 
       {/* Lista de entradas — lado a lado quando o cliente tem mais de uma comanda em fiado */}
       {!collapsed && (

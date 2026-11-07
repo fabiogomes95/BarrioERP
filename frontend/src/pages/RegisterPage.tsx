@@ -52,10 +52,8 @@ export default function RegisterPage() {
 
         {/* Marca */}
         <div className="text-center mb-8 select-none">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl
-                          border border-amber-500/20 mb-4 text-xl"
-            style={{ background: 'rgba(245,158,11,0.07)' }}>
-            🍺
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl overflow-hidden mb-4">
+            <img src="/icon-barrio-192.png" alt="Barrio" className="w-full h-full object-cover" />
           </div>
           <h1 className="text-xl font-bold text-stone-100 tracking-tight">Criar seu bar</h1>
           <p className="text-stone-600 text-xs mt-1">Comece a gerenciar em 1 minuto</p>

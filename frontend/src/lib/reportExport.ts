@@ -38,6 +38,7 @@ export function exportDailyReportCSV(
   lines.push(csvRow(['Faturado', brl(report.revenue_total)]))
   lines.push(csvRow(['Comandas', report.orders_count]))
   lines.push(csvRow(['Ticket médio', brl(report.average_ticket)]))
+  lines.push(csvRow(['10% Garçom (taxa de serviço)', brl(report.service_fee_total)]))
   lines.push('')
 
   lines.push(csvRow(['Forma de pagamento', 'Quantidade', 'Total']))
@@ -124,7 +125,7 @@ export function printDailyReport(
   body { font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; margin: 0; }
   h1 { font-size: 20px; margin: 0 0 2px; }
   .sub { color: #666; font-size: 12px; margin-bottom: 20px; }
-  .stats { display: flex; gap: 16px; margin-bottom: 24px; }
+  .stats { display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
   .stat { flex: 1; border: 1px solid #ddd; border-radius: 8px; padding: 10px 14px; }
   .stat .label { font-size: 10px; text-transform: uppercase; color: #888; letter-spacing: .05em; }
   .stat .value { font-size: 18px; font-weight: bold; margin-top: 2px; }
@@ -146,6 +147,7 @@ export function printDailyReport(
     <div class="stat"><div class="label">Faturado</div><div class="value">${brl(report.revenue_total)}</div></div>
     <div class="stat"><div class="label">Comandas</div><div class="value">${report.orders_count}</div></div>
     <div class="stat"><div class="label">Ticket médio</div><div class="value">${brl(report.average_ticket)}</div></div>
+    <div class="stat"><div class="label">10% Garçom</div><div class="value">${brl(report.service_fee_total)}</div></div>
   </div>
 
   <h2>Por forma de pagamento</h2>
