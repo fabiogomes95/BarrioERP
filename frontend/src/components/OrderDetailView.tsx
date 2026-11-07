@@ -410,9 +410,15 @@ function AddItemModal({
     <div className="fixed inset-0 z-50 flex flex-col sm:items-center sm:justify-center sm:p-4"
          style={{ background: 'rgba(0,0,0,0.75)' }}
          onClick={onClose}>
-      <div className="w-full h-[100dvh] sm:h-auto sm:max-w-md sm:max-h-[85dvh] sm:rounded-3xl
+      {/* flex-1 (não 100dvh): o pai já é fixo nas 4 bordas — o dvh fica errado
+          no Android depois do "puxar pra atualizar" (ver Layout) */}
+      <div className="w-full flex-1 min-h-0 sm:flex-none sm:h-auto sm:max-w-md sm:max-h-[85dvh] sm:rounded-3xl
                       overflow-y-auto overscroll-contain flex flex-col p-5"
-           style={{ background: 'var(--color-app-surface)' }}
+           style={{
+             background: 'var(--color-app-surface)',
+             paddingTop: 'max(1.25rem, env(safe-area-inset-top))',
+             paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))',
+           }}
            onClick={e => e.stopPropagation()}>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-stone-100 text-base font-bold">Adicionar item</h2>

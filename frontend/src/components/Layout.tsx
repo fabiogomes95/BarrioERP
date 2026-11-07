@@ -464,8 +464,13 @@ export default function Layout() {
   // área sob a barra de gestos e o rodapé de ações voltava a ficar cortado.
   // Com viewport-fit=cover (index.html) o navegador informa o tamanho dessas
   // barras; onde não há sobreposição o valor é 0 e nada muda.
+  //
+  // fixed inset-0 em vez de h-dvh: depois do "puxar pra atualizar" o Chrome
+  // do Android recalcula o dvh errado (~65px a mais) e o rodapé descia pra
+  // trás da barra de gestos de novo. Um container fixo nas 4 bordas é
+  // sempre recalculado pelo tamanho real da tela visível.
   return (
-    <div className="flex flex-col h-dvh" style={{
+    <div className="fixed inset-0 flex flex-col" style={{
       background: 'var(--color-app-bg)',
       paddingTop: 'env(safe-area-inset-top)',
       paddingBottom: 'env(safe-area-inset-bottom)',
