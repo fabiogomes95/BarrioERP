@@ -19,17 +19,27 @@ from uuid import UUID
 
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.api.deps import CurrentUser, CurrentUserSSE, DBSession
 from app.core import events
+from app.services import direct_print
 
 router = APIRouter()
 
 
+class KitchenItemIn(BaseModel):
+    name: str = Field(max_length=200)
+    qty: int = Field(ge=1, le=99)
+    notes: str | None = Field(default=None, max_length=300)
+
+
 class PrintRequestIn(BaseModel):
     order_id: UUID
-    print_type: Literal["comanda"] = "comanda"
+    print_type: Literal["comanda", "cozinha"] = "comanda"
+    # Cozinha: itens escolhidos na tela (ex: só o item recém-lançado).
+    # Sem lista = todos os itens da comanda que vão pra cozinha.
+    items: list[KitchenItemIn] | None = Field(default=None, max_length=60)
 
 
 @router.get(
@@ -89,11 +99,23 @@ async def request_print(
     session: DBSession,
     current_user: CurrentUser,
 ) -> dict:
+    # Térmica ligada neste PC: imprime direto, sem navegador (o window.print()
+    # disparado por SSE era bloqueado pelo Chrome como pop-up e o alert()
+    # travava a tela do caixa). Sem impressora configurada ou se falhar, cai
+    # no caminho antigo (evento pro PC marcado como "impressora do bar").
+    if current_user.establishment_id is not None:
+        items = [(i.qty, i.name, i.notes) for i in data.items] if data.items else None
+        printed = await direct_print.print_or_fallback(
+            data.print_type, current_user.company_id, current_user.establishment_id, data.order_id,
+            items=items,
+        )
+        return {"status": "printed" if printed else "sent"}
+
     await events.publish(
         session,
         "print.request",
         company_id=str(current_user.company_id),
-        establishment_id=str(current_user.establishment_id) if current_user.establishment_id else None,
+        establishment_id=None,
         order_id=str(data.order_id),
         print_type=data.print_type,
     )
