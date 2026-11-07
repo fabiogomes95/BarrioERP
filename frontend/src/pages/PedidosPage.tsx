@@ -630,6 +630,34 @@ export default function PedidosPage() {
   }
   function clearSelection() { setSelected(new Set()) }
 
+  // Cabeçalho (título + busca) some ao rolar pra baixo e volta ao rolar pra
+  // cima. Nunca some selecionando comandas (a barra Mesclar/Apagar mora nele)
+  // nem com a busca em uso.
+  const [headerHidden, setHeaderHidden] = useState(false)
+  const [searchFocused, setSearchFocused] = useState(false)
+  const lastScrollY = useRef(0)
+  const scrollLockUntil = useRef(0)
+  const headerVisible = !headerHidden || selecting || searchFocused
+
+  function onListScroll(e: React.UIEvent<HTMLDivElement>) {
+    const y = e.currentTarget.scrollTop
+    // Durante a animação a área da lista muda de altura e o navegador pode
+    // reposicionar o scroll — ignora esses eventos pra não ficar piscando
+    if (Date.now() < scrollLockUntil.current) { lastScrollY.current = y; return }
+    const dy = y - lastScrollY.current
+    let next: boolean | null = null
+    if (y < 40) next = false            // perto do topo: sempre visível
+    else if (dy > 12) next = true       // descendo
+    else if (dy < -12) next = false     // subindo
+    if (next !== null) {
+      lastScrollY.current = y
+      if (next !== headerHidden) {
+        setHeaderHidden(next)
+        scrollLockUntil.current = Date.now() + 350
+      }
+    }
+  }
+
   useEffect(() => {
     if (!selecting) return
     const h = (e: KeyboardEvent) => { if (e.key === 'Escape') clearSelection() }
@@ -682,8 +710,12 @@ export default function PedidosPage() {
   return (
     <div className="h-full flex flex-col">
 
-      {/* Cabeçalho */}
-      <div className="px-5 pt-5 pb-4 border-b border-stone-800/50 shrink-0"
+      {/* Cabeçalho — some ao rolar a lista pra baixo (mais tela pras comandas)
+          e volta ao rolar pra cima. grid-rows 1fr→0fr anima a altura até zero. */}
+      <div className="grid shrink-0 transition-[grid-template-rows] duration-300 ease-out"
+           style={{ gridTemplateRows: headerVisible ? '1fr' : '0fr' }}>
+      <div className="overflow-hidden min-h-0">
+      <div className="px-5 pt-5 pb-4 border-b border-stone-800/50"
            style={{ background: 'var(--color-app-surface-2)' }}>
         {selecting ? (
           <div className="flex items-center justify-between gap-3 mb-4 min-h-[42px]">
@@ -757,6 +789,7 @@ export default function PedidosPage() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 105 11a6 6 0 0012 0z" />
           </svg>
           <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+            onFocus={() => setSearchFocused(true)} onBlur={() => setSearchFocused(false)}
             placeholder="Buscar por mesa, cliente ou comanda avulsa…"
             className="w-full pl-9 pr-4 py-2.5 rounded-xl text-sm border border-stone-800/60
                        text-stone-200 placeholder-stone-600 focus:outline-none
@@ -772,9 +805,11 @@ export default function PedidosPage() {
           )}
         </div>
       </div>
+      </div>
+      </div>
 
       {/* Conteúdo */}
-      <div className="flex-1 overflow-auto p-4">
+      <div className="flex-1 overflow-auto p-4" onScroll={onListScroll}>
         {canHandleOnline && <OnlineOrdersPanel onAccepted={load} />}
 
         {error && (
