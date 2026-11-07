@@ -139,6 +139,15 @@ class OrderItemAdd(BaseSchema):
         max_length=300,
         description="Observações do item (ex: 'sem cebola', 'ao ponto').",
     )
+    complemento: str | None = Field(
+        default=None,
+        max_length=60,
+        description="Opção obrigatória do item (ex: 'frango' no Churrasco). Exige menu_item_id.",
+    )
+    half_with: UUID | None = Field(
+        default=None,
+        description="Pizza meio a meio: a outra metade. Exige menu_item_id; cobra a metade mais cara.",
+    )
 
     @model_validator(mode="after")
     def validate_item_source(self) -> "OrderItemAdd":
@@ -160,6 +169,10 @@ class OrderItemAdd(BaseSchema):
                 raise ValueError(
                     "unit_price é obrigatório quando menu_item_id não é informado."
                 )
+            if self.complemento or self.half_with:
+                raise ValueError("complemento/half_with exigem menu_item_id.")
+        if self.complemento and self.half_with:
+            raise ValueError("Use complemento OU meio a meio, não os dois.")
         return self
 
 
@@ -262,6 +275,12 @@ class OrderCreate(BaseSchema):
         max_length=500,
         description="Observações gerais da comanda (ex: 'aniversariante na mesa').",
     )
+
+
+class OrderMerge(BaseSchema):
+    """Comandas que serão mescladas na comanda do path (POST /orders/{id}/merge)."""
+
+    source_ids: list[UUID] = Field(min_length=1, max_length=20)
 
 
 class OrderClose(BaseSchema):

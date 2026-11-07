@@ -92,6 +92,7 @@ from decimal import Decimal
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import func, select, update
 from sqlalchemy.orm.exc import StaleDataError
 
 from app.core import events
@@ -104,7 +105,7 @@ from app.core.exceptions import (
 )
 from app.models.establishment import Establishment
 from app.models.order import Order, OrderItem, OrderItemStatus, OrderStatus, OrderType
-from app.models.payment import PaymentStatus
+from app.models.payment import Payment, PaymentStatus
 from app.models.table import Table, TableStatus
 from app.repositories.order_repository import OrderRepository
 from app.repositories.table_repository import TableRepository
@@ -115,6 +116,7 @@ from app.schemas.report import (
     FiadoEntry,
     PaymentMethodTotal,
     PeriodReport,
+    ShiftReport,
     TopItem,
 )
 from app.schemas.order import (
@@ -128,6 +130,7 @@ from app.schemas.order import (
     OrderResponse,
 )
 from app.services.base import BaseService
+from app.services.online_order_pricing import half_pizza_name, is_pizza_category
 from app.services.stock_service import StockService
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -439,17 +442,42 @@ class OrderService(BaseService):
             item_name = menu_item.name
             unit_price = menu_item.price
             menu_item_id = menu_item.id
+            sends_to_kitchen = menu_item.category.sends_to_kitchen
+            # Baixa de estoque: (item do cardápio, quantas receitas)
+            stock_parts: list[tuple[UUID, Decimal]] = [(menu_item.id, Decimal(data.quantity))]
+
+            if data.half_with is not None and data.half_with != menu_item.id:
+                # Pizza meio a meio: "Pizza Calabresa / Mussarela", preço da
+                # metade mais cara, meia receita de cada sabor. Sem menu_item_id
+                # único (são dois) — set_item_quantity escala a baixa já feita.
+                other = await self._order_repo.get_available_menu_item(data.half_with, establishment_id)
+                if other is None:
+                    raise NotFoundError("MenuItem", data.half_with)
+                if not (is_pizza_category(menu_item.category.name) and is_pizza_category(other.category.name)):
+                    raise BusinessRuleError("Meio a meio é só para pizzas.")
+                item_name = half_pizza_name(menu_item.name, other.name)
+                unit_price = max(menu_item.price, other.price)
+                menu_item_id = None
+                sends_to_kitchen = sends_to_kitchen or other.category.sends_to_kitchen
+                half = Decimal(data.quantity) / 2
+                stock_parts = [(menu_item.id, half), (other.id, half)]
+            elif data.complemento:
+                # Ex: "Churrasco - frango" — continua ligado ao Churrasco
+                # (cozinha, estoque e relatório por item funcionam normal)
+                if data.complemento not in (menu_item.complementos or []):
+                    raise BusinessRuleError(f"Opção '{data.complemento}' não existe para {menu_item.name}.")
+                item_name = f"{menu_item.name} - {data.complemento}"
+
             # Categoria marcada "vai pra cozinha" → item nasce direto em SENT
             # (pula PENDING) e já aparece na fila do KDS. Itens sem essa marca
             # (ex: bebida) ficam em PENDING até o garçom marcar como servido.
-            initial_status = (
-                OrderItemStatus.SENT if menu_item.category.sends_to_kitchen else OrderItemStatus.PENDING
-            )
+            initial_status = OrderItemStatus.SENT if sends_to_kitchen else OrderItemStatus.PENDING
         else:
             # Modo manual: usa dados do request (validados no schema)
             item_name = data.item_name  # type: ignore[assignment] — garantido pelo model_validator
             unit_price = data.unit_price  # type: ignore[assignment] — garantido pelo model_validator
             menu_item_id = None
+            stock_parts = []
             # Sem menu_item_id não há como saber se precisa de cozinha —
             # fica em PENDING, igual a um item sem preparo.
             initial_status = OrderItemStatus.PENDING
@@ -484,10 +512,10 @@ class OrderService(BaseService):
             raise OptimisticLockError("Order")
 
         # Deduz estoque dos insumos da receita (se o item vier do cardápio).
-        # Itens manuais (menu_item_id=None) não têm receita — não afetam estoque.
-        if menu_item_id is not None:
+        # Itens manuais não têm receita — não afetam estoque.
+        for stock_menu_item_id, recipes in stock_parts:
             await self._stock_service.deduct_for_sale(
-                menu_item_id, data.quantity, new_item.id, establishment_id
+                stock_menu_item_id, recipes, new_item.id, establishment_id
             )
 
         await self._log_audit(
@@ -821,6 +849,12 @@ class OrderService(BaseService):
             await self._stock_service.adjust_for_quantity_change(
                 item.menu_item_id, item.id, old_quantity, quantity, establishment_id
             )
+        else:
+            # Meio a meio (meia receita de cada sabor): repete a baixa original
+            # na proporção. Item manual comum não tem baixa — não faz nada.
+            await self._stock_service.scale_for_quantity_change(
+                item.id, old_quantity, quantity, establishment_id
+            )
 
         item.quantity = quantity
         item.subtotal = item.unit_price * quantity
@@ -1150,6 +1184,103 @@ class OrderService(BaseService):
             after=self._order_snapshot(order),
         )
 
+    async def merge_orders(self, target_id: UUID, source_ids: list[UUID]) -> OrderResponse:
+        """
+        Mescla outras comandas na comanda `target_id` (ex: duas mesas que viraram
+        uma só, ou o cliente que abriu uma comanda nova sem querer).
+
+        Os itens MUDAM de comanda (UPDATE order_items.order_id) — não são
+        recriados: mantêm preço, status de cozinha e a baixa de estoque já feita.
+        As comandas de origem ficam CANCELLED com nota "Itens movidos para a comanda X"
+        (os itens agora contam na receita da comanda destino) e as mesas delas
+        são liberadas. Desconto das origens é somado no destino.
+
+        POR QUE NÃO `target.items.append(item)`:
+            items tem cascade "delete-orphan" — tirar o item da coleção da
+            comanda de origem faria o SQLAlchemy APAGAR o item.
+
+        Comanda de origem com pagamento registrado é recusada: o dinheiro ficaria
+        preso numa comanda cancelada. O caixa estorna primeiro (ou mescla ao contrário).
+        Tudo numa transação: ou mescla tudo, ou nada muda.
+        """
+        establishment_id = self._require_establishment()
+        source_ids = list(dict.fromkeys(source_ids))  # sem repetidos, mantém a ordem
+        if not source_ids:
+            raise BusinessRuleError("Escolha ao menos uma comanda para mesclar.")
+        if target_id in source_ids:
+            raise BusinessRuleError("A comanda de destino não pode estar entre as que serão mescladas.")
+
+        mergeable = (OrderStatus.OPEN, OrderStatus.BILL_REQUESTED)
+        target = await self._get_or_raise(target_id, establishment_id)
+        if target.status not in mergeable:
+            raise BusinessRuleError("A comanda de destino não está aberta.")
+        target_label = await self._order_label(target)
+
+        sources = [await self._get_or_raise(sid, establishment_id) for sid in source_ids]
+        for src in sources:
+            label = await self._order_label(src)
+            if src.status not in mergeable:
+                raise BusinessRuleError(f"A comanda '{label}' não está aberta.")
+            paid = await self.session.scalar(
+                select(func.coalesce(func.sum(Payment.amount), 0)).where(
+                    Payment.order_id == src.id, Payment.status == PaymentStatus.CONFIRMED,
+                )
+            )
+            if paid > 0:
+                raise BusinessRuleError(
+                    f"A comanda '{label}' já tem pagamento registrado (R$ {paid:.2f}). "
+                    "Estorne o pagamento antes de mesclar, ou mescle as outras nela."
+                )
+
+        before = {"target": self._order_snapshot(target),
+                  "sources": [self._order_snapshot(s) for s in sources]}
+
+        await self.session.execute(
+            update(OrderItem)
+            .where(OrderItem.order_id.in_([s.id for s in sources]))
+            .values(order_id=target.id)
+        )
+
+        now = datetime.now(UTC)
+        for src in sources:
+            target.discount += src.discount
+            src.status = OrderStatus.CANCELLED
+            src.closed_at = now
+            note = f"Itens movidos para a comanda {target_label}"
+            src.notes = f"{src.notes} · {note}"[:500] if src.notes else note
+            if src.table_id is not None and src.table_id != target.table_id:
+                table = await self._table_repo.get_by_establishment(src.table_id, establishment_id)
+                if table is not None:
+                    table.status = TableStatus.FREE
+
+        # Recarrega os itens do destino (agora com os que vieram) e recalcula total
+        await self.session.flush()
+        await self.session.refresh(target, ["items"])
+        self._recalculate_total(target)
+        try:
+            await self.session.flush()
+        except StaleDataError:
+            raise OptimisticLockError("Order")
+
+        await self._log_audit(
+            action="order.merge",
+            resource_type="order",
+            resource_id=str(target.id),
+            before=before,
+            after=self._order_snapshot(target),
+        )
+        return await self._get_or_raise(target.id, establishment_id)
+
+    async def _order_label(self, order: Order) -> str:
+        """Como a comanda aparece pro usuário: nome do cliente ou a mesa."""
+        if order.customer_name:
+            return order.customer_name
+        if order.table_id is not None:
+            table = await self._table_repo.get_by_establishment(order.table_id, order.establishment_id)
+            if table is not None:
+                return f"Mesa {table.number}"
+        return "sem nome"
+
     async def list_fiado(self) -> list[FiadoEntry]:
         """Comandas com pagamento parcial (fiado)."""
         establishment_id = self._require_establishment()
@@ -1189,19 +1320,21 @@ class OrderService(BaseService):
 
     @staticmethod
     def _aggregate_orders(orders: list[Order]) -> tuple[
-        Decimal, int, list[PaymentMethodTotal], list[TopItem], dict[date, tuple[Decimal, int]]
+        Decimal, int, list[PaymentMethodTotal], list[TopItem], dict[date, tuple[Decimal, int]], Decimal
     ]:
         """
         Agrega uma lista de comandas fechadas em: faturamento total, nº de
-        comandas, faturamento por forma de pagamento, itens mais vendidos, e
-        um dicionário {data_local: (faturamento, nº comandas)} — usado pelo
-        relatório por período pra montar o detalhamento dia a dia.
+        comandas, faturamento por forma de pagamento, itens mais vendidos, um
+        dicionário {data_local: (faturamento, nº comandas)} — usado pelo
+        relatório por período pra montar o detalhamento dia a dia — e o total
+        de taxa de serviço (10% do garçom) cobrado.
 
-        Compartilhado entre daily_report() e period_report() — a única
-        diferença entre os dois é o intervalo de datas consultado.
+        Compartilhado entre daily_report(), period_report() e shift_report()
+        — a única diferença entre eles é o intervalo consultado.
         """
         tz = ZoneInfo(settings.TIMEZONE)
         revenue_total = Decimal("0.00")
+        service_fee_total = Decimal("0.00")
         method_totals: dict[str, Decimal] = {}
         method_counts: dict[str, int] = {}
         item_qty: dict[str, int] = {}
@@ -1222,6 +1355,7 @@ class OrderService(BaseService):
                 continue
 
             revenue_total += order.total
+            service_fee_total += order.service_fee
             count += 1
 
             local_day = order.closed_at.astimezone(tz).date()
@@ -1253,7 +1387,7 @@ class OrderService(BaseService):
         top_items.sort(key=lambda x: x.quantity, reverse=True)
 
         daily_totals = {d: (v[0], v[1]) for d, v in by_day.items()}
-        return revenue_total, count, by_method, top_items, daily_totals
+        return revenue_total, count, by_method, top_items, daily_totals, service_fee_total
 
     async def daily_report(self, day: date | None = None) -> DailyReport:
         """
@@ -1273,7 +1407,7 @@ class OrderService(BaseService):
             establishment_id, start, end
         )
 
-        revenue_total, count, by_method, top_items, _ = self._aggregate_orders(orders)
+        revenue_total, count, by_method, top_items, _, service_fee_total = self._aggregate_orders(orders)
         average = (revenue_total / count) if count else Decimal("0.00")
 
         return DailyReport(
@@ -1281,6 +1415,7 @@ class OrderService(BaseService):
             revenue_total=revenue_total,
             orders_count=count,
             average_ticket=round(average, 2),
+            service_fee_total=service_fee_total,
             by_payment_method=by_method,
             top_items=top_items[:10],
         )
@@ -1311,7 +1446,7 @@ class OrderService(BaseService):
             establishment_id, start, end
         )
 
-        revenue_total, count, by_method, top_items, daily_totals = self._aggregate_orders(orders)
+        revenue_total, count, by_method, top_items, daily_totals, service_fee_total = self._aggregate_orders(orders)
         average = (revenue_total / count) if count else Decimal("0.00")
 
         breakdown = [
@@ -1325,7 +1460,49 @@ class OrderService(BaseService):
             revenue_total=revenue_total,
             orders_count=count,
             average_ticket=round(average, 2),
+            service_fee_total=service_fee_total,
             by_payment_method=by_method,
             top_items=top_items[:10],
             daily_breakdown=breakdown,
+        )
+
+    async def shift_report(self, start: datetime, end: datetime) -> ShiftReport:
+        """
+        Resumo de um turno com data/hora exatas (não precisa bater com o dia
+        de calendário) — pensado pro bar que fecha de madrugada: ex. turno de
+        05/09 16h até 06/09 05h, atravessando a virada do dia.
+
+        `start`/`end` sem fuso são tratados como horário local
+        (America/Sao_Paulo, configurável via TIMEZONE).
+
+        LANÇA:
+            BusinessRuleError (422) → start >= end, ou intervalo maior que 48h
+            (turno de bar não passa disso; evita relatório gigante/lento).
+        """
+        tz = ZoneInfo(settings.TIMEZONE)
+        if start.tzinfo is None:
+            start = start.replace(tzinfo=tz)
+        if end.tzinfo is None:
+            end = end.replace(tzinfo=tz)
+
+        if start >= end:
+            raise BusinessRuleError("O início do turno precisa ser antes do fim.")
+        if (end - start) > timedelta(hours=48):
+            raise BusinessRuleError("O turno não pode ser maior que 48 horas.")
+
+        establishment_id = self._require_establishment()
+        orders = await self._order_repo.list_closed_between(establishment_id, start, end)
+
+        revenue_total, count, by_method, top_items, _, service_fee_total = self._aggregate_orders(orders)
+        average = (revenue_total / count) if count else Decimal("0.00")
+
+        return ShiftReport(
+            start=start,
+            end=end,
+            revenue_total=revenue_total,
+            orders_count=count,
+            average_ticket=round(average, 2),
+            service_fee_total=service_fee_total,
+            by_payment_method=by_method,
+            top_items=top_items[:10],
         )
