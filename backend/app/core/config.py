@@ -77,6 +77,16 @@ class Settings(BaseSettings):
     # imprime quando alguém mandar (ex: período de testes, pra não gastar papel).
     AUTO_PRINT_ONLINE_ORDERS: bool = True
 
+    # Monitor (app/monitoring.py, tarefa BarrioERP-Monitor a cada 5 min).
+    # Avisos pelo Telegram: token do bot (@BotFather) e o chat que recebe.
+    # Vazios = o monitor só grava em logs/monitor.log.
+    ALERT_TELEGRAM_BOT_TOKEN: str | None = None
+    ALERT_TELEGRAM_CHAT_ID: str | None = None
+    # Endereço público do cardápio no PC (Funnel) — testado de fora do serviço
+    MONITOR_PUBLIC_MENU_URL: str | None = None
+    # Backup diário (fora do repositório) — avisa se ficar velho
+    MONITOR_BACKUP_FILE: str = r"D:\Users\Fabinho\Documents\BarrioERP-DB-Backup\barrio_dump.sql"
+
     @property
     def database_url(self) -> str:
         return (

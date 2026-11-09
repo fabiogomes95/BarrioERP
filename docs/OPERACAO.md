@@ -249,7 +249,28 @@ qualquer coisa** rode o backup na hora: `schtasks /run /tn "BarrioERP-DB-Backup"
 
 ---
 
-## 11. O que é público e o que não é
+## 11. Monitor (avisos quando algo cai)
+
+A tarefa **`BarrioERP-Monitor`** roda a cada 5 min (também na bateria) e verifica:
+Barrio no ar, cardápio online (local e link público), pedido online esperando
+aceite há mais de 10 min, impressora térmica, **notebook na bateria (luz caiu)**,
+backup com mais de 30h ou teste mensal reprovado, publicação do cardápio no
+GitHub e disco com menos de 10 GB.
+
+Avisa quando o problema começa, lembra a cada 2h e avisa quando volta.
+Os avisos vão pro **Telegram** (`ALERT_TELEGRAM_BOT_TOKEN` e
+`ALERT_TELEGRAM_CHAT_ID` no `backend\.env`); sem isso, ficam só em
+`logs\monitor.log`.
+
+```powershell
+cd backend
+.venv\Scripts\python.exe -m app.monitoring --verbose   # roda agora e mostra cada verificação
+.venv\Scripts\python.exe -m app.monitoring --test      # manda uma mensagem de teste
+```
+
+---
+
+## 12. O que é público e o que não é
 
 - **Público:** o cardápio (itens, preços, WhatsApp do bar) e o envio de
   pedido — que só entra numa fila de aceite, sem acesso a comandas, caixa ou login.
@@ -257,7 +278,7 @@ qualquer coisa** rode o backup na hora: `schtasks /run /tn "BarrioERP-DB-Backup"
 
 ---
 
-## 12. Pendências
+## 13. Pendências
 
 - Domínio próprio pro cardápio (ex: `cardapio.recantodabarra.com.br`) — depois.
 - Fotos dos pratos no cardápio — quando houver fotos.
