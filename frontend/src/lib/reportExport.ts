@@ -1,12 +1,9 @@
 import { type DailyReport, type Order, type Table } from './api'
+import { brl } from './format'
 
 const METHOD_LABEL: Record<string, string> = {
   cash: 'Dinheiro', credit_card: 'Crédito', debit_card: 'Débito',
   pix: 'Pix', voucher: 'Voucher', other: 'Outro',
-}
-
-function brl(v: string | number) {
-  return Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
 function esc(s: string) {

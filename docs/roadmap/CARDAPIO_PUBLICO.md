@@ -4,7 +4,7 @@
 
 - Serviço Windows **`BarrioERP-Menu-Publico`** rodando na porta **8090**, isolado do
   ERP (não carrega login/comandas/caixa, só lê o cardápio). Script de instalação:
-  `instalar_servico_cardapio_publico.ps1`.
+  `deploy/windows/instalar_servico_cardapio_publico.ps1`.
 - Página em `public_menu_static/index.html` (+ `logo.png`), visual moderno
   (banner com gradiente, cards, abas de categoria), com **pizza meio a meio**
   funcionando (cobra sempre o valor da metade mais cara).
@@ -58,7 +58,7 @@ desde a config original dos serviços).
 
 - `backend/app/public_menu.py` — app FastAPI isolado
 - `public_menu_static/index.html`, `public_menu_static/logo.png` — página pública
-- `instalar_servico_cardapio_publico.ps1` — instala o serviço Windows
+- `deploy/windows/instalar_servico_cardapio_publico.ps1` — instala o serviço Windows
 - `backend/.env` → `PUBLIC_MENU_WHATSAPP`, `PUBLIC_MENU_DISPLAY_NAME`
 - Memória: `barrioerp-cardapio-publico.md` (contexto completo da decisão/arquitetura)
 

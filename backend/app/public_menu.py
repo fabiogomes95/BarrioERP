@@ -8,7 +8,7 @@ POR QUE UM APP FASTAPI SEPARADO (em vez de um router dentro de app.main)?
     Se um dia expuséssemos essa porta pra internet (Tailscale Funnel),
     qualquer endpoint autenticado ficaria alcançável por qualquer pessoa do
     mundo — mesmo que ainda precisasse de senha, é superfície de ataque que
-    o resto do BarrioERP foi desenhado pra NUNCA ter (ver ARCHITECTURE.md).
+    o resto do BarrioERP foi desenhado pra NUNCA ter (ver docs/ARCHITECTURE.md).
 
     Este arquivo só importa o necessário pra mostrar o cardápio: sessão de
     banco e os repositories de menu/estabelecimento. Nada de auth, comandas,
@@ -20,7 +20,7 @@ POR QUE UM APP FASTAPI SEPARADO (em vez de um router dentro de app.main)?
     ninguém, porque esse código nem sabe que essas coisas existem.
 
     Roda como serviço Windows separado (BarrioERP-Menu-Publico), numa porta
-    própria (ver instalar_servico_cardapio_publico.ps1). Só ESSA porta deve
+    própria (ver deploy/windows/instalar_servico_cardapio_publico.ps1). Só ESSA porta deve
     ser exposta via `tailscale funnel` — o resto do sistema (8000/443)
     continua só na rede local/Tailscale, como sempre foi.
 
@@ -98,7 +98,7 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # A página também é publicada no GitHub Pages (abre mesmo com o PC desligado —
-# ver publicar_cardapio.ps1) e chama esta API de outro domínio. Só as origens
+# ver deploy/windows/publicar_cardapio.ps1) e chama esta API de outro domínio. Só as origens
 # listadas no .env, só leitura do cardápio + envio de pedido, sem cookies.
 if settings.PUBLIC_MENU_CORS_ORIGINS:
     app.add_middleware(

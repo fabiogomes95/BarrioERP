@@ -5,9 +5,9 @@ import {
   fetchDailyReport, fetchHistory, fetchTables, fetchCurrentCash, fetchPeriodReport, fetchShiftReport,
   openCash, addCashMovement, closeCash, getUser,
 } from '../lib/api'
-import { brl } from '../components/OrderDetailView'
+import { brl } from '../lib/format'
 import { maskCurrency, parseCurrency } from '../lib/format'
-import { inputCls } from '../components/ui'
+import { inputCls } from '../lib/styles'
 import { exportDailyReportCSV, printDailyReport } from '../lib/reportExport'
 import OnlineOrdersReport from '../components/OnlineOrdersReport'
 

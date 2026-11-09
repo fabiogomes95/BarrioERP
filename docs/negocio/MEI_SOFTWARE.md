@@ -29,7 +29,7 @@
 - [ ] Assinatura de software é **serviço** → precisa de NFS-e (nota fiscal
   de serviço eletrônica), emitida pelo portal da **prefeitura do
   município**, não pelo mesmo emissor de NFC-e do bar (que nem existe hoje
-  — foi descartado no `PENDENTE.md`). São dois sistemas de nota diferentes.
+  — foi descartado no `docs/roadmap/PENDENTE.md`). São dois sistemas de nota diferentes.
 - [ ] Verificar com a prefeitura: cadastro de ISS (Imposto Sobre Serviço)
   pra MEI — em muitos municípios o MEI é isento ou tem alíquota fixa
   simplificada, mas isso varia de cidade pra cidade. Perguntar
@@ -55,6 +55,6 @@
 - Gateway de pagamento (Stripe/Mercado Pago/Asaas) e modelo de
   assinatura/plano no sistema.
 - Infra de produção (sair do PC caseiro pra algo mais robusto).
-- Gaps de produto (estoque, reservas, KDS) — já mapeados no `PENDENTE.md`.
+- Gaps de produto (estoque, reservas, KDS) — já mapeados no `docs/roadmap/PENDENTE.md`.
 
 *Criado em 2026-07-24.*

@@ -1,4 +1,5 @@
 import { type Order, type Table, type Payment } from './api'
+import { brl } from './format'
 
 const METHOD_LABEL: Record<string, string> = {
   cash: 'Dinheiro', credit_card: 'Crédito', debit_card: 'Débito',
@@ -65,10 +66,6 @@ export function printCozinha(items: KitchenItem[], where: string) {
 
 // Recibo para impressora térmica 80mm via impressão do navegador.
 // Abre uma janela com o conteúdo formatado e dispara a impressão.
-
-function brl(v: string | number) {
-  return Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-}
 
 function esc(s: string) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')

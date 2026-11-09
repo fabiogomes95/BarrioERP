@@ -2,7 +2,7 @@
 
 > Ainda não decidido como vai ser feito nenhum dos dois — só registrando que
 > existem e vão precisar de decisão antes de vender pra terceiros. Ver
-> também `MEI_SOFTWARE.md` (parte fiscal) e `PENDENTE.md` (roadmap de
+> também `docs/negocio/MEI_SOFTWARE.md` (parte fiscal) e `docs/roadmap/PENDENTE.md` (roadmap de
 > produto, sendo trabalhado agora).
 
 ## 1. Billing / assinatura
@@ -21,7 +21,7 @@ sistema. Decisões em aberto:
 ## 2. Infra de produção
 
 Hoje: PC em casa, Tailscale, dois serviços Windows (NSSM) — ver seção 28 do
-`ARCHITECTURE.md`. Funciona bem pra 1 cliente (uso próprio), mas é ponto
+`docs/ARCHITECTURE.md`. Funciona bem pra 1 cliente (uso próprio), mas é ponto
 único de falha grave com clientes pagantes de verdade. Decisões em aberto:
 
 - Continuar caseiro (mais barato, mais risco) vs migrar pra VPS (Hetzner,

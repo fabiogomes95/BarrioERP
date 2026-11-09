@@ -5,7 +5,7 @@ Barramento de eventos em tempo real via PostgreSQL LISTEN/NOTIFY.
 
 POR QUE POSTGRES E NÃO SÓ MEMÓRIA?
     O backend roda como dois processos uvicorn separados (HTTP na porta 8000
-    e HTTPS na porta 443 — ver instalar_servicos.ps1). Um dicionário em
+    e HTTPS na porta 443 — ver deploy/windows/instalar_servicos.ps1). Um dicionário em
     memória num processo não seria visto pelo outro processo. O Postgres já
     é compartilhado pelos dois, então usamos LISTEN/NOTIFY como o barramento:
     qualquer processo que dispare NOTIFY é ouvido por todos os processos com

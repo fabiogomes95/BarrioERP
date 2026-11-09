@@ -5,13 +5,10 @@ import {
   fetchFiadoGrouped, fetchOrderPayments, registerPayment, voidPayment, reopenOrder, fetchOrder, getUser,
   type Payment, type PaymentMethod,
 } from '../lib/api'
-import { maskCurrency, parseCurrency, toCurrencyInput } from '../lib/format'
-import { inputCls, ErrorBanner, Spinner, ModalOverlay } from '../components/ui'
+import { brl, maskCurrency, parseCurrency, toCurrencyInput } from '../lib/format'
+import { ErrorBanner, Spinner, ModalOverlay } from '../components/ui'
+import { inputCls } from '../lib/styles'
 import { shareFiadoStatementWhatsApp } from '../lib/receiptImage'
-
-function brl(v: string | number) {
-  return Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-}
 
 const ORDER_TYPE_LABEL: Record<string, string> = {
   counter: 'Consumo no local',

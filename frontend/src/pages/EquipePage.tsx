@@ -9,7 +9,8 @@ import {
   type UserRole,
   updateUser,
 } from '../lib/api'
-import { ModalOverlay, inputCls, AdminTabs } from '../components/ui'
+import { ModalOverlay, AdminTabs } from '../components/ui'
+import { inputCls } from '../lib/styles'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

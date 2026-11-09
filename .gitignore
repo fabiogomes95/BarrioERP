@@ -11,3 +11,5 @@ backend/.venv/
 *.log
 .coverage
 htmlcov/
+# Logs dos serviços do Windows (NSSM) e dos scripts de deploy
+/logs/

@@ -1,4 +1,6 @@
-// Utilidades de formatação de moeda (pt-BR)
+import type { OrderItem } from './api'
+
+// Utilidades de formatação (moeda, tempo) — pt-BR
 
 /**
  * Máscara de moeda baseada em centavos.
@@ -36,4 +38,25 @@ export function toCurrencyInput(value: string | number): string {
   const n = Number(value)
   if (isNaN(n)) return ''
   return maskCurrency(String(Math.round(n * 100)))
+}
+
+/** R$ 1.250,00 */
+export function brl(v: string | number) {
+  return Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
+/** Tempo desde `iso`, curto: agora, 5min, 2h, 3d. */
+export function timeAgo(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime()
+  const m = Math.floor(diff / 60000)
+  if (m < 1) return 'agora'
+  if (m < 60) return `${m}min`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h`
+  return `${Math.floor(h / 24)}d`
+}
+
+/** Hora (HH:mm) do último lançamento do item — quantidade incrementada conta como novo lançamento. */
+export function itemTime(item: OrderItem) {
+  return new Date(item.updated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 }

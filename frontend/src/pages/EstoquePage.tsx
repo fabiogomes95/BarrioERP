@@ -4,7 +4,8 @@ import {
   fetchStockItems, createStockItem, updateStockItem, deleteStockItem,
   createStockMovement, fetchStockMovements,
 } from '../lib/api'
-import { inputCls, Field, ModalOverlay, ErrorBanner, Spinner } from '../components/ui'
+import { Field, ModalOverlay, ErrorBanner, Spinner } from '../components/ui'
+import { inputCls } from '../lib/styles'
 
 const UNIT_LABEL: Record<StockUnit, string> = {
   unit: 'un', kg: 'kg', g: 'g', l: 'L', ml: 'ml',

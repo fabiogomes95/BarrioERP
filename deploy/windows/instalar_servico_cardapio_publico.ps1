@@ -14,20 +14,21 @@
 # COMO USAR:
 #   1. Abra o menu Iniciar, digite "PowerShell"
 #   2. Clique com o botão direito em "Windows PowerShell" -> "Executar como administrador"
-#   3. Cole e rode:  D:\Users\Fabinho\Documents\BarrioERP\instalar_servico_cardapio_publico.ps1
+#   3. Cole e rode:  D:\Users\Fabinho\Documents\BarrioERP\deploy\windows\instalar_servico_cardapio_publico.ps1
 #
 # Antes de expor pra internet, configure no backend\.env:
 #   PUBLIC_MENU_WHATSAPP=55DDDNUMERO   (número que recebe os pedidos)
 #   PUBLIC_MENU_DISPLAY_NAME=Nome Fantasia do Bar
 
 $nssm = "C:\Users\Fabinho\AppData\Local\Microsoft\WinGet\Packages\NSSM.NSSM_Microsoft.Winget.Source_8wekyb3d8bbwe\nssm-2.24-101-g897c7ad\win64\nssm.exe"
-$root = "D:\Users\Fabinho\Documents\BarrioERP"
+$root = (Resolve-Path "$PSScriptRoot\..\..").Path   # raiz do repositório
+New-Item -ItemType Directory -Force "$root\logs" | Out-Null
 $port = 8090
 
 & $nssm install BarrioERP-Menu-Publico "$root\backend\.venv\Scripts\python.exe" "-m uvicorn app.public_menu:app --host 0.0.0.0 --port $port"
 & $nssm set BarrioERP-Menu-Publico AppDirectory "$root\backend"
-& $nssm set BarrioERP-Menu-Publico AppStdout "$root\backend\service_menu_out.log"
-& $nssm set BarrioERP-Menu-Publico AppStderr "$root\backend\service_menu_err.log"
+& $nssm set BarrioERP-Menu-Publico AppStdout "$root\logs\service_menu_out.log"
+& $nssm set BarrioERP-Menu-Publico AppStderr "$root\logs\service_menu_err.log"
 & $nssm set BarrioERP-Menu-Publico AppRotateFiles 1
 & $nssm set BarrioERP-Menu-Publico Start SERVICE_AUTO_START
 & $nssm set BarrioERP-Menu-Publico DependOnService postgresql-x64-16

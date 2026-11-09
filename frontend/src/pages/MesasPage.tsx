@@ -9,7 +9,8 @@ import {
   fetchOpenOrders,
   createReservation,
 } from '../lib/api'
-import { inputCls, Field, ModalOverlay } from '../components/ui'
+import { Field, ModalOverlay } from '../components/ui'
+import { inputCls } from '../lib/styles'
 
 // ── Config de status ──────────────────────────────────────────────────────────
 

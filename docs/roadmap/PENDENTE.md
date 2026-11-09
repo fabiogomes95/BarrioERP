@@ -1,7 +1,7 @@
 # BarrioERP — Pendente
 
 > Este arquivo existe pra não perder o desenho pensado entre sessões.
-> Não é doc permanente como o `CHANGELOG.md`/`ARCHITECTURE.md`.
+> Não é doc permanente como o `CHANGELOG.md`/`docs/ARCHITECTURE.md`.
 
 ## Contexto
 
@@ -12,9 +12,9 @@ afetam o Recanto mas afetariam outro cliente.
 ## Status: leva de comercialização concluída
 
 1. ~~Relatórios por período~~ — **feito** (v0.11.0)
-2. ~~Controle de estoque/insumos~~ — **feito** (v0.12.0, `ARCHITECTURE.md` seção 29)
-3. ~~Reservas de mesa com data/hora~~ — **feito** (v0.13.0, `ARCHITECTURE.md` seção 30)
-4. ~~Tela simplificada pra cozinha (KDS)~~ — **feito** (v0.14.0, `ARCHITECTURE.md` seção 31)
+2. ~~Controle de estoque/insumos~~ — **feito** (v0.12.0, `docs/ARCHITECTURE.md` seção 29)
+3. ~~Reservas de mesa com data/hora~~ — **feito** (v0.13.0, `docs/ARCHITECTURE.md` seção 30)
+4. ~~Tela simplificada pra cozinha (KDS)~~ — **feito** (v0.14.0, `docs/ARCHITECTURE.md` seção 31)
 
 Nenhum item novo definido ainda — retomar com o dono quando surgir a
 próxima prioridade.
@@ -48,4 +48,4 @@ Plano: começar pela opção 1 (sem risco, sem código); só migrar pra opção
 - Emissão fiscal (NFC-e) — descartada, dono não é MEI/CNPJ
 
 **Pendências fiscais/de negócio separadas** (não são deste arquivo):
-ver `MEI_SOFTWARE.md` e `PENDENTE_NEGOCIO.md` na raiz do projeto.
+ver `docs/negocio/MEI_SOFTWARE.md` e `docs/negocio/PENDENTE_NEGOCIO.md` na raiz do projeto.

@@ -11,9 +11,40 @@
   (relatório por período v0.11.0, estoque v0.12.0, reservas v0.13.0, KDS v0.14.0).
   Sem próximo item definido ainda; retomar com o dono quando houver nova prioridade.
 - Avaliar se o polling de 8s do KDS é responsivo o suficiente na prática, ou se
-  vale a pena migrar pra SSE (ver limitação documentada em `ARCHITECTURE.md` seção 31).
+  vale a pena migrar pra SSE (ver limitação documentada em `docs/ARCHITECTURE.md` seção 31).
 - **NFC-e descartada** — dono não é MEI/CNPJ, não há obrigação fiscal hoje.
   Revisitar só se a situação formal do negócio mudar.
+
+---
+
+## [v0.15.0] — Organização do repositório, limpeza e frontend sob demanda
+
+**Estrutura:** a raiz ficou só com o que é do projeto inteiro (README,
+CHANGELOG, Makefile, docker-compose, render.yaml). O resto foi para:
+- `docs/` — `ARCHITECTURE.md`, `OPERACAO.md` (era `README-OPERACAO.md`),
+  `LEARNING.md`, `roadmap/` (`PENDENTE.md`, `CARDAPIO_PUBLICO.md`),
+  `negocio/` (`MEI_SOFTWARE.md`, `PENDENTE_NEGOCIO.md`), `marca/` (logo, ícones).
+- `deploy/docker/Dockerfile.prod` (`render.yaml` atualizado).
+- `deploy/windows/` — instalação dos serviços NSSM, publicação do cardápio
+  e `limpar_logs.ps1`. Os scripts acham a raiz por `$PSScriptRoot`.
+- `logs/` (gitignored) — os dois serviços NSSM e os scripts gravam aqui, não
+  mais em `backend/`. Tarefa agendada `BarrioERP-Publicar-Cardapio` aponta
+  para o novo caminho do `.vbs`.
+
+**Limpeza:** nova tarefa `BarrioERP-Limpar-Logs` (dia 1, 10h, SYSTEM) apaga
+logs rotacionados com mais de 30 dias e corta o log de publicação em 2000
+linhas. Removidos o serviço `BarrioERP-Backend-TLS`, o certificado vencido
+e `backend/certs/renovar-cert.ps1` (HTTPS é do `tailscale serve`).
+
+**Frontend:** lint zerado; `brl`/`timeAgo` (7 cópias) unificados em
+`lib/format.ts`; `ORDER_STATUS` e `inputCls` em `lib/`; telas com
+`React.lazy` (bundle principal 530 kB → 284 kB), com recarga automática
+única se uma aba antiga pedir um arquivo apagado pelo deploy.
+`react-hooks/set-state-in-effect` desligada com justificativa no
+`eslint.config.js`.
+
+**Pedidos online (08/11):** recibo do delivery com local, telefone,
+pagamento e troco calculado; ticket da cozinha só com itens e observação.
 
 ---
 

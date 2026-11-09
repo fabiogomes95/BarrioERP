@@ -12,18 +12,19 @@
 # COMO USAR:
 #   1. Abra o menu Iniciar, digite "PowerShell"
 #   2. Clique com o botão direito em "Windows PowerShell" -> "Executar como administrador"
-#   3. Cole e rode:  D:\Users\Fabinho\Documents\BarrioERP\instalar_servicos.ps1
+#   3. Cole e rode:  D:\Users\Fabinho\Documents\BarrioERP\deploy\windows\instalar_servicos.ps1
 #      (se der erro de "execution policy", rode antes:
 #       Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force)
 
 $nssm = "C:\Users\Fabinho\AppData\Local\Microsoft\WinGet\Packages\NSSM.NSSM_Microsoft.Winget.Source_8wekyb3d8bbwe\nssm-2.24-101-g897c7ad\win64\nssm.exe"
-$root = "D:\Users\Fabinho\Documents\BarrioERP"
+$root = (Resolve-Path "$PSScriptRoot\..\..").Path   # raiz do repositório
+New-Item -ItemType Directory -Force "$root\logs" | Out-Null
 
 # ── Backend HTTP (rede local, fallback sem Tailscale) ───────────────────────
 & $nssm install BarrioERP-Backend "$root\backend\.venv\Scripts\python.exe" "-m uvicorn app.main:app --host 0.0.0.0 --port 8000"
 & $nssm set BarrioERP-Backend AppDirectory "$root\backend"
-& $nssm set BarrioERP-Backend AppStdout "$root\backend\service_out.log"
-& $nssm set BarrioERP-Backend AppStderr "$root\backend\service_err.log"
+& $nssm set BarrioERP-Backend AppStdout "$root\logs\service_out.log"
+& $nssm set BarrioERP-Backend AppStderr "$root\logs\service_err.log"
 & $nssm set BarrioERP-Backend AppRotateFiles 1
 & $nssm set BarrioERP-Backend Start SERVICE_AUTO_START
 & $nssm set BarrioERP-Backend DependOnService postgresql-x64-16

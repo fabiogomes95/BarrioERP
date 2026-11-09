@@ -1,7 +1,7 @@
 # BarrioERP
 
 > **Operação no Recanto da Barra** (serviços, cardápio online, pedidos online,
-> impressão direta, WhatsApp): veja [README-OPERACAO.md](README-OPERACAO.md).
+> impressão direta, WhatsApp): veja [docs/OPERACAO.md](docs/OPERACAO.md).
 
 Sistema SaaS de gestão de restaurantes com arquitetura multi-tenancy, onde múltiplos estabelecimentos operam no mesmo sistema com dados completamente isolados.
 
@@ -144,9 +144,22 @@ BarrioERP/
 │   │   ├── pages/              # Páginas da aplicação
 │   │   └── lib/                # Utilitários e API
 │   └── ...
-├── docker-compose.yml
+├── public_menu_static/         # Página do cardápio público (GitHub Pages)
+├── deploy/
+│   ├── docker/                 # Dockerfile.prod (imagem única API + frontend)
+│   └── windows/                # Serviços NSSM, publicação do cardápio, limpeza de logs
+├── docs/
+│   ├── ARCHITECTURE.md         # Arquitetura e decisões técnicas
+│   ├── OPERACAO.md             # Guia de operação no bar
+│   ├── LEARNING.md             # Anotações de aprendizado
+│   ├── roadmap/                # Pendências e próximos passos
+│   ├── negocio/                # Comercialização e parte fiscal (MEI)
+│   └── marca/                  # Logo e ícones
+├── logs/                       # Logs dos serviços (fora do git)
+├── CHANGELOG.md
 ├── Makefile
-└── ARCHITECTURE.md
+├── docker-compose.yml
+└── render.yaml                 # Blueprint do Render (deploy em nuvem)
 ```
 
 ## Licença

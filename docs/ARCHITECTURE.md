@@ -82,8 +82,9 @@ No backend: enquanto o banco de dados processa uma query, o servidor pode atende
 ```
 BarrioERP/
 │
-├── ARCHITECTURE.md          ← Este arquivo
-├── LEARNING.md              ← Anotações de aprendizado
+├── docs/                    ← Documentação (este arquivo, operação, roadmap...)
+├── deploy/                  ← Docker de produção e scripts do Windows (NSSM)
+├── logs/                    ← Logs dos serviços (fora do git)
 ├── Makefile                 ← Atalhos de comandos
 ├── docker-compose.yml       ← Define os serviços Docker
 │
@@ -1756,7 +1757,7 @@ sistema por padrão; toggle sol/lua grava a escolha em `localStorage`.
 ## 29. Módulo de Estoque (Stock)
 
 Implementado em 2026-07-24. Primeiro módulo pensado desde o início pra
-comercialização (não só uso próprio do Recanto) — ver `PENDENTE.md` no
+comercialização (não só uso próprio do Recanto) — ver `docs/roadmap/PENDENTE.md` no
 histórico do repositório para o desenho original.
 
 ### Modelo de dados
@@ -1840,7 +1841,7 @@ backend/app/
 ## 30. Módulo de Reservas
 
 Implementado em 2026-07-24 (mesma sessão do módulo de Estoque). Terceiro
-item da leva de comercialização — ver `PENDENTE.md`.
+item da leva de comercialização — ver `docs/roadmap/PENDENTE.md`.
 
 ### Decisões de escopo (confirmadas com o dono antes de implementar)
 
@@ -1919,7 +1920,7 @@ backend/app/
 ## 31. KDS — Tela da Cozinha
 
 Implementado em 2026-07-24 (mesma sessão dos módulos de Estoque e
-Reservas). Último item da leva de comercialização — ver `PENDENTE.md`.
+Reservas). Último item da leva de comercialização — ver `docs/roadmap/PENDENTE.md`.
 Ativa de verdade o fluxo `sent → preparing → ready → served` de
 `OrderItemStatus`, que existia só no enum desde o início do projeto sem
 nenhuma transição real (confirmado por grep antes de implementar).
