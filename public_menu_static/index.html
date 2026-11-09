@@ -88,6 +88,20 @@
   }
   .paused-note b{color:var(--terra);}
   .social{margin:12px 0 0;}
+  .repeat{
+    display:flex;align-items:center;gap:10px;max-width:420px;margin:14px auto 0;padding:10px 10px 10px 14px;
+    border-radius:16px;background:rgba(255,248,240,.75);border:1px solid var(--dots);text-align:left;
+    box-shadow:0 2px 10px rgba(58,35,20,.08);
+  }
+  .repeat-text{flex:1;min-width:0;line-height:1.3;}
+  .repeat-text b{display:block;font-size:.9rem;color:var(--brown);}
+  .repeat-text span{display:block;font-size:.82rem;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .repeat-text small{display:block;font-size:.72rem;color:var(--muted);margin-top:2px;}
+  .repeat-btn{
+    flex-shrink:0;padding:8px 14px;border-radius:999px;border:0;cursor:pointer;
+    background:var(--brown);color:var(--paper);font-size:.82rem;font-weight:700;
+  }
+  .repeat-x{flex-shrink:0;width:28px;height:28px;border:0;background:transparent;color:var(--muted);font-size:1.3rem;cursor:pointer;line-height:1;}
   .ig{
     display:inline-flex;align-items:center;gap:9px;padding:6px 16px 6px 6px;border-radius:999px;
     background:rgba(255,248,240,.75);border:1px solid var(--dots);color:var(--brown);
@@ -608,9 +622,15 @@
     openSheetEl(picker);
   }
   function pickOption(i) {
-    var base = registry[pickingKey];
+    var key = ensureVariant(pickingKey, i);
+    closeAll();
+    changeQty(key, 1);
+  }
+  // Cria (se preciso) a linha "Churrasco · Coração" e devolve a chave dela
+  function ensureVariant(baseKey, i) {
+    var base = registry[baseKey];
     var comp = base.complementos[i];
-    var key = pickingKey + '-c' + i;
+    var key = baseKey + '-c' + i;
     if (!registry[key]) {
       registry[key] = {
         name: base.name + ' - ' + comp, label: base.label + ' · ' + comp, price: base.price,
@@ -619,10 +639,9 @@
       };
     }
     if (!document.getElementById('row-' + key)) {
-      document.getElementById('var-' + pickingKey).insertAdjacentHTML('beforeend', rowHtml(key, registry[key].label, null, base.price));
+      document.getElementById('var-' + baseKey).insertAdjacentHTML('beforeend', rowHtml(key, registry[key].label, null, base.price));
     }
-    closeAll();
-    changeQty(key, 1);
+    return key;
   }
 
   // ── Envio ───────────────────────────────────────────────────────────
@@ -762,6 +781,7 @@
     document.getElementById('sheet-form').hidden = true;
     document.getElementById('sheet-done').hidden = false;
     sheet.scrollTop = 0;
+    saveLastOrder();
     // Já registrado: esvazia o carrinho pra não reenviar o mesmo pedido sem querer
     clearCart();
     // Leva o cliente direto pro WhatsApp do bar com a mensagem pronta. Na
@@ -812,6 +832,7 @@
     html += '<p class="social"><a class="ig" href="' + INSTAGRAM_URL + '" target="_blank" rel="noopener">' +
       '<span class="ig-badge">' + IG_ICON + '</span>' +
       '<span><small>Siga no Instagram</small>@' + INSTAGRAM + '</span></a></p>';
+    html += '<div id="repeat"></div>';
     html += '<svg class="squiggle" viewBox="0 0 400 12" preserveAspectRatio="none" aria-hidden="true">' +
       '<path d="M0 7 C 40 3, 80 10, 130 6 S 230 3, 280 7 S 360 9, 400 5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>';
     html += '</header>';
@@ -1029,10 +1050,14 @@
   function addCombo(ci) {
     var p = comboPick(ci);
     var lo = Math.min(p.ia, p.ib), hi = Math.max(p.ia, p.ib);
+    if (lo === hi) { changeQty('i' + ci + '-' + lo, 1); return; }  // mesmo sabor = pizza inteira
+    changeQty(ensureHalf(ci, lo, hi), 1);
+  }
+
+  // Cria (se preciso) a linha "½ Calabresa + ½ Mussarela" e devolve a chave dela
+  function ensureHalf(ci, lo, hi) {
     var items = DATA.categories[ci].items;
     var catName = DATA.categories[ci].name;
-    if (lo === hi) { changeQty('i' + ci + '-' + lo, 1); return; }  // mesmo sabor = pizza inteira
-
     var key = 'h' + ci + '-' + lo + '-' + hi;
     if (!registry[key]) {
       var first = items[lo], second = items[hi];
@@ -1049,7 +1074,98 @@
       document.getElementById('combo-list-' + ci).insertAdjacentHTML('beforeend',
         rowHtml(key, registry[key].label, null, registry[key].price));
     }
-    changeQty(key, 1);
+    return key;
+  }
+
+  // ── Pedir de novo ─────────────────────────────────────────────────
+  // Guarda o último pedido NESTE aparelho (como nome e telefone), pelo id do
+  // item — não pelo nome nem pelo preço. Na volta, refaz com o cardápio de
+  // hoje: preço atualizado, item que saiu ou esgotou fica de fora (e avisa).
+  var LAST_KEY = 'last_order';
+  var REPEAT_MAX_AGE = 90 * 864e5;  // 90 dias
+
+  function saveLastOrder() {
+    var lines = order.map(function (k) {
+      var l = registry[k].line;
+      return { id: l.menu_item_id, comp: l.complemento || null, half: l.half_with || null, qty: cart[k] };
+    });
+    if (lines.length) remember(LAST_KEY, JSON.stringify({ at: Date.now(), lines: lines }));
+  }
+
+  function findItem(id) {  // -> {ci, ii, item} no cardápio de hoje, ou null
+    for (var ci = 0; ci < DATA.categories.length; ci++) {
+      var items = DATA.categories[ci].items;
+      for (var ii = 0; ii < items.length; ii++) {
+        if (items[ii].id === id) return { ci: ci, ii: ii, item: items[ii] };
+      }
+    }
+    return null;
+  }
+
+  // Só calcula nome/preço (não mexe na tela). null = não dá pra pedir hoje.
+  function previewLine(l) {
+    var a = findItem(l.id);
+    if (!a) return null;
+    if (l.half) {
+      var b = findItem(l.half);
+      if (!b || b.ci !== a.ci) return null;
+      return { label: halfName(a.item.name, b.item.name), price: Math.max(a.item.price, b.item.price) };
+    }
+    if (l.comp) {
+      if ((a.item.complementos || []).indexOf(l.comp) < 0) return null;
+      return { label: a.item.name + ' - ' + l.comp, price: a.item.price };
+    }
+    return { label: a.item.name, price: a.item.price };
+  }
+
+  // Põe a linha no carrinho de hoje e devolve a chave (cria a linha de
+  // meio a meio / complemento se preciso).
+  function resolveLine(l) {
+    var a = findItem(l.id);
+    if (!a) return null;
+    var base = 'i' + a.ci + '-' + a.ii;
+    if (l.half) {
+      var b = findItem(l.half);
+      if (!b || b.ci !== a.ci) return null;
+      return a.ii === b.ii ? base : ensureHalf(a.ci, Math.min(a.ii, b.ii), Math.max(a.ii, b.ii));
+    }
+    if (l.comp) {
+      var i = (registry[base].complementos || []).indexOf(l.comp);
+      return i < 0 ? null : ensureVariant(base, i);
+    }
+    return base;
+  }
+
+  function offerRepeat() {
+    var box = document.getElementById('repeat');
+    if (!box || order.length) return;
+    var saved;
+    try { saved = JSON.parse(recall(LAST_KEY) || 'null'); } catch (e) { saved = null; }
+    if (!saved || !saved.lines || !saved.lines.length || Date.now() - saved.at > REPEAT_MAX_AGE) return;
+
+    var ok = [], missing = 0, total = 0;
+    saved.lines.forEach(function (l) {
+      var pv = previewLine(l);
+      if (pv) { ok.push({ l: l, pv: pv }); total += pv.price * l.qty; } else missing++;
+    });
+    if (!ok.length) return;
+
+    var names = ok.slice(0, 3).map(function (x) { return x.l.qty + 'x ' + x.pv.label; }).join(', ') +
+      (ok.length > 3 ? ' e mais ' + (ok.length - 3) : '');
+    var note = money(total) + ' com os preços de hoje';
+    if (missing) note += ' · ' + missing + (missing > 1 ? ' itens não estão disponíveis' : ' item não está disponível') + ' hoje';
+
+    box.innerHTML = '<div class="repeat"><div class="repeat-text"><b>Pedir de novo?</b>' +
+      '<span>' + esc(names) + '</span><small>' + esc(note) + '</small></div>' +
+      '<button class="repeat-btn" id="repeat-btn">Repetir</button>' +
+      '<button class="repeat-x" id="repeat-x" aria-label="Dispensar">&times;</button></div>';
+
+    document.getElementById('repeat-btn').addEventListener('click', function () {
+      ok.forEach(function (x) { var k = resolveLine(x.l); if (k) changeQty(k, x.l.qty); });
+      box.innerHTML = '';
+      openReview();
+    });
+    document.getElementById('repeat-x').addEventListener('click', function () { box.innerHTML = ''; });
   }
 
   function halfName(n1, n2) {
@@ -1140,6 +1256,7 @@
         document.querySelector('.send-hint').textContent = 'Seu pedido vai pelo WhatsApp do Recanto.';
       }
       render(data);
+      offerRepeat();
     })
     .catch(function () {
       app.innerHTML = '<div class="state-msg">Não conseguimos carregar o cardápio agora. Tente novamente em instantes.</div>';
