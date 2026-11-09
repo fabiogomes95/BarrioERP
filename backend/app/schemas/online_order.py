@@ -35,6 +35,10 @@ class OnlineOrderAccepted(BaseSchema):
     order_id: UUID
 
 
+class OnlineOrdersPause(BaseSchema):
+    paused: bool
+
+
 class OnlineTopItem(BaseSchema):
     name: str
     quantity: int

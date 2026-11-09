@@ -17,7 +17,9 @@ from app.api.deps import CurrentUser, DBSession, require_roles
 from app.core.config import settings
 from app.models.online_order import OnlineOrderStatus
 from app.models.user import UserRole
-from app.schemas.online_order import OnlineOrderAccepted, OnlineOrderResponse, OnlineOrdersReport
+from app.schemas.online_order import (
+    OnlineOrderAccepted, OnlineOrderResponse, OnlineOrdersPause, OnlineOrdersReport,
+)
 from app.services import direct_print
 from app.services.online_order_service import OnlineOrderService
 
@@ -53,6 +55,18 @@ async def online_orders_report(
     end: datetime = Query(description="Fim, exclusivo."),
 ) -> OnlineOrdersReport:
     return await _service(session, current_user).report(start, end)
+
+
+@router.get("/pause", response_model=OnlineOrdersPause, summary="Pedidos pelo cardápio estão pausados?")
+async def get_online_orders_pause(session: DBSession, current_user: CurrentUser) -> OnlineOrdersPause:
+    return OnlineOrdersPause(paused=await _service(session, current_user).is_paused())
+
+
+@router.put("/pause", response_model=OnlineOrdersPause, summary="Pausar/retomar pedidos pelo cardápio")
+async def set_online_orders_pause(
+    data: OnlineOrdersPause, session: DBSession, current_user: CurrentUser,
+) -> OnlineOrdersPause:
+    return OnlineOrdersPause(paused=await _service(session, current_user).set_paused(data.paused))
 
 
 @router.post("/{online_order_id}/accept", response_model=OnlineOrderAccepted,

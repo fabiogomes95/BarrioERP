@@ -54,6 +54,7 @@ from app.models.order import OrderType
 from app.repositories.base import BaseRepository
 from app.repositories.menu_repository import MenuCategoryRepository, MenuItemRepository
 from app.services.online_order_pricing import CartError, CartLine, is_pizza_category, price_cart
+from app.services.establishment_settings import online_orders_paused
 from app.services.opening_hours import is_open
 
 
@@ -136,6 +137,9 @@ class PublicMenuOut(BaseModel):
     # com isso — inclusive na cópia do GitHub, com o PC desligado.
     hours: dict[str, str]
     open_now: bool
+    # Casa pausou os pedidos pelo site (noite cheia): a página mostra o aviso
+    # e o pedido segue pelo WhatsApp, como quando o PC está fora do ar.
+    orders_paused: bool = False
 
 
 # ── API ──────────────────────────────────────────────────────────────────────
@@ -192,6 +196,7 @@ async def get_public_menu(slug: str, request: Request) -> PublicMenuOut:
         categories=categories_out,
         hours=settings.PUBLIC_MENU_HOURS,
         open_now=_open_now(),
+        orders_paused=online_orders_paused(establishment),
     )
 
 
@@ -258,6 +263,11 @@ async def create_online_order(slug: str, data: OnlineOrderIn, request: Request) 
 
     async with AsyncSessionLocal() as session:
         establishment = await _get_establishment(session, slug)
+        if online_orders_paused(establishment):
+            raise HTTPException(
+                status_code=409,
+                detail="Os pedidos pelo site estão pausados agora. Finalize pelo WhatsApp!",
+            )
 
         pending = await session.scalar(
             select(func.count()).select_from(OnlineOrder).where(

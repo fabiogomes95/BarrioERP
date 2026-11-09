@@ -327,6 +327,17 @@ export async function acceptOnlineOrder(id: string): Promise<{ order_id: string 
   return request<{ order_id: string }>(`/online-orders/${id}/accept`, { method: 'POST' })
 }
 
+/** Pedidos pelo cardápio pausados (noite cheia) — o cliente finaliza pelo WhatsApp. */
+export async function fetchOnlineOrdersPause(): Promise<boolean> {
+  return (await request<{ paused: boolean }>('/online-orders/pause')).paused
+}
+
+export async function setOnlineOrdersPause(paused: boolean): Promise<boolean> {
+  return (await request<{ paused: boolean }>('/online-orders/pause', {
+    method: 'PUT', body: JSON.stringify({ paused }),
+  })).paused
+}
+
 export async function rejectOnlineOrder(id: string): Promise<void> {
   return request<void>(`/online-orders/${id}/reject`, { method: 'POST' })
 }

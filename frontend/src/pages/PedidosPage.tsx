@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   type Order, type Table, type OrderType, type OnlineOrder,
   fetchOpenOrders, fetchTables, createOrder, getUser, cancelOrder, mergeOrders,
-  fetchOnlineOrders, acceptOnlineOrder, rejectOnlineOrder,
+  fetchOnlineOrders, acceptOnlineOrder, rejectOnlineOrder, fetchOnlineOrdersPause, setOnlineOrdersPause,
 } from '../lib/api'
 import { ONLINE_ORDER_EVENT } from '../lib/notifications'
 import { brl, timeAgo } from '../lib/format'
@@ -394,6 +394,56 @@ function acceptedMessage(oo: OnlineOrder) {
     ? 'Já estamos preparando e logo sai pra entrega.'
     : 'Já estamos preparando, te avisamos quando estiver pronto pra retirar.'
   return `Oi ${first}! Seu pedido #${oo.number} foi aceito. ${next}`
+}
+
+/**
+ * Pausar/retomar os pedidos pelo cardápio. Pausado, o cardápio continua no ar
+ * com o aviso e o pedido segue pelo WhatsApp. Faixa chamativa enquanto
+ * pausado — pra ninguém esquecer de religar no fim da correria.
+ */
+function OnlinePauseBar() {
+  const [paused, setPaused] = useState<boolean | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    const load = () => { fetchOnlineOrdersPause().then(setPaused).catch(() => {}) }
+    load()
+    const id = setInterval(load, 60_000)  // outro aparelho pode ter mudado
+    return () => clearInterval(id)
+  }, [])
+
+  async function toggle() {
+    if (paused === null || busy) return
+    setBusy(true)
+    try { setPaused(await setOnlineOrdersPause(!paused)) } catch { /* mantém o estado atual */ }
+    finally { setBusy(false) }
+  }
+
+  if (paused === null) return null
+  if (paused) {
+    return (
+      <div className="flex items-center gap-3 rounded-xl border border-amber-500/40 bg-amber-500/15 px-3.5 py-2.5 mb-3">
+        <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shrink-0" />
+        <p className="flex-1 min-w-0 text-sm text-stone-200">
+          <span className="text-amber-400 font-bold">Pedidos pelo site pausados.</span>
+          <span className="text-stone-400"> O cardápio avisa o cliente e o pedido vem pelo WhatsApp.</span>
+        </p>
+        <button onClick={toggle} disabled={busy}
+          className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-400 text-stone-900 disabled:opacity-50">
+          {busy ? '...' : 'Retomar'}
+        </button>
+      </div>
+    )
+  }
+  return (
+    <div className="flex justify-end mb-2">
+      <button onClick={toggle} disabled={busy}
+        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-stone-500 hover:text-amber-400 hover:bg-stone-800/60 disabled:opacity-50">
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+        Pedidos pelo site: recebendo · {busy ? '...' : 'Pausar'}
+      </button>
+    </div>
+  )
 }
 
 function OnlineOrdersPanel({ onAccepted }: { onAccepted: () => void }) {
@@ -814,6 +864,7 @@ export default function PedidosPage() {
 
       {/* Conteúdo */}
       <div className="flex-1 overflow-auto p-4" onScroll={onListScroll}>
+        {canHandleOnline && <OnlinePauseBar />}
         {canHandleOnline && <OnlineOrdersPanel onAccepted={load} />}
 
         {error && (

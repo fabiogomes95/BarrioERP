@@ -81,6 +81,12 @@
   }
   .open-status::before{content:'';width:7px;height:7px;border-radius:50%;background:currentColor;}
   .open-status.closed{background:rgba(110,16,16,.1);color:var(--wine);}
+  .paused-note{
+    max-width:420px;margin:12px auto 0;padding:9px 14px;border-radius:14px;
+    background:rgba(156,74,26,.1);border:1px solid rgba(156,74,26,.25);
+    color:var(--brown);font-size:.84rem;line-height:1.4;
+  }
+  .paused-note b{color:var(--terra);}
   .social{margin:12px 0 0;}
   .ig{
     display:inline-flex;align-items:center;gap:9px;padding:6px 16px 6px 6px;border-radius:999px;
@@ -801,6 +807,8 @@
     html += '<h1 class="brand"><span class="w">Recanto</span><img src="' + LOGO + '" alt="Recanto da Barra"><span class="w">Da Barra</span></h1>';
     html += '<p class="kicker">Bar &amp; Restaurante</p>';
     html += '<p class="open-status" id="open-status" hidden></p>';
+    if (data.orders_paused) html += '<p class="paused-note"><b>Pedidos pelo site pausados agora.</b> ' +
+      'Monte seu pedido normalmente e finalize pelo WhatsApp.</p>';
     html += '<p class="social"><a class="ig" href="' + INSTAGRAM_URL + '" target="_blank" rel="noopener">' +
       '<span class="ig-badge">' + IG_ICON + '</span>' +
       '<span><small>Siga no Instagram</small>@' + INSTAGRAM + '</span></a></p>';
@@ -1125,6 +1133,8 @@
       return fetchJson('menu.json?v=' + Date.now(), 8000).then(function (d) { LIVE = false; return d; });
     })
     .then(function (data) {
+      // Casa pausou os pedidos pelo site: mesmo caminho do PC fora do ar (WhatsApp)
+      if (data.orders_paused) LIVE = false;
       if (!LIVE) {
         document.getElementById('send-btn').textContent = 'Continuar no WhatsApp';
         document.querySelector('.send-hint').textContent = 'Seu pedido vai pelo WhatsApp do Recanto.';

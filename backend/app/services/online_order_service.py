@@ -18,11 +18,13 @@ from sqlalchemy import select
 
 from app.core.config import settings
 from app.core.exceptions import BusinessRuleError, NotFoundError, TenantError
+from app.models.establishment import Establishment
 from app.models.online_order import OnlineOrder, OnlineOrderStatus
 from app.models.order import OrderType
 from app.schemas.online_order import OnlineOrderResponse, OnlineOrdersReport, OnlineTopItem
 from app.schemas.order import OrderCreate, OrderItemAdd
 from app.services.base import BaseService
+from app.services.establishment_settings import ONLINE_ORDERS_PAUSED, online_orders_paused, write_setting
 from app.services.order_service import OrderService
 
 
@@ -178,6 +180,32 @@ class OnlineOrderService(BaseService):
             pickup=sum(1 for o in accepted if o.fulfillment == OrderType.PICKUP),
             top_items=[OnlineTopItem(name=n, quantity=qty[n], total=money[n]) for n in top],
         )
+
+    async def _establishment(self) -> Establishment:
+        establishment = await self.session.get(Establishment, self._require_establishment())
+        if establishment is None:
+            raise NotFoundError("Establishment", self.establishment_id)
+        return establishment
+
+    async def is_paused(self) -> bool:
+        return online_orders_paused(await self._establishment())
+
+    async def set_paused(self, paused: bool) -> bool:
+        """Pausa/retoma os pedidos pelo cardápio. Pausado, o cardápio continua
+        no ar e o cliente finaliza pelo WhatsApp."""
+        establishment = await self._establishment()
+        before = online_orders_paused(establishment)
+        if before != paused:
+            write_setting(establishment, ONLINE_ORDERS_PAUSED, paused)
+            await self.session.flush()
+            await self._log_audit(
+                action="online_order.pause" if paused else "online_order.resume",
+                resource_type="establishment",
+                resource_id=str(establishment.id),
+                before={"paused": before},
+                after={"paused": paused},
+            )
+        return paused
 
     async def reject(self, online_order_id: UUID) -> None:
         online_order = await self._get_pending_for_update(online_order_id)
