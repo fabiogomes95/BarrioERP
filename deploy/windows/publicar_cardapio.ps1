@@ -10,11 +10,11 @@
 #
 # Roda sozinho pela tarefa agendada "BarrioERP-Publicar-Cardapio" (a cada
 # 10 min). Pra publicar na hora (ex: acabou de mudar preço), rode à mão:
-#   powershell -ExecutionPolicy Bypass -File D:\Users\Fabinho\Documents\BarrioERP\publicar_cardapio.ps1
+#   powershell -ExecutionPolicy Bypass -File D:\Users\Fabinho\Documents\BarrioERP\deploy\windows\publicar_cardapio.ps1
 
-$root = "D:\Users\Fabinho\Documents\BarrioERP"
+$root = (Resolve-Path "$PSScriptRoot\..\..").Path   # raiz do repositório
 $site = "D:\Users\Fabinho\Documents\recanto-cardapio-site"   # clone do repositório do site
-$log  = "$root\publicar_cardapio.log"
+$log  = "$root\logs\publicar_cardapio.log"
 $api  = "http://127.0.0.1:8090/api/cardapio/matriz"
 
 function Log($msg) {

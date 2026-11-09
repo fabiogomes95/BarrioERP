@@ -1,4 +1,4 @@
-# LEARNING.md
+# docs/LEARNING.md
 
 # BarrioERP — Diário de aprendizado
 

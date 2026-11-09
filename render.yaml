@@ -11,7 +11,7 @@ services:
   - type: web
     name: barrio-erp
     runtime: docker
-    dockerfilePath: ./Dockerfile.prod
+    dockerfilePath: ./deploy/docker/Dockerfile.prod
     dockerContext: .
     plan: starter
     healthCheckPath: /health

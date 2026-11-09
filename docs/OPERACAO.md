@@ -2,7 +2,7 @@
 
 Guia do dia a dia: como o sistema está montado neste PC, o que cada parte faz
 e como mexer quando precisar. (Instalação e desenvolvimento ficam no
-[README.md](README.md).)
+[README.md](../README.md).)
 
 ---
 
@@ -63,7 +63,7 @@ A página fica no **GitHub Pages** (organização `recantodabarra`, repositório
 A tarefa agendada **`BarrioERP-Publicar-Cardapio`** roda a cada 10 min
 (escondida) e só publica se algo mudou (preço, item novo/esgotado, a página).
 Mudou preço e quer publicar **na hora**? Dois cliques em
-`publicar_cardapio.vbs` (pasta do BarrioERP). Log: `publicar_cardapio.log`.
+`deploy/windows/publicar_cardapio.vbs` (pasta do BarrioERP). Log: `logs/publicar_cardapio.log`.
 Cópia local do site: `D:\Users\Fabinho\Documents\recanto-cardapio-site`
 (commits saem como "Recanto da Barra").
 
@@ -196,10 +196,16 @@ tailscale serve status                                # HTTPS do Barrio
 tailscale funnel status                               # o que está público
 tailscale funnel --https=8443 off                     # tira o cardápio do ar (link do PC)
 schtasks /run /tn "BarrioERP-Publicar-Cardapio"       # publica o cardápio agora
-Get-Content backend\service_err.log -Tail 30          # erros do Barrio
+Get-Content logs\service_err.log -Tail 30             # erros do Barrio
+Get-Content logs\service_menu_err.log -Tail 30        # erros do cardápio público
+schtasks /run /tn "BarrioERP-Limpar-Logs"             # limpa logs antigos agora
 ```
 
-Subir o Barrio de novo do zero (ex: PC novo): `instalar_servicos.ps1`
+**Logs:** tudo fica em `logs/` (fora do git). A tarefa **`BarrioERP-Limpar-Logs`**
+(dia 1 de cada mês, 10h) apaga os arquivos rotacionados com mais de 30 dias
+— script `deploy/windows/limpar_logs.ps1`.
+
+Subir o Barrio de novo do zero (ex: PC novo): `deploy/windows/instalar_servicos.ps1`
 (como administrador) já configura o `tailscale serve`.
 
 **Antes de mexer no banco** (migration, limpeza): faça backup com `pg_dump`.

@@ -383,7 +383,7 @@
   //   - no próprio PC, via Funnel (…ts.net:8443/cardapio/matriz) → API no mesmo endereço
   //   - no GitHub Pages (sempre no ar)                            → API do PC, de fora
   // No GitHub, se o PC não responder, usa a cópia do cardápio publicada junto
-  // (menu.json, ver publicar_cardapio.ps1) e o pedido vai só pelo WhatsApp.
+  // (menu.json, ver deploy/windows/publicar_cardapio.ps1) e o pedido vai só pelo WhatsApp.
   var ON_PC = /\/cardapio\//.test(location.pathname);
   var API = ON_PC ? '' : 'https://gomes-pc.cod-aldebaran.ts.net:8443';
   var LOGO = ON_PC ? '/static/logo.png' : 'logo.png';
