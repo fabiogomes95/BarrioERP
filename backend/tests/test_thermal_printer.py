@@ -42,6 +42,36 @@ def test_recibo_com_taxa_pagamento_e_falta_pagar():
     assert data.startswith(b"\x1b@") and data.endswith(b"\x1dVB\x00")  # inicia e corta o papel
 
 
+def test_recibo_delivery_com_local_pagamento_e_troco():
+    from app.models.online_order import OnlineOrder
+    from app.models.order import OrderType
+    from app.services.direct_print import delivery_lines
+
+    online = OnlineOrder(fulfillment=OrderType.DELIVERY, customer_name="Marina", customer_phone="81999998888",
+                         delivery_location="Barraca 3, perto do coqueiro", payment_method="cash",
+                         change_for=Decimal("100.00"), notes="sem cebola")
+    data = receipt("Recanto da Barra", "Entrega - Marina", [(1, "Pizza Calabresa", Decimal("62.00"))],
+                   subtotal=Decimal("62.00"), service_fee=Decimal("0"), service_fee_percent=Decimal("0"),
+                   discount=Decimal("0"), total=Decimal("62.00"), payments=[],
+                   delivery=delivery_lines(online, Decimal("62.00")), now=NOW)
+    text = "\n".join(_text_lines(data))
+    assert "ENTREGAR EM:" in text and "Barraca 3, perto do coqueiro" in text
+    assert "(81) 99999-8888" in text and "Dinheiro" in text
+    assert "LEVAR TROCO:" in text and "R$ 38,00 (paga com R$ 100,00)" in text
+    assert "sem cebola" in text
+
+
+def test_recibo_retirada_pix_sem_local_nem_troco():
+    from app.models.online_order import OnlineOrder
+    from app.models.order import OrderType
+    from app.services.direct_print import delivery_lines
+
+    online = OnlineOrder(fulfillment=OrderType.PICKUP, customer_name="Ana", customer_phone="81988887777",
+                         payment_method="pix")
+    labels = [l for l, _ in delivery_lines(online, Decimal("30.00"))]
+    assert labels == ["Telefone", "Pagamento"]
+
+
 def test_ticket_cozinha_sem_acento_e_sem_preco():
     data = kitchen_ticket("Retirada - Marina", [(3, "Churrasco - coração", None), (1, "Batata Frita P", "sem sal")],
                           notes="Obs: capricha", now=NOW)

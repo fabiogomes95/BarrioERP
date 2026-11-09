@@ -14,6 +14,7 @@ requisição já foi fechada.
 
 import asyncio
 import logging
+from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
@@ -23,11 +24,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import events
 from app.database.session import AsyncSessionLocal
 from app.models.company import Company
+from app.models.online_order import OnlineOrder
 from app.models.order import Order, OrderItemStatus, OrderType
 from app.models.payment import Payment, PaymentStatus
 from app.models.table import Table
 from app.repositories.order_repository import OrderRepository
 from app.services import thermal_printer
+from app.services.online_order_service import format_phone, payment_label
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +40,7 @@ _METHOD_LABEL = {
     "cash": "Dinheiro", "credit_card": "Credito", "debit_card": "Debito",
     "pix": "Pix", "voucher": "Voucher", "other": "Outro",
 }
-_TYPE_LABEL = {OrderType.DELIVERY: "Delivery", OrderType.PICKUP: "Retirada"}
+_TYPE_LABEL = {OrderType.DELIVERY: "Entrega", OrderType.PICKUP: "Retirada"}
 
 
 async def _where(session: AsyncSession, order: Order, *, receipt: bool) -> str:
@@ -57,8 +60,34 @@ async def _load(session: AsyncSession, establishment_id: UUID, order_id: UUID) -
     return order
 
 
+async def _online(session: AsyncSession, order: Order) -> OnlineOrder | None:
+    """Pedido do cardápio que virou esta comanda (None = comanda lançada na casa)."""
+    return await session.scalar(select(OnlineOrder).where(OnlineOrder.order_id == order.id))
+
+
+def delivery_lines(online: OnlineOrder, total: Decimal) -> list[tuple[str, str]]:
+    """O que o entregador precisa no papel: onde, quem, como recebe, quanto de troco."""
+    lines: list[tuple[str, str]] = []
+    if online.fulfillment == OrderType.DELIVERY:
+        lines.append(("ENTREGAR EM", online.delivery_location or "(nao informado - ligar pro cliente)"))
+    lines.append(("Telefone", format_phone(online.customer_phone)))
+    if online.payment_method:
+        lines.append(("Pagamento", payment_label(online.payment_method)))
+        if online.payment_method == "cash" and online.change_for:
+            troco = online.change_for - total
+            if troco > 0:
+                lines.append(("LEVAR TROCO",
+                              f"{thermal_printer._money(troco)} (paga com {thermal_printer._money(online.change_for)})"))
+            else:
+                lines.append(("Troco", f"paga com {thermal_printer._money(online.change_for)}"))
+    if online.notes:
+        lines.append(("Obs do cliente", online.notes))
+    return lines
+
+
 async def print_receipt(session: AsyncSession, company_id: UUID, establishment_id: UUID, order_id: UUID) -> None:
     order = await _load(session, establishment_id, order_id)
+    online = await _online(session, order)
     company = await session.get(Company, company_id)
     payments = (await session.scalars(
         select(Payment).where(Payment.order_id == order.id, Payment.status == PaymentStatus.CONFIRMED)
@@ -72,6 +101,7 @@ async def print_receipt(session: AsyncSession, company_id: UUID, establishment_i
         subtotal=order.subtotal, service_fee=order.service_fee,
         service_fee_percent=order.service_fee_percent, discount=order.discount, total=order.total,
         payments=[(method(p), p.amount) for p in payments],
+        delivery=delivery_lines(online, order.total) if online else None,
     )
     await asyncio.to_thread(thermal_printer.send_raw, data)
 
@@ -88,8 +118,12 @@ async def print_kitchen(session: AsyncSession, establishment_id: UUID, order_id:
         items = [(i.quantity, i.item_name, i.notes) for i in order.items if i.status == OrderItemStatus.SENT]
     if not items:
         return False
+    # Pedido online: order.notes carrega telefone/pagamento/local pro caixa —
+    # a cozinha só precisa da observação que o cliente escreveu.
+    online = await _online(session, order)
     data = thermal_printer.kitchen_ticket(
-        where=await _where(session, order, receipt=False), items=items, notes=order.notes,
+        where=await _where(session, order, receipt=False), items=items,
+        notes=online.notes if online else order.notes,
     )
     await asyncio.to_thread(thermal_printer.send_raw, data)
     return True

@@ -113,11 +113,21 @@ def kitchen_ticket(where: str, items: list[tuple[int, str, str | None]],
 def receipt(bar_name: str, where: str, items: list[tuple[int, str, Decimal]],
             subtotal: Decimal, service_fee: Decimal, service_fee_percent: Decimal,
             discount: Decimal, total: Decimal, payments: list[tuple[str, Decimal]],
+            delivery: list[tuple[str, str]] | None = None,
             now: datetime | None = None) -> bytes:
-    """Recibo da comanda — mesmo conteúdo do printComanda() do navegador."""
+    """Recibo da comanda — mesmo conteúdo do printComanda() do navegador.
+
+    `delivery` = linhas (rótulo, valor) do pedido online — local, telefone,
+    pagamento, troco — impressas em destaque logo abaixo do cabeçalho: é o
+    papel que vai junto com o entregador."""
     now = now or datetime.now()
     out = [INIT, CENTER, BOLD_ON, TALL, _text(bar_name), NORMAL, BOLD_OFF,
            _text(where), _text(now.strftime("%d/%m/%Y %H:%M")), LEFT, _line()]
+    if delivery:
+        for label, value in delivery:
+            out += [BOLD_ON, _text(f"{label}:"), BOLD_OFF]
+            out += [_text(f"  {l}") for l in _wrap(value, WIDTH - 2)]
+        out.append(_line())
     if not items:
         out.append(_text("(sem itens)"))
     for qty, name, line_total in items:

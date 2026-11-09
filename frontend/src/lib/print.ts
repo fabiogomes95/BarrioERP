@@ -107,6 +107,13 @@ export function printComanda(
   const discRow = Number(order.discount) > 0
     ? `<tr><td>Desconto</td><td class="val">-${brl(order.discount)}</td></tr>` : ''
 
+  // Entrega/retirada: as notas da comanda trazem local, telefone, pagamento e
+  // troco do pedido online ("Pedido online #12 · Entrega · Tel ... · ...").
+  // Vão no papel porque ele sai junto com o entregador.
+  const deliveryBlock = (order.order_type === 'delivery' || order.order_type === 'pickup') && order.notes
+    ? `<div class="delivery">${order.notes.split(' · ').map(l => `<div>${esc(l)}</div>`).join('')}</div><div class="hr"></div>`
+    : ''
+
   const confirmedPayments = payments.filter(p => p.status === 'confirmed')
   const paidSoFar = confirmedPayments.reduce((sum, p) => sum + Number(p.amount), 0)
   const remaining = Math.max(0, Math.round((Number(order.total) - paidSoFar) * 100) / 100)
@@ -141,6 +148,7 @@ export function printComanda(
   .qtyname { text-align: left; word-break: break-word; }
   .val { text-align: right; white-space: nowrap; padding-left: 2mm; }
   .total-row td { font-size: 12pt; font-weight: bold; padding-top: 1.5mm; border-top: 1px solid #000; }
+  .delivery { font-size: 10pt; line-height: 1.35; word-break: break-word; }
   .foot { margin-top: 3mm; font-size: 9pt; text-align: center; }
 </style></head>
 <body>
@@ -148,6 +156,7 @@ export function printComanda(
   <div class="center sub">${esc(where)}${order.customer_name ? ' - ' + esc(order.customer_name) : ''}</div>
   <div class="center sub">${now}</div>
   <div class="hr"></div>
+  ${deliveryBlock}
   <table>
     ${itemRows || '<tr><td class="sub center">(sem itens)</td></tr>'}
   </table>
