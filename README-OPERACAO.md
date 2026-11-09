@@ -25,9 +25,9 @@ O **Tailscale** cuida do acesso seguro (HTTPS) — sem certificado pra renovar
 - `tailscale funnel` → **só o cardápio**, aberto pra internet, na porta 8443.
   **Nunca** faça funnel da porta 443: ela é o Barrio inteiro.
 
-> O antigo serviço `BarrioERP-Backend-TLS` (uvicorn com certificado) e a tarefa
-> `BarrioERP-Renovar-Cert` foram **desativados** (não removidos) — o
-> certificado tinha vencido e não renovava; o Tailscale Serve renova sozinho.
+> O antigo serviço `BarrioERP-Backend-TLS` (uvicorn com certificado), a tarefa
+> `BarrioERP-Renovar-Cert` e a pasta `backend/certs/` foram **removidos** em
+> 08/11/2026 — o Tailscale Serve cuida do HTTPS e renova o certificado sozinho.
 
 ---
 
