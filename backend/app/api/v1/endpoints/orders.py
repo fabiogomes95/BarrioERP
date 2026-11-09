@@ -65,6 +65,7 @@ from app.schemas.order import (
     OrderDiscountUpdate,
     OrderItemAdd,
     OrderItemQuantityUpdate,
+    OrderMerge,
     OrderResponse,
     OrderServiceFeeToggle,
 )
@@ -472,6 +473,28 @@ async def cancel_order(
 ) -> None:
     require_roles(current_user, UserRole.OWNER, UserRole.MANAGER)
     await _service(session, current_user).cancel_order(order_id)
+
+
+# ── POST /orders/{order_id}/merge — Mesclar comandas ─────────────────────────
+
+
+@router.post(
+    "/{order_id}/merge",
+    response_model=OrderResponse,
+    summary="Mesclar comandas",
+    description=(
+        "Move os itens das comandas em `source_ids` para esta, encerra as de "
+        "origem e libera as mesas delas. Recusa origem com pagamento registrado."
+    ),
+)
+async def merge_orders(
+    order_id: UUID,
+    data: OrderMerge,
+    session: DBSession,
+    current_user: CurrentUser,
+) -> OrderResponse:
+    require_roles(current_user, UserRole.OWNER, UserRole.MANAGER, UserRole.CASHIER)
+    return await _service(session, current_user).merge_orders(order_id, data.source_ids)
 
 
 # ── PATCH /orders/{order_id}/close — Fechar comanda ───────────────────────────

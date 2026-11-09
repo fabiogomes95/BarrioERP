@@ -1,4 +1,4 @@
-import { type Order, type Table, type Payment } from './api'
+import { type Order, type Table, type Payment, type FiadoEntry } from './api'
 
 const METHOD_LABEL: Record<string, string> = {
   cash: 'Dinheiro', credit_card: 'Crédito', debit_card: 'Débito',
@@ -252,6 +252,179 @@ function drawDash(ctx: CanvasRenderingContext2D, y: number, x0: number, x1: numb
   ctx.stroke()
   ctx.setLineDash([])
   return y
+}
+
+const ORDER_TYPE_LABEL: Record<string, string> = {
+  counter: 'Consumo no local',
+  delivery: 'Delivery',
+  pickup: 'Retirada',
+}
+
+/**
+ * Gera uma imagem PNG com o extrato consolidado de fiado de um cliente — todas as
+ * comandas em aberto somadas num único recibo, pra não precisar mandar uma imagem
+ * por comanda no WhatsApp.
+ */
+export async function buildFiadoStatementImage(
+  customerName: string, entries: FiadoEntry[], barName: string,
+): Promise<Blob> {
+  const now = new Date().toLocaleString('pt-BR')
+  const logo = await loadImage('/icon-barrio-192.png')
+  const totalRemaining = entries.reduce((s, e) => s + Number(e.remaining), 0)
+
+  const W = 440
+  const PAD = 28
+  const contentW = W - PAD * 2
+  const valueColW = 84
+  const nameColW = contentW - valueColW
+
+  const measure = document.createElement('canvas').getContext('2d')!
+
+  type Row = { lines: string[]; value: string }
+  measure.font = `bold 14px ${FONT}`
+  const entryRows: Row[] = entries.map(e => {
+    const where = e.table_number ? `Mesa ${e.table_number}` : (ORDER_TYPE_LABEL[e.order_type] ?? e.order_type)
+    const label = `${new Date(e.created_at).toLocaleDateString('pt-BR')} — ${where}`
+    return { lines: wrapText(measure, label, nameColW), value: brl(e.remaining) }
+  })
+
+  const LOGO_SIZE = 56
+  const HEADER_H = (logo ? LOGO_SIZE + 14 : 0) + 34 + 24 + 22 + 20
+  const DASH_H = 22
+  const ITEM_ROW_LINE_H = 22
+  const ITEM_ROW_GAP = 10
+  const TOTAL_ROW_H = 46
+  const FOOTER_H = 50
+
+  const entriesH = entryRows.reduce((h, r) => h + r.lines.length * ITEM_ROW_LINE_H + ITEM_ROW_GAP, 0)
+
+  const H = PAD + HEADER_H + DASH_H + entriesH + DASH_H + TOTAL_ROW_H + DASH_H + FOOTER_H + PAD
+
+  const canvas = document.createElement('canvas')
+  const scale = 2
+  canvas.width = W * scale
+  canvas.height = H * scale
+  const ctx = canvas.getContext('2d')!
+  ctx.scale(scale, scale)
+
+  ctx.fillStyle = PAPER
+  ctx.fillRect(0, 0, W, H)
+  ctx.textBaseline = 'alphabetic'
+
+  let y = PAD
+
+  if (logo) {
+    ctx.save()
+    ctx.beginPath()
+    ctx.arc(W / 2, y + LOGO_SIZE / 2, LOGO_SIZE / 2, 0, Math.PI * 2)
+    ctx.closePath()
+    ctx.clip()
+    ctx.drawImage(logo, W / 2 - LOGO_SIZE / 2, y, LOGO_SIZE, LOGO_SIZE)
+    ctx.restore()
+    y += LOGO_SIZE + 14
+  }
+
+  ctx.fillStyle = INK
+  ctx.font = `bold 21px ${FONT}`
+  ctx.textAlign = 'center'
+  y += 24
+  ctx.fillText(barName, W / 2, y)
+
+  ctx.font = `14px ${FONT}`
+  ctx.fillStyle = MUTED
+  y += 26
+  ctx.fillText(`Extrato de fiado — ${customerName}`, W / 2, y)
+
+  y += 22
+  ctx.fillText(now, W / 2, y)
+
+  y += 14
+  y = drawDash(ctx, y, PAD, W - PAD)
+
+  ctx.textAlign = 'left'
+  if (entryRows.length === 0) {
+    ctx.font = `italic 14px ${FONT}`
+    ctx.fillStyle = MUTED
+    ctx.textAlign = 'center'
+    y += ITEM_ROW_LINE_H
+    ctx.fillText('(sem contas em aberto)', W / 2, y)
+    ctx.textAlign = 'left'
+  } else {
+    for (const row of entryRows) {
+      ctx.font = `bold 14px ${FONT}`
+      row.lines.forEach((line, i) => {
+        y += ITEM_ROW_LINE_H
+        ctx.fillStyle = INK
+        ctx.textAlign = 'left'
+        ctx.fillText(line, PAD, y)
+        if (i === 0) {
+          const nameW = ctx.measureText(line).width
+          const valueW = ctx.measureText(row.value).width
+          const dotsStart = PAD + nameW + 6
+          const dotsEnd = W - PAD - valueW - 6
+          if (dotsEnd > dotsStart) {
+            ctx.fillStyle = DASH
+            ctx.font = `14px ${FONT}`
+            let x = dotsStart
+            while (x < dotsEnd) { ctx.fillText('.', x, y); x += 5 }
+            ctx.font = `bold 14px ${FONT}`
+          }
+          ctx.fillStyle = INK
+          ctx.textAlign = 'right'
+          ctx.fillText(row.value, W - PAD, y)
+        }
+      })
+      y += ITEM_ROW_GAP
+    }
+  }
+
+  y = drawDash(ctx, y, PAD, W - PAD)
+
+  y += 32
+  ctx.font = `bold 19px ${FONT}`
+  ctx.fillStyle = INK
+  ctx.textAlign = 'left'
+  ctx.fillText('TOTAL DEVIDO', PAD, y)
+  ctx.textAlign = 'right'
+  ctx.fillText(brl(totalRemaining), W - PAD, y)
+
+  y += 20
+  y = drawDash(ctx, y, PAD, W - PAD)
+
+  ctx.font = `14px ${FONT}`
+  ctx.fillStyle = MUTED
+  ctx.textAlign = 'center'
+  y += 24
+  ctx.fillText('Obrigado pela preferência!', W / 2, y)
+
+  return new Promise(resolve => canvas.toBlob(b => resolve(b!), 'image/png'))
+}
+
+/**
+ * Compartilha o extrato consolidado de fiado do cliente via WhatsApp (mesma lógica
+ * de share/fallback do recibo individual).
+ */
+export async function shareFiadoStatementWhatsApp(
+  customerName: string, entries: FiadoEntry[], barName: string,
+): Promise<'shared' | 'downloaded'> {
+  const blob = await buildFiadoStatementImage(customerName, entries, barName)
+  const safeName = customerName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+  const file = new File([blob], `fiado-${safeName || 'cliente'}.png`, { type: 'image/png' })
+
+  const nav = navigator as Navigator & { canShare?: (data: { files: File[] }) => boolean }
+  if (nav.share && nav.canShare?.({ files: [file] })) {
+    await nav.share({ files: [file] })
+    return 'shared'
+  }
+
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = file.name
+  a.click()
+  URL.revokeObjectURL(url)
+  window.open('https://web.whatsapp.com/', '_blank')
+  return 'downloaded'
 }
 
 /**

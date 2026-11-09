@@ -62,6 +62,20 @@ class Settings(BaseSettings):
     # Nome exibido na página pública. Pode divergir de Establishment.name
     # (ex: "Matriz" é o nome interno/tenant, não o nome fantasia do bar).
     PUBLIC_MENU_DISPLAY_NAME: str | None = None
+    # Sites que podem chamar a API do cardápio de fora (ex: a cópia da página
+    # no GitHub Pages). A própria porta do cardápio não precisa estar aqui.
+    PUBLIC_MENU_CORS_ORIGINS: list[str] = []
+    # Horário em que o cardápio aceita pedido — formato em app/services/opening_hours.py.
+    # Vazio = aceita sempre.
+    PUBLIC_MENU_HOURS: dict[str, str] = {}
+
+    # Impressora térmica ligada neste PC (nome no Windows, ex: "POS-80C").
+    # Preenchida = recibo/ticket de cozinha saem direto, sem navegador
+    # (app/services/thermal_printer.py). Vazia = impressão pelo navegador.
+    THERMAL_PRINTER: str | None = None
+    # Ticket da cozinha sai sozinho ao aceitar pedido online. False = só
+    # imprime quando alguém mandar (ex: período de testes, pra não gastar papel).
+    AUTO_PRINT_ONLINE_ORDERS: bool = True
 
     @property
     def database_url(self) -> str:

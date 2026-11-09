@@ -47,7 +47,9 @@ Write-Host "Pra parar:           Stop-Service BarrioERP-Menu-Publico"
 Write-Host "Pra desinstalar:     & '$nssm' remove BarrioERP-Menu-Publico confirm"
 Write-Host ""
 Write-Host "Pra expor pro CLIENTE de verdade (fora do Tailscale), com o PC ligado:" -ForegroundColor Yellow
-Write-Host "  tailscale funnel --bg $port"
-Write-Host "  (o link publico vira algo como https://gomes-pc.cod-aldebaran.ts.net/ )"
-Write-Host "  Rode isso so depois de testar o link do Tailscale acima e confirmar" -ForegroundColor Yellow
-Write-Host "  que o cardapio esta certo. tailscale funnel list mostra o que esta exposto." -ForegroundColor Yellow
+Write-Host "  tailscale funnel --bg --https=8443 http://127.0.0.1:$port"
+Write-Host "  (o link publico vira https://gomes-pc.cod-aldebaran.ts.net:8443/cardapio/matriz )"
+Write-Host "  NUNCA rode funnel na 443: ela e do ERP via tailscale serve (so tailnet)" -ForegroundColor Red
+Write-Host "  e virar funnel na 443 exporia o ERP inteiro na internet." -ForegroundColor Red
+Write-Host "  Pra conferir o que esta exposto: tailscale funnel status" -ForegroundColor Yellow
+Write-Host "  Pra tirar do ar:                 tailscale funnel --https=8443 off" -ForegroundColor Yellow

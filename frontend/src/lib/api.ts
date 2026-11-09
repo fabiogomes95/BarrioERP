@@ -300,6 +300,56 @@ export async function fetchOrder(orderId: string): Promise<Order> {
   return request<Order>(`/orders/${orderId}`)
 }
 
+// ── Pedidos online (cardápio público → fila de aceite) ───────────────────────
+
+export interface OnlineOrder {
+  id: string
+  number: number
+  status: 'pending' | 'accepted' | 'rejected'
+  fulfillment: 'delivery' | 'pickup'
+  customer_name: string
+  customer_phone: string
+  notes: string | null
+  delivery_location: string | null
+  payment_method: 'cash' | 'pix' | 'credit' | 'debit' | null
+  change_for: string | null
+  items: { menu_item_id: string | null; item_name: string; unit_price: string; quantity: number }[]
+  total: string
+  order_id: string | null
+  created_at: string
+}
+
+export async function fetchOnlineOrders(): Promise<OnlineOrder[]> {
+  return request<OnlineOrder[]>('/online-orders/')
+}
+
+export async function acceptOnlineOrder(id: string): Promise<{ order_id: string }> {
+  return request<{ order_id: string }>(`/online-orders/${id}/accept`, { method: 'POST' })
+}
+
+export async function rejectOnlineOrder(id: string): Promise<void> {
+  return request<void>(`/online-orders/${id}/reject`, { method: 'POST' })
+}
+
+export interface OnlineOrdersReport {
+  received: number
+  accepted: number
+  rejected: number
+  pending: number
+  accepted_total: string
+  average_ticket: string
+  delivery: number
+  pickup: number
+  top_items: { name: string; quantity: number; total: string }[]
+}
+
+/** start/end no formato do <input type="datetime-local"> (horário local do bar); end exclusivo */
+export async function fetchOnlineOrdersReport(start: string, end: string): Promise<OnlineOrdersReport> {
+  return request<OnlineOrdersReport>(
+    `/online-orders/report?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`,
+  )
+}
+
 export async function addOrderItem(
   orderId: string,
   data: {
@@ -308,6 +358,10 @@ export async function addOrderItem(
     unit_price?: number
     quantity: number
     notes?: string | null
+    /** Opção obrigatória do item (ex: sabor do churrasco) — exige menu_item_id */
+    complemento?: string
+    /** Pizza meio a meio: a outra metade — exige menu_item_id */
+    half_with?: string
   },
 ): Promise<Order> {
   return request<Order>(`/orders/${orderId}/items`, {
@@ -367,6 +421,14 @@ export async function closeOrder(
 
 export async function cancelOrder(orderId: string): Promise<void> {
   return request<void>(`/orders/${orderId}`, { method: 'DELETE' })
+}
+
+/** Junta as comandas `sourceIds` dentro de `targetId` (itens mudam de comanda). */
+export async function mergeOrders(targetId: string, sourceIds: string[]): Promise<Order> {
+  return request<Order>(`/orders/${targetId}/merge`, {
+    method: 'POST',
+    body: JSON.stringify({ source_ids: sourceIds }),
+  })
 }
 
 export async function reopenOrder(orderId: string): Promise<Order> {
@@ -443,11 +505,20 @@ export async function requestBill(orderId: string): Promise<Order> {
   return request<Order>(`/orders/${orderId}/request-bill`, { method: 'PATCH' })
 }
 
-export async function requestRemotePrint(orderId: string): Promise<void> {
-  // Envia o pedido de impressão pro dispositivo marcado como impressora do bar
-  await request(`/notifications/print`, {
+/**
+ * Imprime na térmica do bar — o servidor manda direto pra impressora (sem
+ * janela do navegador). Se não conseguir, repassa pro PC marcado como
+ * "impressora do bar". `items` (só cozinha) = os escolhidos na tela; sem
+ * lista, vão os itens da comanda que vão pra cozinha.
+ */
+export async function requestRemotePrint(
+  orderId: string,
+  printType: 'comanda' | 'cozinha' = 'comanda',
+  items?: { name: string; qty: number; notes?: string | null }[],
+): Promise<{ status: 'printed' | 'sent' }> {
+  return request(`/notifications/print`, {
     method: 'POST',
-    body: JSON.stringify({ order_id: orderId, print_type: 'comanda' }),
+    body: JSON.stringify({ order_id: orderId, print_type: printType, items: items ?? null }),
   })
 }
 
@@ -658,6 +729,7 @@ export interface DailyReport {
   revenue_total: string
   orders_count: number
   average_ticket: string
+  service_fee_total: string
   by_payment_method: PaymentMethodTotal[]
   top_items: TopItem[]
 }
@@ -679,6 +751,7 @@ export interface PeriodReport {
   revenue_total: string
   orders_count: number
   average_ticket: string
+  service_fee_total: string
   by_payment_method: PaymentMethodTotal[]
   top_items: TopItem[]
   daily_breakdown: DailyBreakdownEntry[]
@@ -686,6 +759,28 @@ export interface PeriodReport {
 
 export async function fetchPeriodReport(start: string, end: string): Promise<PeriodReport> {
   return request<PeriodReport>(`/reports/period?start=${start}&end=${end}`)
+}
+
+// Relatório de turno: intervalo exato de data/hora (não precisa bater com o
+// dia de calendário) — pra fechar a conta de um turno de bar que atravessa
+// a virada do dia, ex.: 05/09 16h até 06/09 05h.
+export interface ShiftReport {
+  start: string
+  end: string
+  revenue_total: string
+  orders_count: number
+  average_ticket: string
+  service_fee_total: string
+  by_payment_method: PaymentMethodTotal[]
+  top_items: TopItem[]
+}
+
+// startIso/endIso: datetime local sem fuso (ex.: "2026-09-05T16:00"), como
+// vem de um <input type="datetime-local">. O backend trata como horário local.
+export async function fetchShiftReport(startIso: string, endIso: string): Promise<ShiftReport> {
+  return request<ShiftReport>(
+    `/reports/shift?start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}`
+  )
 }
 
 export async function fetchHistory(limit = 50, day?: string): Promise<Order[]> {

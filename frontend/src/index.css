@@ -1,13 +1,15 @@
 @import "tailwindcss";
 
 /*
- * Paleta "Ardósia & Cobre" — tema genérico pra bares/restaurantes em geral
- * (o sistema passou a ser vendido pra outros estabelecimentos, não é mais
- * fixo na identidade do Recanto da Barra). Base neutra fria (ardósia,
- * cinza-azulado) contrastando com um acento quente de cobre nos botões de
- * ação — troca o "café colonial" (creme + marrom) anterior por algo mais
- * parecido com software de operação moderno, mantendo o calor de
- * hospitalidade só no acento.
+ * Paleta "Areia & Terracota" — mesma linha visual do cardápio público
+ * (public_menu_static/index.html, que segue o cardápio impresso do Recanto
+ * da Barra): papel pêssego, marrom nos títulos, terracota nos botões de ação
+ * e vinho nos preços; títulos em Cormorant com versalete, texto em Poppins.
+ *
+ * Antes era "Ardósia & Cobre" (neutra fria), escolhida quando o sistema foi
+ * pensado pra vários estabelecimentos. Hoje o único é o Recanto, e o dono
+ * pediu o app na mesma identidade do cardápio — se um dia voltar a ser
+ * multi-marca, é só esta paleta que muda (o resto do código usa os tokens).
  *
  * @theme define os valores padrão (modo claro) e registra cada um como
  * variável CSS em :root. O Tailwind gera as classes utilitárias
@@ -20,102 +22,102 @@
  * (100 = texto de maior destaque, 800 = fundo/borda de card, etc.), não pelo
  * valor real de luminosidade do Tailwind padrão. Por isso os tokens são
  * invertidos entre os temas — mantém a mesma classe funcionando nos dois.
+ * "amber" é o acento (terracota) — o nome ficou por compatibilidade.
  */
 
 @theme {
+  --font-sans: 'Poppins', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Cormorant Garamond', Georgia, 'Times New Roman', serif;
+
   /* Decorativas — iguais nos dois temas */
-  --color-app-gold: #c17638;
-  --color-app-cream: #f6dcc3;
+  --color-app-gold: #c4a083;
+  --color-app-cream: #fde8d2;
 
-  /* Semânticas — modo claro (padrão) */
-  --color-app-bg: #eef1f4;
-  --color-app-surface: #ffffff;
-  --color-app-surface-2: #e3e8ed;
-  --color-app-border: rgba(51, 65, 85, 0.12);
-  --color-app-heading: #1e293b;
-  --color-app-accent: #b35e28;
-  --color-app-accent-hover: #96491c;
-  --color-app-accent-soft: rgba(179, 94, 40, 0.1);
-  --color-app-text: #161b21;
-  --color-app-text-muted: #5c6773;
-  --color-app-text-faint: #8b95a1;
-  --color-app-price: #a8432a;
-  --color-app-success: #1f8f6f;
+  /* Semânticas — modo claro (padrão): papel do cardápio */
+  --color-app-bg: #fbeedf;
+  --color-app-surface: #fffaf4;
+  --color-app-surface-2: #f6dfc6;
+  --color-app-border: rgba(122, 74, 42, 0.16);
+  --color-app-heading: #7a4a2a;
+  --color-app-accent: #9c4a1a;
+  --color-app-accent-hover: #7f3a12;
+  --color-app-accent-soft: rgba(156, 74, 26, 0.1);
+  --color-app-text: #2a1a10;
+  --color-app-text-muted: #7d6553;
+  --color-app-text-faint: #a8917c;
+  --color-app-price: #6e1010;
+  --color-app-success: #1f8f4e;
 
-  /* Escala amber (acento principal) — cobre no claro */
-  --color-amber-50: #fdf2ea;
-  --color-amber-100: #f9e0cc;
-  --color-amber-200: #f0c299;
-  --color-amber-300: #dd9a63;
-  --color-amber-400: #c17638;
-  --color-amber-500: #b35e28;
-  --color-amber-600: #96491c;
-  --color-amber-700: #743a17;
-  --color-amber-800: #522910;
-  --color-amber-900: #331a0a;
-  --color-amber-950: #1c0e05;
+  /* Escala amber (acento principal) — terracota no claro */
+  --color-amber-50: #fdf1e6;
+  --color-amber-100: #f9dcc4;
+  --color-amber-200: #efbd96;
+  --color-amber-300: #d99466;
+  --color-amber-400: #ad5726;
+  --color-amber-500: #9c4a1a;
+  --color-amber-600: #7f3a12;
+  --color-amber-700: #622c0d;
+  --color-amber-800: #461f09;
+  --color-amber-900: #2c1305;
+  --color-amber-950: #180a02;
 
-  /* Escala stone (neutros/texto) — ardósia, invertida (ver nota acima) */
-  --color-stone-50: #fdfdfe;
-  --color-stone-100: #12161c;
-  --color-stone-200: #232a33;
-  --color-stone-300: #333c48;
-  --color-stone-400: #4a5568;
-  --color-stone-500: #64748b;
-  --color-stone-600: #8592a3;
-  --color-stone-700: #aab4c0;
-  --color-stone-800: #d3d9e0;
-  --color-stone-900: #e9ecf0;
-  --color-stone-950: #fbfcfd;
+  /* Escala stone (neutros/texto) — marrom-areia, invertida (ver nota acima) */
+  --color-stone-50: #fffdfa;
+  --color-stone-100: #2a1a10;
+  --color-stone-200: #3d2a1d;
+  --color-stone-300: #54402f;
+  --color-stone-400: #6b5442;
+  --color-stone-500: #856c58;
+  --color-stone-600: #a2876f;
+  --color-stone-700: #c6ab92;
+  --color-stone-800: #ead4bd;
+  --color-stone-900: #f8e8d6;
+  --color-stone-950: #fff8f0;
 
-  /* Laranja (status "conta solicitada"/pendente) — só 400/500 são usados no
-     código. Reformulado pra um dourado/mostarda: continua claramente
-     diferente do cobre (acento) e do vermelho/verde (perigo/sucesso), mas
-     sem ser o laranja padrão do Tailwind (que não fazia parte do tema
-     antigo nem do novo — ficava "solto", com a MESMA cor nos dois temas). */
-  --color-orange-400: #92620d;
-  --color-orange-500: #7a520a;
+  /* Laranja (status "conta solicitada"/pendente) — mostarda, distinto da terracota */
+  --color-orange-400: #8a5a08;
+  --color-orange-500: #74490a;
 }
 
-/* ── Modo escuro — usuário escolheu explicitamente (ThemeToggle) ────────── */
+/* ── Modo escuro — marrom-noite, mesma identidade ──────────────────────── */
 :root[data-theme="dark"] {
-  --color-app-bg: #171b21;
-  --color-app-surface: #1f242c;
-  --color-app-surface-2: #262d37;
-  --color-app-border: rgba(217, 122, 63, 0.14);
-  --color-app-heading: #e8925c;
-  --color-app-accent: #d97a3f;
-  --color-app-accent-hover: #e8925c;
-  --color-app-accent-soft: rgba(217, 122, 63, 0.14);
-  --color-app-text: #eef1f4;
-  --color-app-text-muted: #9aa4b0;
-  --color-app-text-faint: #626b76;
-  --color-app-price: #ff9a5c;
-  --color-app-success: #4fae8a;
+  --color-app-bg: #1c140e;
+  --color-app-surface: #261b13;
+  --color-app-surface-2: #2f2218;
+  --color-app-border: rgba(228, 166, 118, 0.14);
+  --color-app-heading: #e4a676;
+  --color-app-accent: #d98a52;
+  --color-app-accent-hover: #e8a372;
+  --color-app-accent-soft: rgba(217, 138, 82, 0.14);
+  --color-app-text: #f3e8dc;
+  --color-app-text-muted: #b8a38e;
+  --color-app-text-faint: #7d6b5a;
+  --color-app-price: #f0a26e;
+  --color-app-success: #4fae7a;
 
   --color-amber-50: #2b1a0f;
   --color-amber-100: #3d2515;
   --color-amber-200: #5c391f;
-  --color-amber-300: #96502a;
-  --color-amber-400: #c66d3a;
-  --color-amber-500: #d97a3f;
-  --color-amber-600: #e8925c;
-  --color-amber-700: #f0b088;
-  --color-amber-800: #f5cbae;
-  --color-amber-900: #fae1d0;
-  --color-amber-950: #fdf0e8;
+  --color-amber-300: #96582f;
+  --color-amber-400: #e4a676;
+  --color-amber-500: #d98a52;
+  --color-amber-600: #e8a372;
+  --color-amber-700: #f0bd96;
+  --color-amber-800: #f5d2b5;
+  --color-amber-900: #fae4d2;
+  --color-amber-950: #fdf2e8;
 
-  --color-stone-50: #0c0e11;
-  --color-stone-100: #eef1f4;
-  --color-stone-200: #d7dce2;
-  --color-stone-300: #b7c0cb;
-  --color-stone-400: #94a0ad;
-  --color-stone-500: #788594;
-  --color-stone-600: #5e6b7a;
-  --color-stone-700: #444e5c;
-  --color-stone-800: #262d37;
-  --color-stone-900: #171b21;
-  --color-stone-950: #0a0c0e;
+  --color-stone-50: #0a0604;
+  --color-stone-100: #f3e8dc;
+  --color-stone-200: #e2d3c3;
+  --color-stone-300: #c9b6a2;
+  --color-stone-400: #ab967f;
+  --color-stone-500: #8f7a65;
+  --color-stone-600: #6f5d4c;
+  --color-stone-700: #504236;
+  --color-stone-800: #33271d;
+  --color-stone-900: #1c140e;
+  --color-stone-950: #0f0a06;
 
   --color-orange-400: #e8b34a;
   --color-orange-500: #d99f2e;
@@ -124,43 +126,43 @@
 /* ── Modo escuro — segue o sistema, só quando o usuário nunca escolheu ──── */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]):not([data-theme="dark"]) {
-    --color-app-bg: #171b21;
-    --color-app-surface: #1f242c;
-    --color-app-surface-2: #262d37;
-    --color-app-border: rgba(217, 122, 63, 0.14);
-    --color-app-heading: #e8925c;
-    --color-app-accent: #d97a3f;
-    --color-app-accent-hover: #e8925c;
-    --color-app-accent-soft: rgba(217, 122, 63, 0.14);
-    --color-app-text: #eef1f4;
-    --color-app-text-muted: #9aa4b0;
-    --color-app-text-faint: #626b76;
-    --color-app-price: #ff9a5c;
-    --color-app-success: #4fae8a;
+    --color-app-bg: #1c140e;
+    --color-app-surface: #261b13;
+    --color-app-surface-2: #2f2218;
+    --color-app-border: rgba(228, 166, 118, 0.14);
+    --color-app-heading: #e4a676;
+    --color-app-accent: #d98a52;
+    --color-app-accent-hover: #e8a372;
+    --color-app-accent-soft: rgba(217, 138, 82, 0.14);
+    --color-app-text: #f3e8dc;
+    --color-app-text-muted: #b8a38e;
+    --color-app-text-faint: #7d6b5a;
+    --color-app-price: #f0a26e;
+    --color-app-success: #4fae7a;
 
     --color-amber-50: #2b1a0f;
     --color-amber-100: #3d2515;
     --color-amber-200: #5c391f;
-    --color-amber-300: #96502a;
-    --color-amber-400: #c66d3a;
-    --color-amber-500: #d97a3f;
-    --color-amber-600: #e8925c;
-    --color-amber-700: #f0b088;
-    --color-amber-800: #f5cbae;
-    --color-amber-900: #fae1d0;
-    --color-amber-950: #fdf0e8;
+    --color-amber-300: #96582f;
+    --color-amber-400: #e4a676;
+    --color-amber-500: #d98a52;
+    --color-amber-600: #e8a372;
+    --color-amber-700: #f0bd96;
+    --color-amber-800: #f5d2b5;
+    --color-amber-900: #fae4d2;
+    --color-amber-950: #fdf2e8;
 
-    --color-stone-50: #0c0e11;
-    --color-stone-100: #eef1f4;
-    --color-stone-200: #d7dce2;
-    --color-stone-300: #b7c0cb;
-    --color-stone-400: #94a0ad;
-    --color-stone-500: #788594;
-    --color-stone-600: #5e6b7a;
-    --color-stone-700: #444e5c;
-    --color-stone-800: #262d37;
-    --color-stone-900: #171b21;
-    --color-stone-950: #0a0c0e;
+    --color-stone-50: #0a0604;
+    --color-stone-100: #f3e8dc;
+    --color-stone-200: #e2d3c3;
+    --color-stone-300: #c9b6a2;
+    --color-stone-400: #ab967f;
+    --color-stone-500: #8f7a65;
+    --color-stone-600: #6f5d4c;
+    --color-stone-700: #504236;
+    --color-stone-800: #33271d;
+    --color-stone-900: #1c140e;
+    --color-stone-950: #0f0a06;
 
     --color-orange-400: #e8b34a;
     --color-orange-500: #d99f2e;
@@ -174,4 +176,18 @@ html {
 body {
   background: var(--color-app-bg);
   transition: background-color 0.2s ease;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Títulos das telas ("Pedidos", "Caixa"...) no estilo dos títulos do
+   cardápio: Cormorant com versalete. Fora de @layer de propósito, pra valer
+   por cima do tamanho text-lg/text-xl das páginas — a Cormorant é bem mais
+   "miúda" que a Poppins no mesmo tamanho. */
+h1 {
+  font-family: var(--font-display);
+  font-variant: small-caps;
+  font-weight: 700;
+  font-size: 1.75rem;
+  line-height: 1.05;
+  letter-spacing: 0.04em;
 }

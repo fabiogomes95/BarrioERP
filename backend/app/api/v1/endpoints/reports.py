@@ -4,14 +4,14 @@ app/api/v1/endpoints/reports.py
 Relatórios: faturamento do dia e histórico de comandas fechadas.
 """
 
-from datetime import date
+from datetime import date, datetime
 
 from fastapi import APIRouter, Query
 
 from app.api.deps import CurrentUser, DBSession, require_roles
 from app.models.user import UserRole
 from app.schemas.order import OrderHistoryResponse
-from app.schemas.report import DailyReport, FiadoCustomerGroup, FiadoEntry, PeriodReport
+from app.schemas.report import DailyReport, FiadoCustomerGroup, FiadoEntry, PeriodReport, ShiftReport
 from app.services.order_service import OrderService
 
 router = APIRouter()
@@ -91,6 +91,29 @@ async def period_report(
 ) -> PeriodReport:
     require_roles(current_user, UserRole.OWNER, UserRole.MANAGER, UserRole.CASHIER)
     return await _service(session, current_user).period_report(start, end)
+
+
+@router.get(
+    "/shift",
+    response_model=ShiftReport,
+    summary="Relatório de turno (intervalo exato de data/hora)",
+    description=(
+        "Faturamento, nº de comandas, ticket médio, taxa de serviço (10% do "
+        "garçom), faturamento por forma de pagamento e itens mais vendidos "
+        "das comandas FECHADAS entre `start` e `end` (data/hora exatas, não "
+        "precisa bater com meia-noite). Pensado pra turno de bar que "
+        "atravessa a virada do dia, ex.: 05/09 16h até 06/09 05h. "
+        "Intervalo máximo: 48 horas."
+    ),
+)
+async def shift_report(
+    session: DBSession,
+    current_user: CurrentUser,
+    start: datetime = Query(description="Início do turno (ISO 8601, ex.: 2026-09-05T16:00:00)."),
+    end: datetime = Query(description="Fim do turno (ISO 8601, ex.: 2026-09-06T05:00:00)."),
+) -> ShiftReport:
+    require_roles(current_user, UserRole.OWNER, UserRole.MANAGER, UserRole.CASHIER)
+    return await _service(session, current_user).shift_report(start, end)
 
 
 @router.get(

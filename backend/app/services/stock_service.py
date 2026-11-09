@@ -239,7 +239,7 @@ class StockService(BaseService):
     # ══════════════════════════════════════════════════════════════
 
     async def deduct_for_sale(
-        self, menu_item_id: UUID, quantity: int, order_item_id: UUID, establishment_id: UUID
+        self, menu_item_id: UUID, quantity: int | Decimal, order_item_id: UUID, establishment_id: UUID
     ) -> None:
         """Deduz o estoque dos insumos da receita de menu_item_id. Não bloqueia se ficar negativo."""
         ingredients = await self._ingredient_repo.list_for_menu_item(menu_item_id)
@@ -285,6 +285,40 @@ class StockService(BaseService):
             await self._apply_sale_movement(
                 stock_item=ingredient.stock_item,
                 change=change,
+                order_item_id=order_item_id,
+                establishment_id=establishment_id,
+            )
+
+    async def scale_for_quantity_change(
+        self, order_item_id: UUID, old_qty: int, new_qty: int, establishment_id: UUID
+    ) -> None:
+        """
+        Ajuste de quantidade para item SEM menu_item_id único — pizza meio a
+        meio (meia receita de cada sabor). Repete a baixa já feita, na
+        proporção da mudança: de 1 pra 3 pizzas, cada insumo baixa 2x o que
+        baixou por unidade. Sem baixa anterior (item manual comum), não faz nada.
+        """
+        delta = new_qty - old_qty
+        if delta == 0 or old_qty <= 0:
+            return
+        result = await self.session.execute(
+            select(StockMovement).where(
+                StockMovement.order_item_id == order_item_id,
+                StockMovement.kind == StockMovementKind.SALE,
+            )
+        )
+        per_stock_item: dict[UUID, Decimal] = {}
+        for movement in result.scalars().all():
+            per_stock_item[movement.stock_item_id] = (
+                per_stock_item.get(movement.stock_item_id, Decimal("0")) + movement.quantity_change
+            )
+        for stock_item_id, total_change in per_stock_item.items():
+            stock_item = await self._item_repo.get(stock_item_id)
+            if stock_item is None:
+                continue
+            await self._apply_sale_movement(
+                stock_item=stock_item,
+                change=total_change / Decimal(old_qty) * Decimal(delta),
                 order_item_id=order_item_id,
                 establishment_id=establishment_id,
             )

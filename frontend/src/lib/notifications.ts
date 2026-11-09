@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { getToken, getUser, fetchOrder, fetchTables, fetchOrderPayments } from './api'
-import { printComanda } from './print'
+import { printComanda, printCozinha } from './print'
 
 export interface BillRequestAlert {
   id: string
@@ -9,6 +9,17 @@ export interface BillRequestAlert {
   tableLabel: string
   tableId: string | null
 }
+
+export interface OnlineOrderAlert {
+  id: string
+  number: number
+  customerName: string
+  fulfillment: 'delivery' | 'pickup'
+  total: string
+}
+
+/** Disparado em window quando chega pedido do cardápio — a tela de Pedidos recarrega a fila. */
+export const ONLINE_ORDER_EVENT = 'barrio:online-order'
 
 // ── Estação de impressão ────────────────────────────────────────────────────
 // A impressora térmica está ligada por cabo a um único PC. Qualquer outro
@@ -74,6 +85,25 @@ async function handleRemotePrint(orderId: string) {
 }
 
 /**
+ * Reserva quando o servidor não conseguiu imprimir direto na térmica: ticket
+ * da cozinha pelo navegador. `chosen` = itens escolhidos na tela; sem lista,
+ * os itens da comanda que vão pra cozinha.
+ */
+async function handleRemoteKitchenPrint(orderId: string, chosen?: { name: string; qty: number; notes?: string | null }[] | null) {
+  try {
+    const order = await fetchOrder(orderId)
+    const items = chosen?.length ? chosen : order.items
+      .filter(i => i.status === 'sent')
+      .map(i => ({ name: i.item_name, qty: i.quantity, notes: i.notes }))
+    if (items.length === 0) return  // só bebida: nada pra cozinha
+    const kind = order.order_type === 'delivery' ? 'Delivery' : order.order_type === 'pickup' ? 'Retirada' : 'Balcão'
+    printCozinha(items, order.customer_name ? `${kind} - ${order.customer_name}` : kind)
+  } catch {
+    // Mesmo motivo do handleRemotePrint: sem usuário esperando, só não imprime
+  }
+}
+
+/**
  * Escuta o canal de eventos em tempo real (SSE): alertas de "mesa solicitou
  * a conta" (toast + som) e pedidos de impressão remota (quando este
  * dispositivo está marcado como a impressora do bar — ver isPrintStation()).
@@ -84,6 +114,7 @@ async function handleRemotePrint(orderId: string) {
  */
 export function useBillRequestAlerts() {
   const [alerts, setAlerts] = useState<BillRequestAlert[]>([])
+  const [onlineAlerts, setOnlineAlerts] = useState<OnlineOrderAlert[]>([])
   const sourceRef = useRef<EventSource | null>(null)
 
   useEffect(() => {
@@ -111,8 +142,25 @@ export function useBillRequestAlerts() {
             },
           ])
         }
+        if (data.type === 'online_order.created') {
+          // Bipe duplo repetido: pedido online espera resposta, chama mais atenção
+          beep()
+          setTimeout(beep, 900)
+          setOnlineAlerts(prev => [
+            ...prev,
+            {
+              id: data.online_order_id,
+              number: data.number,
+              customerName: data.customer_name,
+              fulfillment: data.fulfillment,
+              total: data.total,
+            },
+          ])
+          window.dispatchEvent(new CustomEvent(ONLINE_ORDER_EVENT))
+        }
         if (data.type === 'print.request' && isPrintStation()) {
-          handleRemotePrint(data.order_id)
+          if (data.print_type === 'cozinha') handleRemoteKitchenPrint(data.order_id, data.items)
+          else handleRemotePrint(data.order_id)
         }
       } catch {
         // ignora mensagens malformadas
@@ -129,5 +177,9 @@ export function useBillRequestAlerts() {
     setAlerts(prev => prev.filter(a => a.id !== id))
   }
 
-  return { alerts, dismiss }
+  function dismissOnline(id: string) {
+    setOnlineAlerts(prev => prev.filter(a => a.id !== id))
+  }
+
+  return { alerts, dismiss, onlineAlerts, dismissOnline }
 }

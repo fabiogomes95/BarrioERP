@@ -3,6 +3,7 @@ from app.models.cash import CashMovement, CashMovementKind, CashSession, CashSes
 from app.models.company import Company
 from app.models.establishment import Establishment
 from app.models.menu import MenuCategory, MenuItem
+from app.models.online_order import OnlineOrder, OnlineOrderStatus
 from app.models.order import Order, OrderItem, OrderItemStatus, OrderStatus
 from app.models.payment import Payment, PaymentMethod, PaymentStatus
 from app.models.print_job import PrintJob, PrintJobStatus, PrintJobType
@@ -30,6 +31,8 @@ __all__ = [
     "OrderItem",
     "OrderStatus",
     "OrderItemStatus",
+    "OnlineOrder",
+    "OnlineOrderStatus",
     "Payment",
     "PaymentMethod",
     "PaymentStatus",

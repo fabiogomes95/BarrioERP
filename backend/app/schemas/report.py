@@ -66,6 +66,7 @@ class DailyReport(BaseSchema):
     revenue_total: Decimal
     orders_count: int
     average_ticket: Decimal
+    service_fee_total: Decimal
     by_payment_method: list[PaymentMethodTotal]
     top_items: list[TopItem]
 
@@ -94,6 +95,29 @@ class PeriodReport(BaseSchema):
     revenue_total: Decimal
     orders_count: int
     average_ticket: Decimal
+    service_fee_total: Decimal
     by_payment_method: list[PaymentMethodTotal]
     top_items: list[TopItem]
     daily_breakdown: list[DailyBreakdownEntry]
+
+
+class ShiftReport(BaseSchema):
+    """
+    Resumo de um intervalo exato de data/hora (ex.: turno de bar que atravessa
+    a virada do dia, tipo 05/09 16h até 06/09 05h).
+
+    Usado em: GET /api/v1/reports/shift?start=...&end=...
+
+    Diferente do DailyReport/PeriodReport (que trabalham com dias inteiros no
+    fuso local), aqui `start`/`end` são datetimes exatos — úteis pra fechar
+    a conta de um turno que não bate com meia-noite.
+    """
+
+    start: datetime
+    end: datetime
+    revenue_total: Decimal
+    orders_count: int
+    average_ticket: Decimal
+    service_fee_total: Decimal
+    by_payment_method: list[PaymentMethodTotal]
+    top_items: list[TopItem]

@@ -8,9 +8,7 @@ import {
   fetchOrderPayments, registerPayment, voidPayment, finishOrder, updateOrderCustomerName, getUser, requestRemotePrint,
 } from '../lib/api'
 import { maskCurrency, parseCurrency, toCurrencyInput } from '../lib/format'
-import { printComanda, printCozinha, type KitchenItem } from '../lib/print'
 import { shareReceiptWhatsApp } from '../lib/receiptImage'
-import { isPrintStation } from '../lib/notifications'
 import { inputCls, Field, ModalOverlay, QtyStepper } from './ui'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -257,14 +255,19 @@ function OrderItemRow({
 // ── Modal: Adicionar item ─────────────────────────────────────────────────────
 
 function AddItemModal({
-  order, table, onClose, onAdded,
+  order, onClose, onAdded,
 }: {
   order: Order
   table: Table | undefined
   onClose: () => void
   onAdded: (updated: Order) => void
 }) {
-  const where = table ? `Mesa ${table.number}` : 'Balcão'
+  // "Adicionar e imprimir": só o item recém-lançado sai na térmica do bar,
+  // direto pelo servidor (mesmo padrão de ticket do pedido online)
+  function printKitchenItem(name: string, qty: number, notes: string | null) {
+    requestRemotePrint(order.id, 'cozinha', [{ name, qty, notes }])
+      .catch(err => setAddError(err instanceof Error ? `Item lançado, mas não imprimiu: ${err.message}` : 'Item lançado, mas não imprimiu'))
+  }
   const [categories, setCategories] = useState<Category[]>([])
   const [items, setItems] = useState<MenuItem[]>([])
   const [loadingMenu, setLoadingMenu] = useState(true)
@@ -319,19 +322,15 @@ function AddItemModal({
     setAdding(true)
     try {
       const effectiveName = comp ? `${picking.name} - ${comp}` : picking.name
-      const updated = comp
-        ? await addOrderItem(order.id, {
-            item_name: effectiveName,
-            unit_price: Number(picking.price),
-            quantity: Number(qty),
-            notes: notes.trim() || null,
-          })
-        : await addOrderItem(order.id, {
-            menu_item_id: picking.id,
-            quantity: Number(qty),
-            notes: notes.trim() || null,
-          })
-      if (andPrint) printCozinha([{ name: effectiveName, qty: Number(qty), notes: notes.trim() || null }], where)
+      // Com complemento continua ligado ao item do cardápio (o servidor monta
+      // "Churrasco - frango") — assim vai pra cozinha e baixa estoque
+      const updated = await addOrderItem(order.id, {
+        menu_item_id: picking.id,
+        complemento: comp || undefined,
+        quantity: Number(qty),
+        notes: notes.trim() || null,
+      })
+      if (andPrint) printKitchenItem(effectiveName, Number(qty), notes.trim() || null)
       onAdded(updated)
       setPicking(null); setQty('1'); setNotes(''); setComp('')
     } catch (err) {
@@ -353,7 +352,7 @@ function AddItemModal({
         quantity: Number(manQty),
         notes: manNotes.trim() || null,
       })
-      if (andPrint) printCozinha([{ name, qty: Number(manQty), notes: manNotes.trim() || null }], where)
+      if (andPrint) printKitchenItem(name, Number(manQty), manNotes.trim() || null)
       onAdded(updated)
       setManName(''); setManPrice(''); setManQty('1'); setManNotes('')
     } catch (err) {
@@ -380,13 +379,15 @@ function AddItemModal({
     const short2 = words1[0] === words2[0] ? words2.slice(1).join(' ') : halfItem2.name
     const name = `${halfItem1.name} / ${short2}`
     try {
+      // O servidor monta o mesmo nome e cobra a metade mais cara; mandar as
+      // duas metades (e não um item manual) faz a pizza ir pra cozinha (KDS)
       const updated = await addOrderItem(order.id, {
-        item_name: name,
-        unit_price: halfPrice,
+        menu_item_id: halfItem1.id,
+        half_with: halfItem2.id,
         quantity: Number(halfQty),
         notes: halfNotes.trim() || null,
       })
-      if (andPrint) printCozinha([{ name, qty: Number(halfQty), notes: halfNotes.trim() || null }], where)
+      if (andPrint) printKitchenItem(name, Number(halfQty), halfNotes.trim() || null)
       onAdded(updated)
       setHalf1(''); setHalf2(''); setHalfQty('1'); setHalfNotes('')
     } catch (err) {
@@ -409,9 +410,15 @@ function AddItemModal({
     <div className="fixed inset-0 z-50 flex flex-col sm:items-center sm:justify-center sm:p-4"
          style={{ background: 'rgba(0,0,0,0.75)' }}
          onClick={onClose}>
-      <div className="w-full h-[100dvh] sm:h-auto sm:max-w-md sm:max-h-[85dvh] sm:rounded-3xl
+      {/* flex-1 (não 100dvh): o pai já é fixo nas 4 bordas — o dvh fica errado
+          no Android depois do "puxar pra atualizar" (ver Layout) */}
+      <div className="w-full flex-1 min-h-0 sm:flex-none sm:h-auto sm:max-w-md sm:max-h-[85dvh] sm:rounded-3xl
                       overflow-y-auto overscroll-contain flex flex-col p-5"
-           style={{ background: 'var(--color-app-surface)' }}
+           style={{
+             background: 'var(--color-app-surface)',
+             paddingTop: 'max(1.25rem, env(safe-area-inset-top))',
+             paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))',
+           }}
            onClick={e => e.stopPropagation()}>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-stone-100 text-base font-bold">Adicionar item</h2>
@@ -1470,13 +1477,6 @@ export function OrderDetail({
       .catch(() => setPayments([]))
   }, [order.id])
 
-  const kitchenWhere = table
-    ? `Mesa ${table.number}`
-    : order.order_type === 'delivery'
-      ? `Delivery${order.customer_name ? ' - ' + order.customer_name : ''}`
-      : order.order_type === 'pickup'
-        ? `Retirada${order.customer_name ? ' - ' + order.customer_name : ''}`
-        : order.customer_name ?? 'Balcão'
 
   function enterKitchenMode() {
     const allIds = new Set(activeItems.filter(i => i.status !== 'served').map(i => i.id))
@@ -1498,11 +1498,13 @@ export function OrderDetail({
   }
 
   function doKitchenPrint() {
-    const items: KitchenItem[] = activeItems
+    const items = activeItems
       .filter(i => kitchenSelected.has(i.id))
       .map(i => ({ name: i.item_name, qty: i.quantity, notes: i.notes }))
     if (items.length === 0) return
-    printCozinha(items, kitchenWhere)
+    // Direto na térmica pelo servidor — mesmo ticket do pedido online
+    requestRemotePrint(order.id, 'cozinha', items)
+      .catch(err => setActionError(err instanceof Error ? err.message : 'Erro ao imprimir'))
     exitKitchenMode()
   }
 
@@ -1533,12 +1535,9 @@ export function OrderDetail({
   }
 
   async function handlePrint() {
-    // A impressora térmica só está ligada (por cabo) a um PC específico.
-    // Se este dispositivo não é ele, manda a impressão pra quem tem.
-    if (isPrintStation()) {
-      printComanda(order, table, getUser()?.company_name ?? 'Barrio', payments)
-      return
-    }
+    // A térmica está ligada por cabo no PC do servidor: de qualquer aparelho
+    // (inclusive o próprio PC), o servidor imprime direto — sem a janela de
+    // impressão do Chrome, mesmo layout do ticket do pedido online.
     setPrintSent(true)
     try {
       await requestRemotePrint(order.id)
@@ -1700,11 +1699,11 @@ export function OrderDetail({
             </p>
           </div>
 
-          {/* Imprimir recibo — local se este dispositivo tem a impressora
-              térmica, senão manda a impressão pro PC que tem (ver isPrintStation) */}
+          {/* Imprimir recibo — o servidor manda direto pra térmica do bar,
+              de qualquer aparelho (ver handlePrint) */}
           <button
             onClick={handlePrint}
-            title={isPrintStation() ? 'Imprimir comanda' : 'Enviar para a impressora do bar'}
+            title="Imprimir comanda na impressora do bar"
             className={[
               'shrink-0 flex items-center justify-center w-9 h-9 rounded-xl border transition-all',
               printSent

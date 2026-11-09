@@ -30,3 +30,6 @@ httpx==0.28.1
 
 # Rate limiting
 slowapi==0.1.9
+
+# Impressão direta na térmica do PC do bar (app/services/thermal_printer.py)
+pywin32==312; sys_platform == "win32"

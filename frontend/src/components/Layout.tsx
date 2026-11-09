@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { clearToken, getUser, refreshCompanyName } from '../lib/api'
+import { getBrand } from '../lib/brand'
 import { useBillRequestAlerts, isPrintStation, setPrintStation } from '../lib/notifications'
 import { ThemeToggle } from './ui'
 
@@ -185,6 +186,7 @@ function PrintStationToggle() {
 
 function SideDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const user = getUser()
+  const brand = getBrand()
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -219,11 +221,16 @@ function SideDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
         {/* Marca + fechar */}
         <div className="px-5 py-5 border-b border-stone-800/50 flex items-center gap-3">
           <div className="w-9 h-9 rounded-full overflow-hidden shrink-0 ring-1 ring-amber-500/20">
-            <img src="/icon-barrio-192.png" alt="" className="w-full h-full object-cover" />
+            <img src={brand?.logo ?? '/icon-barrio-192.png'} alt="" className="w-full h-full object-cover" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-stone-100 text-sm font-semibold leading-tight truncate">Barrio</p>
-            <p className="text-stone-600 text-[11px] mt-0.5">Gestão de bares e restaurantes</p>
+            {brand ? (
+              <p className="font-display [font-variant:small-caps] font-bold text-lg leading-tight truncate tracking-[0.04em]"
+                 style={{ color: 'var(--color-app-heading)' }}>{brand.full}</p>
+            ) : (
+              <p className="text-stone-100 text-sm font-semibold leading-tight truncate">Barrio</p>
+            )}
+            <p className="text-stone-600 text-[11px] mt-0.5">{brand?.tagline ?? 'Gestão de bares e restaurantes'}</p>
           </div>
           <button onClick={onClose}
             className="text-stone-600 hover:text-stone-300 transition-colors p-1 -mr-1" title="Fechar">
@@ -301,6 +308,7 @@ const QUICK = [
 ]
 
 function TopBar({ onMenu }: { onMenu: () => void }) {
+  const brand = getBrand()
   return (
     <header
       className="relative flex items-center gap-2 sm:gap-3 px-2 sm:px-4 h-14 shrink-0 border-b border-stone-800/50"
@@ -317,13 +325,26 @@ function TopBar({ onMenu }: { onMenu: () => void }) {
 
       {/* Marca: no mobile fica no fluxo normal (ícone só, ao lado do menu) pra nunca disputar espaço
           com os atalhos da direita. A partir de sm sobra espaço e ela vira centralizada com o nome. */}
-      <img src="/icon-barrio-192.png" alt="Barrio"
-           className="sm:hidden w-8 h-8 rounded-full shrink-0 object-cover" />
-      <div className="hidden sm:flex absolute left-1/2 -translate-x-1/2 items-center gap-2
-                      pointer-events-none max-w-[55%]">
-        <img src="/icon-barrio-192.png" alt="" className="w-7 h-7 rounded-full shrink-0 object-cover" />
-        <span className="text-stone-100 text-sm font-bold tracking-tight truncate">Barrio</span>
-      </div>
+      <img src={brand?.logo ?? '/icon-barrio-192.png'} alt={brand?.full ?? 'Barrio'}
+           className="sm:hidden w-9 h-9 rounded-full shrink-0 object-cover" />
+      {brand ? (
+        // Mesmo cabeçalho do cardápio público: "Recanto [logo] Da Barra"
+        <div className="hidden sm:flex absolute left-1/2 -translate-x-1/2 items-center gap-3
+                        pointer-events-none whitespace-nowrap">
+          <span className="font-display [font-variant:small-caps] font-bold text-[1.45rem] tracking-[0.06em]"
+                style={{ color: 'var(--color-app-heading)' }}>{brand.left}</span>
+          <img src={brand.logo} alt="" className="w-10 h-10 rounded-full shrink-0 object-cover
+                                                  ring-4 ring-amber-500/10" />
+          <span className="font-display [font-variant:small-caps] font-bold text-[1.45rem] tracking-[0.06em]"
+                style={{ color: 'var(--color-app-heading)' }}>{brand.right}</span>
+        </div>
+      ) : (
+        <div className="hidden sm:flex absolute left-1/2 -translate-x-1/2 items-center gap-2
+                        pointer-events-none max-w-[55%]">
+          <img src="/icon-barrio-192.png" alt="" className="w-7 h-7 rounded-full shrink-0 object-cover" />
+          <span className="text-stone-100 text-sm font-bold tracking-tight truncate">Barrio</span>
+        </div>
+      )}
 
       {/* Atalhos: Mesas e Pedidos */}
       <nav className="ml-auto flex items-center gap-1.5">
@@ -353,13 +374,41 @@ function TopBar({ onMenu }: { onMenu: () => void }) {
 // ── Layout principal ──────────────────────────────────────────────────────────
 
 function BillRequestToasts() {
-  const { alerts, dismiss } = useBillRequestAlerts()
+  const { alerts, dismiss, onlineAlerts, dismissOnline } = useBillRequestAlerts()
   const navigate = useNavigate()
 
-  if (alerts.length === 0) return null
+  if (alerts.length === 0 && onlineAlerts.length === 0) return null
 
   return (
     <div className="fixed top-3 right-3 z-[100] flex flex-col gap-2 w-[calc(100%-1.5rem)] max-w-sm">
+      {onlineAlerts.map(a => (
+        <div key={a.id}
+          className="flex items-center gap-3 rounded-xl border border-emerald-500/30 shadow-lg px-3.5 py-3"
+          style={{ background: 'var(--color-app-surface)' }}>
+          <div className="w-9 h-9 rounded-full bg-emerald-500/15 flex items-center justify-center shrink-0 text-lg">
+            {a.fulfillment === 'delivery' ? '🛵' : '📦'}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-stone-100 text-sm font-semibold">Pedido online #{a.number}</p>
+            <p className="text-stone-400 text-xs truncate">
+              {a.customerName} · {a.fulfillment === 'delivery' ? 'Entrega' : 'Retirada'} · R$ {Number(a.total).toFixed(2).replace('.', ',')}
+            </p>
+          </div>
+          <button
+            onClick={() => { dismissOnline(a.id); navigate('/pedidos') }}
+            className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 px-2 py-1 shrink-0">
+            Ver
+          </button>
+          <button
+            onClick={() => dismissOnline(a.id)}
+            aria-label="Dispensar"
+            className="text-stone-500 hover:text-stone-300 shrink-0">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      ))}
       {alerts.map(a => (
         <div key={a.id}
           className="flex items-center gap-3 rounded-xl border border-orange-500/30 shadow-lg px-3.5 py-3"
@@ -409,8 +458,23 @@ export default function Layout() {
   // parte do tempo. Resultado: o rodapé de ações (Receber/Cozinha na tela
   // de comanda) ficava cortado, exigindo rolar pra ver — dvh acompanha a
   // altura visível de verdade.
+  //
+  // padding com safe-area: no Android o app instalado (PWA) passou a ser
+  // desenhado por trás das barras do sistema (edge-to-edge) — o dvh inclui a
+  // área sob a barra de gestos e o rodapé de ações voltava a ficar cortado.
+  // Com viewport-fit=cover (index.html) o navegador informa o tamanho dessas
+  // barras; onde não há sobreposição o valor é 0 e nada muda.
+  //
+  // fixed inset-0 em vez de h-dvh: depois do "puxar pra atualizar" o Chrome
+  // do Android recalcula o dvh errado (~65px a mais) e o rodapé descia pra
+  // trás da barra de gestos de novo. Um container fixo nas 4 bordas é
+  // sempre recalculado pelo tamanho real da tela visível.
   return (
-    <div className="flex flex-col h-dvh" style={{ background: 'var(--color-app-bg)' }}>
+    <div className="fixed inset-0 flex flex-col" style={{
+      background: 'var(--color-app-bg)',
+      paddingTop: 'env(safe-area-inset-top)',
+      paddingBottom: 'env(safe-area-inset-bottom)',
+    }}>
       {/* Barra superior com o menu hambúrguer */}
       <TopBar onMenu={() => setOpen(true)} />
 
