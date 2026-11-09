@@ -10,6 +10,7 @@ import {
 import { brl, itemTime, maskCurrency, parseCurrency, timeAgo, toCurrencyInput } from '../lib/format'
 import { ORDER_STATUS } from '../lib/orderStatus'
 import { shareReceiptWhatsApp } from '../lib/receiptImage'
+import { paidSlots, splitAmounts, splitByShares } from '../lib/split'
 import { Field, ModalOverlay, QtyStepper } from './ui'
 import { inputCls } from '../lib/styles'
 
@@ -950,33 +951,6 @@ function PaymentModal({
 
 // ── Modal: Dividir conta ──────────────────────────────────────────────────────
 
-/** Divide `total` (R$) em `count` partes exatas em centavos (sem perda de precisão). */
-function splitAmounts(total: number, count: number): number[] {
-  const totalCents = Math.round(total * 100)
-  const base = Math.floor(totalCents / count)
-  const remainder = totalCents - base * count
-  return Array.from({ length: count }, (_, i) => (base + (i < remainder ? 1 : 0)) / 100)
-}
-
-/** Distribui `total` (R$) proporcionalmente aos subtotais de cada pessoa, exato em centavos. */
-function splitByShares(total: number, shares: number[]): number[] {
-  const totalCents = Math.round(total * 100)
-  const shareSum = shares.reduce((a, b) => a + b, 0)
-  if (shareSum <= 0) return shares.map(() => 0)
-
-  const raw = shares.map(s => (s / shareSum) * totalCents)
-  const cents = raw.map(v => Math.floor(v))
-  const remainder = totalCents - cents.reduce((a, b) => a + b, 0)
-
-  // Método dos maiores restos: sobra de centavos vai pra quem tem a maior fração perdida no floor.
-  const order = raw
-    .map((v, i) => ({ i, frac: v - Math.floor(v) }))
-    .sort((a, b) => b.frac - a.frac)
-  for (let k = 0; k < remainder; k++) cents[order[k % order.length].i] += 1
-
-  return cents.map(c => c / 100)
-}
-
 function SplitModal({
   order, onClose, onFinished, onPaidUpdate,
 }: {
@@ -1022,9 +996,7 @@ function SplitModal({
         )
       : Array(count).fill(0)
 
-  // Heurística: marca como pagas as primeiras N parcelas cujo valor acumulado já foi coberto.
-  const slotPaid = amounts.map((_, i) =>
-    amounts.slice(0, i + 1).reduce((sum, a) => sum + a, 0) <= paid + 0.005)
+  const slotPaid = paidSlots(amounts, paid)
 
   function assignItem(itemId: string, person: number) {
     setAssignments(prev => {
