@@ -4,22 +4,9 @@ import {
   type Order, type Table,
   fetchOpenOrders, fetchTables, getUser,
 } from '../lib/api'
+import { brl, timeAgo } from '../lib/format'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function brl(v: string | number) {
-  return Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-}
-
-function timeAgo(iso: string) {
-  const diff = Date.now() - new Date(iso).getTime()
-  const m = Math.floor(diff / 60000)
-  if (m < 1) return 'agora'
-  if (m < 60) return `${m}min`
-  const h = Math.floor(m / 60)
-  if (h < 24) return `${h}h`
-  return `${Math.floor(h / 24)}d`
-}
 
 function greeting() {
   const h = new Date().getHours()

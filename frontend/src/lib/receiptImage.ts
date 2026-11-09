@@ -1,12 +1,9 @@
 import { type Order, type Table, type Payment, type FiadoEntry } from './api'
+import { brl } from './format'
 
 const METHOD_LABEL: Record<string, string> = {
   cash: 'Dinheiro', credit_card: 'Crédito', debit_card: 'Débito',
   pix: 'Pix', voucher: 'Voucher', other: 'Outro',
-}
-
-function brl(v: string | number) {
-  return Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
 // Cores fixas (não seguem o tema claro/escuro do app) — o recibo deve

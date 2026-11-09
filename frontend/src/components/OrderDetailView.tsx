@@ -7,30 +7,13 @@ import {
   serveOrderItem, fetchOrder, isConflictError,
   fetchOrderPayments, registerPayment, voidPayment, finishOrder, updateOrderCustomerName, getUser, requestRemotePrint,
 } from '../lib/api'
-import { maskCurrency, parseCurrency, toCurrencyInput } from '../lib/format'
+import { brl, itemTime, maskCurrency, parseCurrency, timeAgo, toCurrencyInput } from '../lib/format'
+import { ORDER_STATUS } from '../lib/orderStatus'
 import { shareReceiptWhatsApp } from '../lib/receiptImage'
-import { inputCls, Field, ModalOverlay, QtyStepper } from './ui'
+import { Field, ModalOverlay, QtyStepper } from './ui'
+import { inputCls } from '../lib/styles'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-export function brl(v: string | number) {
-  return Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-}
-
-export function timeAgo(iso: string) {
-  const diff = Date.now() - new Date(iso).getTime()
-  const m = Math.floor(diff / 60000)
-  if (m < 1) return 'agora'
-  if (m < 60) return `${m}min`
-  const h = Math.floor(m / 60)
-  if (h < 24) return `${h}h`
-  return `${Math.floor(h / 24)}d`
-}
-
-/** Hora (HH:mm) do último lançamento do item — quantidade incrementada conta como novo lançamento. */
-export function itemTime(item: OrderItem) {
-  return new Date(item.updated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-}
 
 /**
  * Fecha/finaliza uma comanda tolerando o conflito de versão mais comum em
@@ -60,12 +43,6 @@ async function closeOrFinish(
   }
 }
 
-export const ORDER_STATUS = {
-  open:            { label: 'Aberta',  color: 'text-green-400',  bg: 'bg-green-500/10',  border: 'border-green-500/25' },
-  bill_requested:  { label: 'Conta',   color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/25' },
-  closed:          { label: 'Fechada', color: 'text-stone-500',  bg: 'bg-stone-800/40',  border: 'border-stone-700/40' },
-  finalized:       { label: 'Final.',  color: 'text-stone-500',  bg: 'bg-stone-800/40',  border: 'border-stone-700/40' },
-} as Record<string, { label: string; color: string; bg: string; border: string }>
 
 
 
@@ -989,7 +966,7 @@ function splitByShares(total: number, shares: number[]): number[] {
 
   const raw = shares.map(s => (s / shareSum) * totalCents)
   const cents = raw.map(v => Math.floor(v))
-  let remainder = totalCents - cents.reduce((a, b) => a + b, 0)
+  const remainder = totalCents - cents.reduce((a, b) => a + b, 0)
 
   // Método dos maiores restos: sobra de centavos vai pra quem tem a maior fração perdida no floor.
   const order = raw
@@ -1046,8 +1023,8 @@ function SplitModal({
       : Array(count).fill(0)
 
   // Heurística: marca como pagas as primeiras N parcelas cujo valor acumulado já foi coberto.
-  let acc = 0
-  const slotPaid = amounts.map(a => { acc += a; return acc <= paid + 0.005 })
+  const slotPaid = amounts.map((_, i) =>
+    amounts.slice(0, i + 1).reduce((sum, a) => sum + a, 0) <= paid + 0.005)
 
   function assignItem(itemId: string, person: number) {
     setAssignments(prev => {

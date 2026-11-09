@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { type OnlineOrdersReport as Report, fetchOnlineOrdersReport } from '../lib/api'
-import { brl } from './OrderDetailView'
+import { brl } from '../lib/format'
 
 /**
  * Bloco "Pedidos online" da tela de Caixa — segue o mesmo intervalo do

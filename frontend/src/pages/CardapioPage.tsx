@@ -7,14 +7,11 @@ import {
   createMenuItem, updateMenuItem,
   fetchStockItems, fetchMenuItemIngredients, setMenuItemIngredients,
 } from '../lib/api'
-import { maskCurrency, parseCurrency, toCurrencyInput } from '../lib/format'
-import { inputCls, Field, ModalOverlay as BaseModal, ErrorBanner } from '../components/ui'
+import { brl, maskCurrency, parseCurrency, toCurrencyInput } from '../lib/format'
+import { Field, ModalOverlay as BaseModal, ErrorBanner } from '../components/ui'
+import { inputCls } from '../lib/styles'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function brl(v: string | number) {
-  return Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-}
 
 function ModalOverlay({ title, onClose, children }: {
   title: string; onClose: () => void; children: React.ReactNode

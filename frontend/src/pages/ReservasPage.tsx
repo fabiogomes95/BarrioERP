@@ -4,7 +4,8 @@ import {
   fetchReservations, createReservation, updateReservation, checkInReservation, cancelReservation,
   fetchTables,
 } from '../lib/api'
-import { inputCls, Field, ModalOverlay, ErrorBanner, Spinner } from '../components/ui'
+import { Field, ModalOverlay, ErrorBanner, Spinner } from '../components/ui'
+import { inputCls } from '../lib/styles'
 
 const STATUS_CFG: Record<ReservationStatus, { label: string; color: string; bg: string; border: string }> = {
   confirmed: { label: 'Confirmada',      color: 'text-blue-400',  bg: 'bg-blue-500/10',  border: 'border-blue-500/25' },

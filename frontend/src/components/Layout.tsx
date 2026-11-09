@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { clearToken, getUser, refreshCompanyName } from '../lib/api'
 import { getBrand } from '../lib/brand'
 import { useBillRequestAlerts, isPrintStation, setPrintStation } from '../lib/notifications'
-import { ThemeToggle } from './ui'
+import { Spinner, ThemeToggle } from './ui'
 
 // ── Ícones ────────────────────────────────────────────────────────────────────
 
@@ -486,7 +486,9 @@ export default function Layout() {
 
       {/* Conteúdo da rota ativa */}
       <main className="flex-1 overflow-auto min-h-0">
-        <Outlet />
+        <Suspense fallback={<Spinner />}>
+          <Outlet />
+        </Suspense>
       </main>
     </div>
   )

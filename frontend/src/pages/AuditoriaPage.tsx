@@ -2,24 +2,16 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { type AuditLogEntry, fetchAuditLogs } from '../lib/api'
 import { AdminTabs } from '../components/ui'
+import { brl, timeAgo } from '../lib/format'
 
-function brl(v: string | number) {
-  return Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-}
+// before/after da auditoria são JSON livre (cada ação grava um formato) —
+// lidos com ?. e tratados como texto na tela.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AuditPayload = Record<string, any>
 
-function safeParse(json: string | null): Record<string, any> | null {
+function safeParse(json: string | null): AuditPayload | null {
   if (!json) return null
   try { return JSON.parse(json) } catch { return null }
-}
-
-function timeAgo(iso: string) {
-  const diff = Date.now() - new Date(iso).getTime()
-  const m = Math.floor(diff / 60000)
-  if (m < 1) return 'agora'
-  if (m < 60) return `${m}min`
-  const h = Math.floor(m / 60)
-  if (h < 24) return `${h}h`
-  return `${Math.floor(h / 24)}d`
 }
 
 const ACTION_CONFIG: Record<string, { label: string; color: string; bg: string }> = {

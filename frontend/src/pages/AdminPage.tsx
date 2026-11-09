@@ -3,7 +3,8 @@ import {
   type BarSettings,
   fetchSettings, updateSettings, getUser, updateLocalCompanyName, changeMyPassword,
 } from '../lib/api'
-import { inputCls, Field, AdminTabs } from '../components/ui'
+import { Field, AdminTabs } from '../components/ui'
+import { inputCls } from '../lib/styles'
 
 function ChangePasswordCard() {
   const [current, setCurrent] = useState('')

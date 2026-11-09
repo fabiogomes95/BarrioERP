@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { register } from '../lib/api'
-import { inputCls } from '../components/ui'
+import { inputCls } from '../lib/styles'
 
 function Label({ htmlFor, children }: { htmlFor: string; children: React.ReactNode }) {
   return (

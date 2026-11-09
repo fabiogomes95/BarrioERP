@@ -18,5 +18,13 @@ export default defineConfig([
     languageOptions: {
       globals: globals.browser,
     },
+    rules: {
+      // Desligada de propósito: as telas carregam dados com o padrão
+      // `useEffect(() => { load() }, [load])` e pré-preenchem o valor a pagar
+      // quando o saldo muda. A regra (React Compiler) acusa os dois, mas
+      // trocar isso exige uma camada de dados (ex: TanStack Query) — fica
+      // para quando houver essa migração, não para um "conserto" tela a tela.
+      'react-hooks/set-state-in-effect': 'off',
+    },
   },
 ])

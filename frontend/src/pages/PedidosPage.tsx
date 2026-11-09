@@ -6,8 +6,10 @@ import {
   fetchOnlineOrders, acceptOnlineOrder, rejectOnlineOrder,
 } from '../lib/api'
 import { ONLINE_ORDER_EVENT } from '../lib/notifications'
-import { brl, timeAgo, ORDER_STATUS } from '../components/OrderDetailView'
-import { inputCls, Field, ModalOverlay } from '../components/ui'
+import { brl, timeAgo } from '../lib/format'
+import { ORDER_STATUS } from '../lib/orderStatus'
+import { Field, ModalOverlay } from '../components/ui'
+import { inputCls } from '../lib/styles'
 
 const ORDER_TYPE_LABEL: Record<string, string> = {
   counter: 'Balcão',
@@ -688,7 +690,9 @@ export default function PedidosPage() {
         const [os, ts] = await Promise.all([fetchOpenOrders(), fetchTables()])
         setOrders(os)
         setTables(ts)
-      } catch {}
+      } catch {
+        // Sem rede por um instante: mantém a lista atual e tenta de novo em 30s
+      }
     }, 30_000)
     return () => clearInterval(id)
   }, [])

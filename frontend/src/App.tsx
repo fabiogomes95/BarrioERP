@@ -1,22 +1,45 @@
+import { lazy, Suspense, type ComponentType } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { getToken, getUser } from './lib/api'
 import ErrorBoundary from './components/ErrorBoundary'
 import Layout from './components/Layout'
+import { Spinner } from './components/ui'
 import LoginPage from './pages/LoginPage'
-import RegisterPage from './pages/RegisterPage'
-import DashboardPage from './pages/DashboardPage'
-import MesasPage from './pages/MesasPage'
-import PedidosPage from './pages/PedidosPage'
-import ComandaPage from './pages/ComandaPage'
-import CaixaPage from './pages/CaixaPage'
-import AdminPage from './pages/AdminPage'
-import CardapioPage from './pages/CardapioPage'
-import EquipePage from './pages/EquipePage'
-import FiadoPage from './pages/FiadoPage'
-import AuditoriaPage from './pages/AuditoriaPage'
-import EstoquePage from './pages/EstoquePage'
-import ReservasPage from './pages/ReservasPage'
-import KDSPage from './pages/KDSPage'
+
+/**
+ * Cada tela vira um arquivo separado (o celular baixa só o que abre).
+ * Depois de um deploy, uma aba aberta há horas ainda aponta pros arquivos
+ * antigos, que o build apagou — nesse caso recarrega a página UMA vez
+ * pra pegar a versão nova, em vez de mostrar tela de erro.
+ */
+function lazyPage(load: () => Promise<{ default: ComponentType }>) {
+  return lazy(() => load().then(
+    mod => { sessionStorage.removeItem('chunk-reload'); return mod },
+    err => {
+      if (!sessionStorage.getItem('chunk-reload')) {
+        sessionStorage.setItem('chunk-reload', '1')
+        window.location.reload()
+        return new Promise<never>(() => {})
+      }
+      throw err
+    },
+  ))
+}
+
+const RegisterPage = lazyPage(() => import('./pages/RegisterPage'))
+const DashboardPage = lazyPage(() => import('./pages/DashboardPage'))
+const MesasPage = lazyPage(() => import('./pages/MesasPage'))
+const PedidosPage = lazyPage(() => import('./pages/PedidosPage'))
+const ComandaPage = lazyPage(() => import('./pages/ComandaPage'))
+const CaixaPage = lazyPage(() => import('./pages/CaixaPage'))
+const AdminPage = lazyPage(() => import('./pages/AdminPage'))
+const CardapioPage = lazyPage(() => import('./pages/CardapioPage'))
+const EquipePage = lazyPage(() => import('./pages/EquipePage'))
+const FiadoPage = lazyPage(() => import('./pages/FiadoPage'))
+const AuditoriaPage = lazyPage(() => import('./pages/AuditoriaPage'))
+const EstoquePage = lazyPage(() => import('./pages/EstoquePage'))
+const ReservasPage = lazyPage(() => import('./pages/ReservasPage'))
+const KDSPage = lazyPage(() => import('./pages/KDSPage'))
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   if (!getToken()) return <Navigate to="/login" replace />
@@ -34,6 +57,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <ErrorBoundary>
+      <Suspense fallback={<Spinner />}>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
@@ -65,6 +89,7 @@ export default function App() {
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </Suspense>
       </ErrorBoundary>
     </BrowserRouter>
   )
