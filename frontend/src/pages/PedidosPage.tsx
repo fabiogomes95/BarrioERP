@@ -8,6 +8,7 @@ import {
 import { ONLINE_ORDER_EVENT } from '../lib/notifications'
 import { brl, timeAgo } from '../lib/format'
 import { ORDER_STATUS } from '../lib/orderStatus'
+import { whatsLink } from '../lib/whatsapp'
 import { Field, ModalOverlay } from '../components/ui'
 import { inputCls } from '../lib/styles'
 
@@ -374,16 +375,6 @@ function OnlineOrderCard({ oo, onAccept, onReject }: {
       {error && <p className="text-red-400 text-xs mt-2">{error}</p>}
     </div>
   )
-}
-
-/**
- * Abre a conversa com o cliente direto no app do WhatsApp (Desktop no PC,
- * app no celular) — whatsapp:// pula a página intermediária do navegador que
- * o wa.me abre no computador. Telefone só com dígitos, com ou sem 55.
- */
-function whatsLink(phone: string, text?: string) {
-  const digits = phone.length <= 11 ? `55${phone}` : phone
-  return `whatsapp://send?phone=${digits}${text ? `&text=${encodeURIComponent(text)}` : ''}`
 }
 
 // Sem emoji de propósito: o WhatsApp Desktop do Windows estraga emoji vindo

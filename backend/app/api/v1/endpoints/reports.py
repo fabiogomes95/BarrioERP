@@ -11,7 +11,10 @@ from fastapi import APIRouter, Query
 from app.api.deps import CurrentUser, DBSession, require_roles
 from app.models.user import UserRole
 from app.schemas.order import OrderHistoryResponse
-from app.schemas.report import DailyReport, FiadoCustomerGroup, FiadoEntry, PeriodReport, ShiftReport
+from app.schemas.report import (
+    CustomersReport, DailyReport, FiadoCustomerGroup, FiadoEntry, MovementReport, PeriodReport, ShiftReport,
+)
+from app.services.insights import InsightsService
 from app.services.order_service import OrderService
 
 router = APIRouter()
@@ -131,3 +134,44 @@ async def history(
 ) -> list[OrderHistoryResponse]:
     require_roles(current_user, UserRole.OWNER, UserRole.MANAGER, UserRole.CASHIER)
     return await _service(session, current_user).list_history(limit=limit, offset=offset, day=day)
+
+
+def _insights(session: DBSession, user: CurrentUser) -> InsightsService:
+    require_roles(user, UserRole.OWNER, UserRole.MANAGER, UserRole.CASHIER)
+    return InsightsService(
+        session=session, company_id=user.company_id,
+        establishment_id=user.establishment_id, user_id=user.id,
+    )
+
+
+@router.get(
+    "/movement",
+    response_model=MovementReport,
+    summary="Movimento por dia da semana e horário",
+    description=(
+        "Comandas quitadas cujas NOITES (o dia vira às 6h) caem entre `start` e "
+        "`end`: média por noite de cada dia da semana, mapa de horário de pico "
+        "(hora de abertura da comanda) e itens que mais saem em cada dia."
+    ),
+)
+async def movement_report(
+    session: DBSession,
+    current_user: CurrentUser,
+    start: date = Query(description="Primeira noite (YYYY-MM-DD), inclusa."),
+    end: date = Query(description="Última noite (YYYY-MM-DD), inclusa."),
+) -> MovementReport:
+    return await _insights(session, current_user).movement(start, end)
+
+
+@router.get(
+    "/customers",
+    response_model=CustomersReport,
+    summary="Clientes do delivery (últimos 12 meses)",
+    description=(
+        "Pedidos online aceitos agrupados por telefone: quem mais pede, total, "
+        "prato favorito e quem pediu 2+ vezes mas sumiu há mais de 30 dias."
+    ),
+)
+async def customers_report(session: DBSession, current_user: CurrentUser) -> CustomersReport:
+    return await _insights(session, current_user).customers()
+

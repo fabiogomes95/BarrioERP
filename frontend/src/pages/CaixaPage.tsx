@@ -10,6 +10,8 @@ import { maskCurrency, parseCurrency } from '../lib/format'
 import { inputCls } from '../lib/styles'
 import { exportDailyReportCSV, printDailyReport } from '../lib/reportExport'
 import OnlineOrdersReport from '../components/OnlineOrdersReport'
+import MovementReport from '../components/MovementReport'
+import CustomersReport from '../components/CustomersReport'
 
 const METHOD_LABEL: Record<string, string> = {
   cash: 'Dinheiro', credit_card: 'Crédito', debit_card: 'Débito',
@@ -838,6 +840,10 @@ export default function CaixaPage() {
 
         {/* Pedidos do cardápio online — mesmo intervalo do relatório acima */}
         <OnlineOrdersReport {...onlineRange(scope, day, periodStart, periodEnd, shiftStart, shiftEnd)} />
+
+        {/* Gestão: só no modo Período (precisa de várias noites pra fazer sentido) */}
+        {scope === 'period' && <MovementReport start={periodStart} end={periodEnd} />}
+        {scope === 'period' && <CustomersReport />}
       </div>
     </div>
   )

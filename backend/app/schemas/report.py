@@ -121,3 +121,52 @@ class ShiftReport(BaseSchema):
     service_fee_total: Decimal
     by_payment_method: list[PaymentMethodTotal]
     top_items: list[TopItem]
+
+
+# ── Movimento por dia da semana / horário (Caixa → Período) ──────────────────
+
+class WeekdayTopItem(BaseSchema):
+    name: str
+    quantity: int
+
+
+class WeekdayEntry(BaseSchema):
+    weekday: int                 # 0 = segunda ... 6 = domingo (noite do bar, vira às 6h)
+    nights: int                  # quantas noites desse dia tiveram movimento no período
+    orders_count: int
+    revenue_total: Decimal
+    revenue_per_night: Decimal   # média por noite aberta
+    orders_per_night: float
+    top_items: list[WeekdayTopItem]
+
+
+class HourCell(BaseSchema):
+    weekday: int
+    hour: int                    # hora local em que a comanda foi aberta (0-23)
+    orders_count: int
+
+
+class MovementReport(BaseSchema):
+    weekdays: list[WeekdayEntry]  # sempre 7, de segunda a domingo
+    heatmap: list[HourCell]       # só as células com movimento
+
+
+# ── Clientes do delivery (pedidos online aceitos, últimos 12 meses) ──────────
+
+class CustomerEntry(BaseSchema):
+    phone: str
+    name: str
+    orders_count: int
+    total: Decimal
+    first_order: date
+    last_order: date
+    days_since_last: int
+    favorite_item: str | None
+    lapsed: bool                 # pediu 2+ vezes e sumiu há mais de 30 dias
+
+
+class CustomersReport(BaseSchema):
+    customers_count: int
+    returning_count: int         # pediram 2+ vezes
+    top: list[CustomerEntry]
+    lapsed: list[CustomerEntry]

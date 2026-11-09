@@ -1110,3 +1110,48 @@ export async function setMenuItemIngredients(
     method: 'PUT', body: JSON.stringify({ ingredients }),
   })
 }
+
+// ── Relatórios de gestão (Caixa → Período) ───────────────────────────────────
+
+export interface WeekdayEntry {
+  weekday: number            // 0 = segunda ... 6 = domingo (noite do bar, vira às 6h)
+  nights: number
+  orders_count: number
+  revenue_total: string
+  revenue_per_night: string
+  orders_per_night: number
+  top_items: { name: string; quantity: number }[]
+}
+
+export interface MovementReport {
+  weekdays: WeekdayEntry[]
+  heatmap: { weekday: number; hour: number; orders_count: number }[]
+}
+
+export async function fetchMovementReport(start: string, end: string): Promise<MovementReport> {
+  return request<MovementReport>(`/reports/movement?start=${start}&end=${end}`)
+}
+
+export interface CustomerEntry {
+  phone: string
+  name: string
+  orders_count: number
+  total: string
+  first_order: string
+  last_order: string
+  days_since_last: number
+  favorite_item: string | null
+  lapsed: boolean
+}
+
+export interface CustomersReport {
+  customers_count: number
+  returning_count: number
+  top: CustomerEntry[]
+  lapsed: CustomerEntry[]
+}
+
+export async function fetchCustomersReport(): Promise<CustomersReport> {
+  return request<CustomersReport>('/reports/customers')
+}
+
