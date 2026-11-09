@@ -212,7 +212,44 @@ Subir o Barrio de novo do zero (ex: PC novo): `deploy/windows/instalar_servicos.
 
 ---
 
-## 10. O que é público e o que não é
+## 10. Backup e recuperação
+
+**Onde fica:** todo dia às 23:59 a tarefa `BarrioERP-DB-Backup` gera
+`BarrioERP-DB-Backup\barrio_dump.sql` e guarda em **3 lugares**: no PC, no
+Google Drive (`G:\Meu Drive\BarrioERP-Backup`) e no GitHub privado (com histórico, então
+dá para voltar a qualquer dia).
+
+**Teste mensal:** a tarefa `BarrioERP-Testar-Backup` (dia 2, 10h) restaura o
+backup num banco temporário, compara tabela por tabela com o real e apaga o
+temporário. Resultado em `logs\testar_backup.log` ("RESULTADO: OK"). À mão:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File deploy\windows\testar_backup.ps1
+powershell -ExecutionPolicy Bypass -File deploy\windows\testar_backup.ps1 -Dump "G:\Meu Drive\BarrioERP-Backup\barrio_dump.sql"
+```
+
+**Recuperar de verdade** (banco corrompido, PC novo) — testado em 08/11/2026:
+
+1. Parar o Barrio: `Stop-Service BarrioERP-Backend, BarrioERP-Menu-Publico`
+2. Pegar o backup mais recente (PC, Drive ou `git clone` do repositório de backup).
+   Para voltar a um dia específico: `git log` no repositório de backup e
+   `git checkout <commit> -- barrio_dump.sql`.
+3. Recriar o banco e restaurar (usuário/senha estão no `backend\.env`):
+   ```powershell
+   $bin = "C:\Program Files\PostgreSQL\16\bin"
+   & "$bin\dropdb.exe"   -U <usuario> barrio      # só se o banco antigo existir
+   & "$bin\createdb.exe" -U <usuario> barrio
+   & "$bin\psql.exe"     -U <usuario> -d barrio -v ON_ERROR_STOP=1 -f barrio_dump.sql
+   ```
+4. Religar: `Start-Service BarrioERP-Backend, BarrioERP-Menu-Publico`
+
+O que se perde: só o que foi lançado depois do último backup (no pior caso,
+o dia de hoje). Por isso, se der problema no meio do movimento, **antes de
+qualquer coisa** rode o backup na hora: `schtasks /run /tn "BarrioERP-DB-Backup"`.
+
+---
+
+## 11. O que é público e o que não é
 
 - **Público:** o cardápio (itens, preços, WhatsApp do bar) e o envio de
   pedido — que só entra numa fila de aceite, sem acesso a comandas, caixa ou login.
@@ -220,9 +257,7 @@ Subir o Barrio de novo do zero (ex: PC novo): `deploy/windows/instalar_servicos.
 
 ---
 
-## 11. Pendências
+## 12. Pendências
 
-- Nada desta rodada foi **commitado** ainda (está misturado com alterações
-  antigas não commitadas) — organizar commits por assunto.
 - Domínio próprio pro cardápio (ex: `cardapio.recantodabarra.com.br`) — depois.
 - Fotos dos pratos no cardápio — quando houver fotos.
