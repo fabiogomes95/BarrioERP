@@ -69,7 +69,8 @@ class CashService(BaseService):
         return Decimal(result.scalar() or 0)
 
     async def _to_response(self, s: CashSession) -> CashSessionResponse:
-        cash_sales = await self._cash_sales(s)
+        # Fechado: usa o valor gravado no fechamento (não muda com estorno posterior)
+        cash_sales = s.cash_sales if s.cash_sales is not None else await self._cash_sales(s)
         suprimentos = sum(
             (m.amount for m in s.movements if m.kind == CashMovementKind.SUPRIMENTO),
             Decimal("0.00"),
@@ -156,6 +157,7 @@ class CashService(BaseService):
         expected = s.opening_amount + cash_sales + suprimentos - sangrias
 
         s.counted_amount = data.counted_amount
+        s.cash_sales = cash_sales
         s.expected_amount = expected
         s.difference = data.counted_amount - expected
         s.closed_at = datetime.now(UTC)

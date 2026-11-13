@@ -32,3 +32,21 @@ async def test_abertura_simultanea_vira_mensagem_e_nao_erro_500(service, mock_se
     )
     with pytest.raises(BusinessRuleError, match="Já existe um caixa aberto"):
         await service.open(CashOpen(opening_amount=Decimal("100")))
+
+
+async def test_historico_usa_vendas_gravadas_no_fechamento(service):
+    """Estorno depois do fechamento não muda o número do caixa fechado."""
+    from datetime import UTC, datetime
+    from types import SimpleNamespace
+    from uuid import uuid4
+    agora = datetime.now(UTC)
+    fechado = SimpleNamespace(
+        id=uuid4(), created_at=agora, updated_at=agora, status="closed",
+        opening_amount=Decimal("100"), opened_at=agora, closed_at=agora,
+        counted_amount=Decimal("300"), expected_amount=Decimal("300"), difference=Decimal("0"),
+        notes=None, movements=[], cash_sales=Decimal("200"),
+    )
+    service._cash_sales = AsyncMock(return_value=Decimal("150"))  # já com o estorno
+    resp = await service._to_response(fechado)
+    assert resp.cash_sales == Decimal("200")
+    service._cash_sales.assert_not_called()

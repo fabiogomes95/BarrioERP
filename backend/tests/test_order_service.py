@@ -428,3 +428,31 @@ class TestListOpenPago:
         assert result[a.id].paid == Decimal("30")
         assert result[b.id].paid == Decimal("0")
         service._order_repo.sum_confirmed_payments_by_order.assert_awaited_once_with([a.id, b.id])
+
+
+class TestReabrirFiado:
+    async def test_mesa_ocupada_por_outra_comanda_reabre_como_balcao(self, service, order_id, table_id):
+        fiado = make_order(status=OrderStatus.CLOSED, table_id=UUID(table_id), total=Decimal("80"))
+        service._get_or_raise = AsyncMock(return_value=fiado)
+        service._order_repo.sum_confirmed_payments = AsyncMock(return_value=Decimal("30"))
+        service._order_repo.list_open = AsyncMock(return_value=[make_order(id=UUID("00000000-0000-0000-0000-0000000000c3"))])
+        service._table_repo.get_by_establishment = AsyncMock()
+
+        await service.reopen_order(UUID(order_id))
+
+        assert fiado.status == OrderStatus.OPEN
+        assert fiado.table_id is None
+        service._table_repo.get_by_establishment.assert_not_called()
+
+    async def test_mesa_livre_volta_pra_mesa(self, service, order_id, table_id):
+        mesa = make_table(status=TableStatus.FREE)
+        fiado = make_order(status=OrderStatus.CLOSED, table_id=UUID(table_id), total=Decimal("80"))
+        service._get_or_raise = AsyncMock(return_value=fiado)
+        service._order_repo.sum_confirmed_payments = AsyncMock(return_value=Decimal("30"))
+        service._order_repo.list_open = AsyncMock(return_value=[])
+        service._table_repo.get_by_establishment = AsyncMock(return_value=mesa)
+
+        await service.reopen_order(UUID(order_id))
+
+        assert fiado.table_id == UUID(table_id)
+        assert mesa.status == TableStatus.OCCUPIED

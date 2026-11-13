@@ -1201,6 +1201,15 @@ class OrderService(BaseService):
                 "Esta comanda já foi totalmente paga. Não é possível reabrir."
             )
 
+        # Mesa já ocupada por outra comanda (outro cliente sentou lá depois):
+        # a conta reaberta vira de balcão em vez de ficar duas na mesma mesa
+        # (a tela de Mesas só enxerga uma, e a outra "sumia").
+        old_table_id = order.table_id
+        if order.table_id is not None and await self._order_repo.list_open(
+            establishment_id, table_id=order.table_id,
+        ):
+            order.table_id = None
+
         order.status = OrderStatus.OPEN
         order.closed_at = None
 
@@ -1217,7 +1226,7 @@ class OrderService(BaseService):
             action="order.reopen",
             resource_type="order",
             resource_id=str(order.id),
-            before={"status": "closed"},
+            before={"status": "closed", "table_id": str(old_table_id) if old_table_id else None},
             after=self._order_snapshot(order),
         )
 

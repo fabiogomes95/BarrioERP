@@ -55,6 +55,10 @@ class CashSession(Base, UUIDMixin, TimestampMixin):
     counted_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     expected_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     difference: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    # Vendas em dinheiro no momento do fechamento. Gravado pra o histórico não
+    # mudar se um pagamento for estornado depois (antes era recalculado e
+    # deixava de bater com o "esperado" gravado). Null = fechado antes disso.
+    cash_sales: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     movements: Mapped[list["CashMovement"]] = relationship(
