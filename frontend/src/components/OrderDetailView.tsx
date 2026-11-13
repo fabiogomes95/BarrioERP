@@ -64,7 +64,6 @@ function OrderItemRow({
   const [loading, setLoading] = useState(false)
   const [qtyLoading, setQtyLoading] = useState(false)
   const [serving, setServing] = useState(false)
-  const [cancelError, setCancelError] = useState<string | null>(null)
 
   const isCancelled = item.status === 'cancelled'
   const editable = canCancel && !isCancelled && item.status !== 'served'
@@ -74,12 +73,23 @@ function OrderItemRow({
   const canReduce = editable && (item.status === 'pending' || role === 'owner' || role === 'manager' || role === 'cashier')
   const canServe = canCancel && (item.status === 'ready' || item.status === 'pending')
 
+  // Erro de qualquer ação da linha (quantidade, servir, cancelar) — antes só o
+  // cancelar mostrava; quantidade/servir falhavam em silêncio.
+  const [rowError, setRowError] = useState<string | null>(null)
+
+  function showError(err: unknown, fallback: string) {
+    setRowError(err instanceof Error ? err.message : fallback)
+  }
+
   async function handleServe() {
     if (serving) return
     setServing(true)
+    setRowError(null)
     try {
       const updated = await serveOrderItem(item.order_id, item.id)
       onCancelled(updated)
+    } catch (err) {
+      showError(err, 'Não deu pra marcar como servido.')
     } finally {
       setServing(false)
     }
@@ -87,11 +97,14 @@ function OrderItemRow({
 
   async function changeQty(delta: number) {
     const next = item.quantity + delta
-    if (next < 1 || qtyLoading) return
+    if (next < 1 || next > 99 || qtyLoading) return
     setQtyLoading(true)
+    setRowError(null)
     try {
       const updated = await setItemQuantity(item.order_id, item.id, next)
       onCancelled(updated)
+    } catch (err) {
+      showError(err, 'Não deu pra mudar a quantidade.')
     } finally {
       setQtyLoading(false)
     }
@@ -100,144 +113,174 @@ function OrderItemRow({
   async function confirmCancel() {
     if (reason.trim().length < 3 || loading) return
     setLoading(true)
-    setCancelError(null)
+    setRowError(null)
     try {
       const updated = await cancelOrderItem(item.order_id, item.id, reason.trim())
       onCancelled(updated)
       setCancelling(false)
       setReason('')
     } catch (err) {
-      setCancelError(err instanceof Error ? err.message : 'Não deu pra cancelar o item.')
+      showError(err, 'Não deu pra cancelar o item.')
     } finally {
       setLoading(false)
     }
   }
 
+  const status = ITEM_STATUS[item.status]
+  const showActions = !kitchenMode && !isCancelled && (editable || canServe)
+
   return (
-    <div className={['px-4 py-3 border-b border-stone-800/30 transition-opacity', isCancelled ? 'opacity-40' : ''].join(' ')}>
-      <div className="flex items-start justify-between gap-3">
+    <div className={['px-4 py-3.5 border-b border-stone-800/40', isCancelled ? 'opacity-50' : ''].join(' ')}>
+      {/* Linha 1: nome + valor da linha (ou seleção da cozinha) */}
+      <div className="flex items-start gap-3">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            {editable ? (
-              <div className="flex items-center rounded-lg border border-stone-700/60 shrink-0 overflow-hidden">
-                <button onClick={() => changeQty(-1)} disabled={qtyLoading || item.quantity <= 1 || !canReduce}
-                  className="w-6 h-6 flex items-center justify-center
-                             text-stone-300 hover:bg-stone-800/60 disabled:opacity-30 transition-colors">
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                    <path strokeLinecap="round" d="M5 12h14" />
-                  </svg>
-                </button>
-                <span className="text-stone-200 text-sm font-bold w-5 text-center tabular-nums">{item.quantity}</span>
-                <button onClick={() => changeQty(1)} disabled={qtyLoading || item.quantity >= 99}
-                  className="w-6 h-6 flex items-center justify-center
-                             text-stone-300 hover:bg-stone-800/60 disabled:opacity-30 transition-colors">
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                    <path strokeLinecap="round" d="M12 5v14M5 12h14" />
-                  </svg>
-                </button>
-              </div>
-            ) : (
-              <span className="text-stone-500 text-xs font-bold">{item.quantity}×</span>
+          <p className={['text-[15px] font-semibold leading-snug break-words',
+            isCancelled ? 'line-through text-stone-500' : 'text-stone-100'].join(' ')}>
+            {!editable && <span className="text-amber-400 tabular-nums">{item.quantity}× </span>}
+            {item.item_name}
+          </p>
+          {/* Linha 2: preço unitário · horário · situação */}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 text-xs text-stone-500 tabular-nums">
+            {item.quantity > 1 && <span>{item.quantity} × {brl(item.unit_price)}</span>}
+            {item.quantity > 1 && <span aria-hidden>·</span>}
+            <span>{itemTime(item)}</span>
+            {status && (
+              <span className={['inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border',
+                status.cls].join(' ')}>
+                <span className="w-1.5 h-1.5 rounded-full bg-current" aria-hidden />
+                {status.label}
+              </span>
             )}
-            <span className={['text-stone-200 text-sm leading-tight', isCancelled ? 'line-through' : ''].join(' ')}>
-              {item.item_name}
-            </span>
-          </div>
-          {/* Horário + status na mesma linha, discreto — era um badge de texto
-              grande ("NA COZINHA") competindo com o nome do item; agora é só
-              um ponto colorido, sem perder a informação. */}
-          <div className="flex items-center gap-1.5 pl-0.5 mt-0.5">
-            {(item.status === 'sent' || item.status === 'preparing' || item.status === 'ready') && (
-              <span className={[
-                'w-1.5 h-1.5 rounded-full shrink-0',
-                item.status === 'ready' ? 'bg-green-400' : item.status === 'preparing' ? 'bg-amber-400' : 'bg-blue-400',
-              ].join(' ')} />
-            )}
-            <span className="text-stone-600 text-[10px] tabular-nums">
-              {item.status === 'ready' ? 'Pronto · ' : item.status === 'preparing' ? 'Preparando · ' : item.status === 'sent' ? 'Na cozinha · ' : ''}
-              {itemTime(item)}
-            </span>
           </div>
           {item.notes && (
-            <p className="text-stone-600 text-xs mt-0.5 pl-5 italic">{item.notes}</p>
+            <p className="text-stone-400 text-[13px] mt-1.5 italic break-words">Obs.: {item.notes}</p>
           )}
           {isCancelled && item.cancelled_reason && (
-            <p className="text-stone-700 text-xs mt-0.5 pl-5">Motivo: {item.cancelled_reason}</p>
+            <p className="text-stone-500 text-xs mt-1">Motivo: {item.cancelled_reason}</p>
           )}
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <span className={['text-sm font-semibold', isCancelled ? 'text-stone-600' : 'text-stone-300'].join(' ')}>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <span className={['text-[15px] font-bold tabular-nums', isCancelled ? 'text-stone-600' : 'text-stone-200'].join(' ')}>
             {brl(item.subtotal)}
           </span>
-          {kitchenMode && !isCancelled ? (
-            <button onClick={onKitchenToggle}
+          {kitchenMode && !isCancelled && (
+            <button onClick={onKitchenToggle} aria-pressed={!!kitchenSelected}
+              aria-label={kitchenSelected ? `Tirar ${item.item_name} da cozinha` : `Mandar ${item.item_name} pra cozinha`}
               className={[
-                'w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all',
+                'w-10 h-10 rounded-full border-2 flex items-center justify-center transition-colors',
                 kitchenSelected
                   ? 'bg-amber-500 border-amber-500 text-stone-900'
                   : 'border-stone-600 text-transparent hover:border-amber-500/60',
               ].join(' ')}>
-              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
             </button>
-          ) : (
-            <>
-              {canServe && (
-                <button onClick={handleServe} disabled={serving} title="Marcar como servido" aria-label="Marcar como servido"
-                  className="w-6 h-6 flex items-center justify-center rounded-lg text-green-400
-                             border border-green-500/30 hover:bg-green-500/10 disabled:opacity-40 transition-colors">
-                  {serving ? (
-                    <span className="text-[10px]">…</span>
-                  ) : (
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
-                  )}
-                </button>
-              )}
-              {canReduce && (
-                <button onClick={() => { setCancelling(v => !v); setCancelError(null) }}
-                  className="w-6 h-6 flex items-center justify-center rounded-lg
-                             text-stone-700 hover:text-red-400 hover:bg-red-500/10 transition-all">
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              )}
-            </>
           )}
         </div>
       </div>
 
-      {/* Inline cancel form */}
+      {/* Linha 3: ações — botões de 40px, quantidade à esquerda e cancelar
+          bem longe dela (antes ficavam colados e pequenos: tocava errado). */}
+      {showActions && !cancelling && (
+        <div className="flex items-center gap-2 mt-3">
+          {editable && (
+            <div className="flex items-center rounded-xl border border-stone-700/70 overflow-hidden">
+              <button onClick={() => changeQty(-1)} disabled={qtyLoading || item.quantity <= 1 || !canReduce}
+                aria-label={`Diminuir ${item.item_name}`}
+                className="w-10 h-10 flex items-center justify-center text-stone-200
+                           hover:bg-stone-800/70 active:bg-stone-700/70 disabled:opacity-30 transition-colors">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                  <path strokeLinecap="round" d="M5 12h14" />
+                </svg>
+              </button>
+              <span className={['min-w-9 text-center text-base font-bold tabular-nums text-stone-100',
+                qtyLoading ? 'opacity-40' : ''].join(' ')} aria-live="polite">
+                {item.quantity}
+              </span>
+              <button onClick={() => changeQty(1)} disabled={qtyLoading || item.quantity >= 99}
+                aria-label={`Aumentar ${item.item_name}`}
+                className="w-10 h-10 flex items-center justify-center text-stone-200
+                           hover:bg-stone-800/70 active:bg-stone-700/70 disabled:opacity-30 transition-colors">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                  <path strokeLinecap="round" d="M12 5v14M5 12h14" />
+                </svg>
+              </button>
+            </div>
+          )}
+
+          <div className="flex-1" />
+
+          {canServe && (
+            <button onClick={handleServe} disabled={serving}
+              className="h-10 px-3.5 inline-flex items-center gap-1.5 rounded-xl text-sm font-semibold
+                         text-green-400 border border-green-500/30 hover:bg-green-500/10
+                         active:bg-green-500/20 disabled:opacity-40 transition-colors">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+              {serving ? 'Salvando…' : 'Servido'}
+            </button>
+          )}
+          {canReduce && (
+            <button onClick={() => { setCancelling(true); setRowError(null) }}
+              aria-label={`Cancelar ${item.item_name}`} title="Cancelar item"
+              className="h-10 w-10 inline-flex items-center justify-center rounded-xl
+                         text-stone-500 border border-stone-700/60 hover:text-red-400 hover:border-red-500/40
+                         hover:bg-red-500/10 active:bg-red-500/20 transition-colors">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round"
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Cancelar: motivo obrigatório */}
       {cancelling && (
-        <div className="mt-2.5 pl-5 space-y-2">
+        <div className="mt-3 space-y-2">
           <input
             type="text" value={reason} onChange={e => setReason(e.target.value)}
-            placeholder="Motivo (obrigatório)" maxLength={300} autoFocus
-            className="w-full rounded-lg px-3 py-1.5 text-xs border border-stone-700/60
-                       text-stone-300 placeholder-stone-700 bg-stone-900/60
-                       focus:outline-none focus:border-red-500/40"
+            onKeyDown={e => { if (e.key === 'Enter') confirmCancel() }}
+            placeholder="Motivo do cancelamento (obrigatório)" maxLength={300} autoFocus
+            className="w-full h-11 rounded-xl px-3.5 text-sm border border-stone-700/70
+                       text-stone-100 placeholder-stone-600 bg-stone-900/60
+                       focus:outline-none focus:border-red-500/50"
           />
           <div className="flex gap-2">
-            {cancelError && <p className="text-red-400 text-xs">{cancelError}</p>}
-            <button onClick={() => { setCancelling(false); setReason(''); setCancelError(null) }}
-              className="flex-1 py-1.5 rounded-lg text-xs text-stone-500 border border-stone-700/50
-                         hover:bg-stone-800/50 transition-colors">
+            <button onClick={() => { setCancelling(false); setReason(''); setRowError(null) }}
+              className="flex-1 h-10 rounded-xl text-sm font-semibold text-stone-400 border border-stone-700/60
+                         hover:bg-stone-800/60 transition-colors">
               Voltar
             </button>
             <button onClick={confirmCancel} disabled={loading || reason.trim().length < 3}
-              className="flex-1 py-1.5 rounded-lg text-xs font-semibold
-                         bg-red-500/15 text-red-400 border border-red-500/20
+              className="flex-1 h-10 rounded-xl text-sm font-bold
+                         bg-red-500/15 text-red-400 border border-red-500/30
                          hover:bg-red-500/25 disabled:opacity-40 transition-colors">
               {loading ? 'Cancelando…' : 'Cancelar item'}
             </button>
           </div>
         </div>
       )}
+
+      {rowError && (
+        <p role="alert" className="mt-2 text-red-400 text-xs bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+          {rowError}
+        </p>
+      )}
     </div>
   )
+}
+
+// Selo da situação do item. Pendente não tem selo (bebida nem passa pela
+// cozinha); servido aparece discreto.
+const ITEM_STATUS: Partial<Record<OrderItem['status'], { label: string; cls: string }>> = {
+  sent:      { label: 'Na cozinha', cls: 'text-blue-400 border-blue-500/30 bg-blue-500/10' },
+  preparing: { label: 'Preparando', cls: 'text-amber-400 border-amber-500/30 bg-amber-500/10' },
+  ready:     { label: 'Pronto',     cls: 'text-green-400 border-green-500/30 bg-green-500/10' },
+  served:    { label: 'Servido',    cls: 'text-stone-500 border-stone-700/60 bg-transparent' },
 }
 
 // ── Modal: Adicionar item ─────────────────────────────────────────────────────
