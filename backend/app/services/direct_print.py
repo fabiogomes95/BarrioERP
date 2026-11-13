@@ -85,6 +85,25 @@ def delivery_lines(online: OnlineOrder, total: Decimal) -> list[tuple[str, str]]
     return lines
 
 
+def receipt_items(items) -> list[tuple[int, str, Decimal, Decimal]]:
+    """
+    Linhas da conta: itens iguais (mesmo nome + mesmo preço) lançados em
+    horas diferentes saem juntos — "12x Churrasco" em vez de 5x e 7x. No banco
+    continuam separados (cozinha, horário, cancelamento). Mesma regra do
+    groupForReceipt() do frontend. Cancelados ficam de fora; a ordem é a do
+    primeiro lançamento.
+    """
+    groups: dict[tuple[str, Decimal], list] = {}
+    for it in items:
+        if it.status == OrderItemStatus.CANCELLED:
+            continue
+        key = (it.item_name.strip().lower(), Decimal(it.unit_price).quantize(Decimal("0.01")))
+        g = groups.setdefault(key, [0, it.item_name, Decimal(it.unit_price), Decimal("0")])
+        g[0] += it.quantity
+        g[3] += Decimal(it.subtotal)
+    return [(qty, name, unit, total) for qty, name, unit, total in groups.values()]
+
+
 async def print_receipt(session: AsyncSession, company_id: UUID, establishment_id: UUID, order_id: UUID) -> None:
     order = await _load(session, establishment_id, order_id)
     online = await _online(session, order)
@@ -97,7 +116,7 @@ async def print_receipt(session: AsyncSession, company_id: UUID, establishment_i
     data = thermal_printer.receipt(
         bar_name=company.name if company else "Barrio",
         where=await _where(session, order, receipt=True),
-        items=[(i.quantity, i.item_name, i.subtotal) for i in order.items if i.status != OrderItemStatus.CANCELLED],
+        items=receipt_items(order.items),
         subtotal=order.subtotal, service_fee=order.service_fee,
         service_fee_percent=order.service_fee_percent, discount=order.discount, total=order.total,
         payments=[(method(p), p.amount) for p in payments],

@@ -110,7 +110,7 @@ def kitchen_ticket(where: str, items: list[tuple[int, str, str | None]],
     return b"".join(out)
 
 
-def receipt(bar_name: str, where: str, items: list[tuple[int, str, Decimal]],
+def receipt(bar_name: str, where: str, items: list[tuple[int, str, Decimal, Decimal]],
             subtotal: Decimal, service_fee: Decimal, service_fee_percent: Decimal,
             discount: Decimal, total: Decimal, payments: list[tuple[str, Decimal]],
             delivery: list[tuple[str, str]] | None = None,
@@ -130,8 +130,12 @@ def receipt(bar_name: str, where: str, items: list[tuple[int, str, Decimal]],
         out.append(_line())
     if not items:
         out.append(_text("(sem itens)"))
-    for qty, name, line_total in items:
+    # items = (quantidade, nome, preço unitário, total da linha) — já agrupados
+    # (ver direct_print.receipt_items). Unitário embaixo quando qtd > 1.
+    for qty, name, unit_price, line_total in items:
         out += [_text(l) for l in _two_cols(f"{qty}x {name}", _money(line_total))]
+        if qty > 1:
+            out.append(_text(f"   {qty} x {_money(unit_price)}"))
     out.append(_line())
     if service_fee > 0:
         out += [_text(l) for l in _two_cols("Subtotal", _money(subtotal))]

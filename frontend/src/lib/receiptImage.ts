@@ -1,5 +1,6 @@
 import { type Order, type Table, type Payment, type FiadoEntry } from './api'
 import { brl } from './format'
+import { groupForReceipt } from './groupItems'
 
 const METHOD_LABEL: Record<string, string> = {
   cash: 'Dinheiro', credit_card: 'Crédito', debit_card: 'Débito',
@@ -44,7 +45,8 @@ function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number)
 export async function buildReceiptImage(
   order: Order, table: Table | undefined, barName: string, payments: Payment[] = [],
 ): Promise<Blob> {
-  const active = order.items.filter(i => i.status !== 'cancelled')
+  // Itens iguais lançados em horas diferentes saem juntos ("12x Churrasco")
+  const groups = groupForReceipt(order.items)
   const typeLabel = order.order_type === 'delivery'
     ? 'Delivery'
     : order.order_type === 'pickup'
@@ -64,11 +66,13 @@ export async function buildReceiptImage(
   // Canvas de medição (não desenhado) — usado só pra calcular a altura total antes de criar o canvas final.
   const measure = document.createElement('canvas').getContext('2d')!
 
-  type Row = { lines: string[]; value: string; bold?: boolean; muted?: boolean }
+  // sub = linha menor embaixo do nome (valor unitário: "12 x R$ 15,00")
+  type Row = { lines: string[]; value: string; bold?: boolean; muted?: boolean; sub?: string }
   measure.font = `bold 14px ${FONT}`
-  const itemRows: Row[] = active.map(it => ({
-    lines: wrapText(measure, `${it.quantity}x ${it.item_name}`, nameColW),
-    value: brl(it.subtotal),
+  const itemRows: Row[] = groups.map(g => ({
+    lines: wrapText(measure, `${g.quantity}x ${g.item_name}`, nameColW),
+    value: brl(g.subtotal),
+    sub: g.quantity > 1 ? `${g.quantity} x ${brl(g.unit_price)}` : undefined,
   }))
 
   const totalsRows: Row[] = []
@@ -89,6 +93,7 @@ export async function buildReceiptImage(
   const DASH_H = 22
   const ITEM_ROW_LINE_H = 22
   const ITEM_ROW_GAP = 10
+  const ITEM_SUB_H = 18
   const TOTALS_ROW_H = 24
   const TOTAL_ROW_H = 46
   // uma linha por pagamento confirmado + a linha "Falta pagar"
@@ -96,7 +101,7 @@ export async function buildReceiptImage(
     ? confirmedPayments.length * TOTALS_ROW_H + 34 : 0
   const FOOTER_H = 50
 
-  const itemsH = itemRows.reduce((h, r) => h + r.lines.length * ITEM_ROW_LINE_H + ITEM_ROW_GAP, 0)
+  const itemsH = itemRows.reduce((h, r) => h + r.lines.length * ITEM_ROW_LINE_H + (r.sub ? ITEM_SUB_H : 0) + ITEM_ROW_GAP, 0)
   const totalsH = totalsRows.length * TOTALS_ROW_H
 
   const H = PAD + HEADER_H + DASH_H + itemsH + DASH_H + totalsH + TOTAL_ROW_H + PAID_BLOCK_H + DASH_H + FOOTER_H + PAD
@@ -175,6 +180,13 @@ export async function buildReceiptImage(
           ctx.fillText(row.value, W - PAD, y)
         }
       })
+      if (row.sub) {
+        y += ITEM_SUB_H
+        ctx.font = `13px ${FONT}`
+        ctx.fillStyle = MUTED
+        ctx.textAlign = 'left'
+        ctx.fillText(row.sub, PAD, y)
+      }
       y += ITEM_ROW_GAP
     }
   }
@@ -236,7 +248,15 @@ export async function buildReceiptImage(
   y += 24
   ctx.fillText('Obrigado pela preferência!', W / 2, y)
 
-  return new Promise(resolve => canvas.toBlob(b => resolve(b!), 'image/png'))
+  // A altura acima é uma estimativa por cima; corta a sobra de papel vazio
+  // que ficava no fim da imagem.
+  const usedH = Math.min(H, Math.ceil(y + PAD))
+  if (usedH >= H) return new Promise(resolve => canvas.toBlob(b => resolve(b!), 'image/png'))
+  const cropped = document.createElement('canvas')
+  cropped.width = canvas.width
+  cropped.height = usedH * scale
+  cropped.getContext('2d')!.drawImage(canvas, 0, 0)
+  return new Promise(resolve => cropped.toBlob(b => resolve(b!), 'image/png'))
 }
 
 function drawDash(ctx: CanvasRenderingContext2D, y: number, x0: number, x1: number): number {
@@ -394,7 +414,15 @@ export async function buildFiadoStatementImage(
   y += 24
   ctx.fillText('Obrigado pela preferência!', W / 2, y)
 
-  return new Promise(resolve => canvas.toBlob(b => resolve(b!), 'image/png'))
+  // A altura acima é uma estimativa por cima; corta a sobra de papel vazio
+  // que ficava no fim da imagem.
+  const usedH = Math.min(H, Math.ceil(y + PAD))
+  if (usedH >= H) return new Promise(resolve => canvas.toBlob(b => resolve(b!), 'image/png'))
+  const cropped = document.createElement('canvas')
+  cropped.width = canvas.width
+  cropped.height = usedH * scale
+  cropped.getContext('2d')!.drawImage(canvas, 0, 0)
+  return new Promise(resolve => cropped.toBlob(b => resolve(b!), 'image/png'))
 }
 
 /**

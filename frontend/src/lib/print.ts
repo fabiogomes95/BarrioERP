@@ -1,5 +1,6 @@
 import { type Order, type Table, type Payment } from './api'
 import { brl } from './format'
+import { groupForReceipt } from './groupItems'
 
 const METHOD_LABEL: Record<string, string> = {
   cash: 'Dinheiro', credit_card: 'Crédito', debit_card: 'Débito',
@@ -81,7 +82,8 @@ export function printComanda(
     return
   }
 
-  const active = order.items.filter(i => i.status !== 'cancelled')
+  // Itens iguais lançados em horas diferentes saem juntos ("12x Churrasco")
+  const groups = groupForReceipt(order.items)
   const now = new Date().toLocaleString('pt-BR')
   const typeLabel = order.order_type === 'delivery'
     ? 'Delivery'
@@ -90,10 +92,11 @@ export function printComanda(
       : 'Consumo no local'
   const where = table ? `Mesa ${table.number}` : typeLabel
 
-  const itemRows = active.map(it => `
+  const itemRows = groups.map(g => `
     <tr>
-      <td class="qtyname">${it.quantity}x ${esc(it.item_name)}</td>
-      <td class="val">${brl(it.subtotal)}</td>
+      <td class="qtyname">${g.quantity}x ${esc(g.item_name)}${g.quantity > 1
+        ? `<div class="unit">${g.quantity} x ${brl(g.unit_price)}</div>` : ''}</td>
+      <td class="val">${brl(g.subtotal)}</td>
     </tr>
   `).join('')
 
@@ -143,6 +146,7 @@ export function printComanda(
   table { width: 100%; border-collapse: collapse; }
   td { vertical-align: top; padding: 0.3mm 0; }
   .qtyname { text-align: left; word-break: break-word; }
+  .unit { font-size: 11px; font-weight: normal; color: #333; }
   .val { text-align: right; white-space: nowrap; padding-left: 2mm; }
   .total-row td { font-size: 12pt; font-weight: bold; padding-top: 1.5mm; border-top: 1px solid #000; }
   .delivery { font-size: 10pt; line-height: 1.35; word-break: break-word; }

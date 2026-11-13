@@ -9,6 +9,7 @@ import {
 } from '../lib/api'
 import { brl, itemTime, maskCurrency, parseCurrency, timeAgo, toCurrencyInput } from '../lib/format'
 import { ORDER_STATUS } from '../lib/orderStatus'
+import { groupForScreen, type ItemGroup } from '../lib/groupItems'
 import { shareReceiptWhatsApp } from '../lib/receiptImage'
 import { paidSlots, splitAmounts, splitByShares } from '../lib/split'
 import { Field, ModalOverlay, QtyStepper } from './ui'
@@ -280,6 +281,76 @@ function OrderItemRow({
 
 // Selo da situação do item. Pendente não tem selo (bebida nem passa pela
 // cozinha); servido aparece discreto.
+// ── Grupo de lançamentos iguais ("12× Churrasco · 2 lançamentos") ──────────────
+
+const STATUS_PLURAL: Record<string, [string, string]> = {
+  pending: ['a servir', 'a servir'],
+  sent: ['na cozinha', 'na cozinha'],
+  preparing: ['preparando', 'preparando'],
+  ready: ['pronto', 'prontos'],
+  served: ['servido', 'servidos'],
+}
+
+function ItemGroupRow({ group, canEdit, onUpdated }: {
+  group: ItemGroup
+  canEdit: boolean
+  onUpdated: (updated: Order) => void
+}) {
+  const [open, setOpen] = useState(false)
+
+  // Resumo da situação somando as quantidades: "5 servidos · 7 preparando"
+  const byStatus = new Map<string, number>()
+  for (const it of group.items) byStatus.set(it.status, (byStatus.get(it.status) ?? 0) + it.quantity)
+  const summary = [...byStatus].map(([st, qty]) => {
+    const [one, many] = STATUS_PLURAL[st] ?? [st, st]
+    return `${qty} ${qty === 1 ? one : many}`
+  }).join(' · ')
+  const single = byStatus.size === 1 ? ITEM_STATUS[group.items[0].status] : undefined
+
+  return (
+    <div className="border-b border-stone-800/40">
+      <button type="button" onClick={() => setOpen(v => !v)} aria-expanded={open}
+        className="w-full text-left px-4 py-3.5 flex items-start gap-3 hover:bg-stone-800/30 active:bg-stone-800/50 transition-colors">
+        <div className="flex-1 min-w-0">
+          <p className="text-stone-100 text-[15px] font-semibold leading-snug break-words">
+            <span className="text-amber-400 tabular-nums">{group.quantity}× </span>{group.item_name}
+          </p>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 text-xs text-stone-500 tabular-nums">
+            <span>{group.quantity} × {brl(group.unit_price)}</span>
+            <span aria-hidden>·</span>
+            <span>{group.items.length} lançamentos</span>
+            {single ? (
+              <span className={['inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border',
+                single.cls].join(' ')}>
+                <span className="w-1.5 h-1.5 rounded-full bg-current" aria-hidden />{single.label}
+              </span>
+            ) : (
+              <span className="text-stone-400">{summary}</span>
+            )}
+          </div>
+          {group.notes && (
+            <p className="text-stone-400 text-[13px] mt-1.5 italic break-words">Obs.: {group.notes}</p>
+          )}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-stone-200 text-[15px] font-bold tabular-nums">{brl(group.subtotal)}</span>
+          <svg className={['w-5 h-5 text-stone-500 transition-transform', open ? 'rotate-180' : ''].join(' ')}
+            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+      </button>
+      {open && (
+        <div className="ml-4 border-l-2 border-amber-500/30 bg-stone-900/20">
+          {group.items.map(it => (
+            <OrderItemRow key={it.id} item={it} canCancel={canEdit} onCancelled={onUpdated} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 const ITEM_STATUS: Partial<Record<OrderItem['status'], { label: string; cls: string }>> = {
   sent:      { label: 'Na cozinha', cls: 'text-blue-400 border-blue-500/30 bg-blue-500/10' },
   preparing: { label: 'Preparando', cls: 'text-amber-400 border-amber-500/30 bg-amber-500/10' },
@@ -1778,17 +1849,26 @@ export function OrderDetail({
           </div>
         ) : (
           <>
-            {activeItems.map(item => (
-              <OrderItemRow
-                key={item.id}
-                item={item}
-                canCancel={canEdit && !kitchenMode}
-                onCancelled={onUpdated}
-                kitchenMode={kitchenMode}
-                kitchenSelected={kitchenSelected.has(item.id)}
-                onKitchenToggle={() => toggleKitchenItem(item.id)}
-              />
-            ))}
+            {/* Escolhendo itens pra cozinha: lista de lançamentos, um por um.
+                Fora disso, iguais (nome + preço + observação) viram uma linha
+                "12× Churrasco" que abre os lançamentos ao tocar. */}
+            {kitchenMode
+              ? activeItems.map(item => (
+                  <OrderItemRow
+                    key={item.id}
+                    item={item}
+                    canCancel={false}
+                    onCancelled={onUpdated}
+                    kitchenMode
+                    kitchenSelected={kitchenSelected.has(item.id)}
+                    onKitchenToggle={() => toggleKitchenItem(item.id)}
+                  />
+                ))
+              : groupForScreen(activeItems).map(g => g.items.length === 1 ? (
+                  <OrderItemRow key={g.key} item={g.items[0]} canCancel={canEdit} onCancelled={onUpdated} />
+                ) : (
+                  <ItemGroupRow key={g.key} group={g} canEdit={canEdit} onUpdated={onUpdated} />
+                ))}
 
             {cancelledItems.length > 0 && (
               <>

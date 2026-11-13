@@ -30,7 +30,8 @@ def test_valor_alinhado_a_direita_e_quebra_nome_longo():
 def test_recibo_com_taxa_pagamento_e_falta_pagar():
     data = receipt(
         "Recanto da Barra", "Mesa 4 - Marina",
-        [(2, "Brahma 600ml", Decimal("20.00")), (1, "Pizza Calabresa / Mussarela", Decimal("48.00"))],
+        [(2, "Brahma 600ml", Decimal("10.00"), Decimal("20.00")),
+         (1, "Pizza Calabresa / Mussarela", Decimal("48.00"), Decimal("48.00"))],
         subtotal=Decimal("68.00"), service_fee=Decimal("6.80"), service_fee_percent=Decimal("10.00"),
         discount=Decimal("0"), total=Decimal("74.80"), payments=[("Pix", Decimal("50.00"))], now=NOW,
     )
@@ -39,6 +40,8 @@ def test_recibo_com_taxa_pagamento_e_falta_pagar():
     assert "Taxa de servico (10%)" in text and "R$ 6,80" in text
     assert "R$ 74,80" in text and "Pago (Pix)" in text
     assert "FALTA PAGAR" in text and "R$ 24,80" in text
+    assert "2 x R$ 10,00" in text                 # unitário quando qtd > 1
+    assert "1 x R$ 48,00" not in text             # qtd 1: o total da linha já é o unitário
     assert data.startswith(b"\x1b@") and data.endswith(b"\x1dVB\x00")  # inicia e corta o papel
 
 
@@ -50,7 +53,7 @@ def test_recibo_delivery_com_local_pagamento_e_troco():
     online = OnlineOrder(fulfillment=OrderType.DELIVERY, customer_name="Marina", customer_phone="81999998888",
                          delivery_location="Barraca 3, perto do coqueiro", payment_method="cash",
                          change_for=Decimal("100.00"), notes="sem cebola")
-    data = receipt("Recanto da Barra", "Entrega - Marina", [(1, "Pizza Calabresa", Decimal("62.00"))],
+    data = receipt("Recanto da Barra", "Entrega - Marina", [(1, "Pizza Calabresa", Decimal("62.00"), Decimal("62.00"))],
                    subtotal=Decimal("62.00"), service_fee=Decimal("0"), service_fee_percent=Decimal("0"),
                    discount=Decimal("0"), total=Decimal("62.00"), payments=[],
                    delivery=delivery_lines(online, Decimal("62.00")), now=NOW)
@@ -80,3 +83,26 @@ def test_ticket_cozinha_sem_acento_e_sem_preco():
     assert "3x Churrasco - coracao" in text  # acento removido, sempre legível
     assert "> sem sal" in text and "capricha" in text
     assert "R$" not in text
+
+
+def test_conta_junta_itens_iguais_lancados_em_horas_diferentes():
+    from types import SimpleNamespace as I
+    from app.models.order import OrderItemStatus as S
+    from app.services.direct_print import receipt_items
+
+    itens = [
+        I(item_name="Churrasco", unit_price=Decimal("15.00"), quantity=5, subtotal=Decimal("75.00"), status=S.SERVED),
+        I(item_name="Cerveja", unit_price=Decimal("12.00"), quantity=2, subtotal=Decimal("24.00"), status=S.SERVED),
+        I(item_name="Churrasco ", unit_price=Decimal("15"), quantity=7, subtotal=Decimal("105.00"), status=S.READY),
+        I(item_name="Churrasco", unit_price=Decimal("15.00"), quantity=3, subtotal=Decimal("45.00"), status=S.CANCELLED),
+        I(item_name="Churrasco", unit_price=Decimal("12.00"), quantity=1, subtotal=Decimal("12.00"), status=S.SERVED),
+    ]
+    assert receipt_items(itens) == [
+        (12, "Churrasco", Decimal("15.00"), Decimal("180.00")),
+        (2, "Cerveja", Decimal("12.00"), Decimal("24.00")),
+        (1, "Churrasco", Decimal("12.00"), Decimal("12.00")),   # preço diferente: linha própria
+    ]
+    text = "\n".join(_text_lines(receipt("Bar", "Mesa 1", receipt_items(itens), subtotal=Decimal("216"),
+                                         service_fee=Decimal("0"), service_fee_percent=Decimal("0"),
+                                         discount=Decimal("0"), total=Decimal("216"), payments=[], now=NOW)))
+    assert "12x Churrasco" in text and "R$ 180,00" in text and "12 x R$ 15,00" in text
