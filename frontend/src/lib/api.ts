@@ -714,7 +714,7 @@ export async function changeMyPassword(
 ): Promise<TeamUser> {
   const me = getUser()
   if (!me) throw new Error('Sessão expirada')
-  return request<TeamUser>(`/users/${me.id}/password`, {
+  const updated = await request<TeamUser>(`/users/${me.id}/password`, {
     method: 'PATCH',
     body: JSON.stringify({
       current_password: currentPassword,
@@ -722,6 +722,10 @@ export async function changeMyPassword(
       confirm_password: newPassword,
     }),
   })
+  // Trocar a senha derruba todos os logins abertos (token_version) — inclusive
+  // este. Entra de novo com a senha nova pra não cair na tela de login.
+  await login(updated.email, newPassword)
+  return updated
 }
 
 // ── Auditoria ─────────────────────────────────────────────────────────────────

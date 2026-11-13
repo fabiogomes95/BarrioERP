@@ -94,6 +94,7 @@ class AuthService:
             "role": user.role.value,       # ex: "manager", "waiter"
             "name": user.name,             # para exibir no frontend sem query extra
             "company_name": company.name if company else None,  # nome do bar
+            "tv": user.token_version,      # trocar a senha invalida tokens antigos
         }
 
         access_token = create_access_token(subject=user.id, extra=token_extra)
@@ -124,6 +125,7 @@ class AuthService:
             raise NotFoundError("User", data.email)
 
         user.password_hash = hash_password(data.new_password)
+        user.token_version += 1  # derruba os logins abertos com a senha antiga
         await self.session.flush()
 
         await AuditService(self.session).log(

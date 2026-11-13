@@ -14,7 +14,7 @@ from app.core.security import create_access_token, create_sse_ticket, decode_tok
 
 
 def _session_com_usuario():
-    user = MagicMock(is_active=True, deleted_at=None)
+    user = MagicMock(is_active=True, deleted_at=None, token_version=0)
     session = MagicMock()
     session.get = AsyncMock(return_value=user)
     return session, user
@@ -54,3 +54,27 @@ async def test_ticket_vencido_e_recusado():
     )
     with pytest.raises(HTTPException):
         await _load_user_from_token(vencido, session, expected_type="sse")
+
+
+# ── token_version: trocar a senha derruba logins abertos ───────────────────────
+
+
+async def test_token_com_versao_antiga_e_recusado():
+    session, user = _session_com_usuario()
+    user.token_version = 1
+    with pytest.raises(HTTPException) as e:
+        await _load_user_from_token(create_access_token(uuid4(), {"tv": 0}), session)
+    assert "senha foi trocada" in e.value.detail
+
+
+async def test_token_com_versao_atual_passa():
+    session, user = _session_com_usuario()
+    user.token_version = 2
+    assert await _load_user_from_token(create_access_token(uuid4(), {"tv": 2}), session) is user
+
+
+async def test_token_antigo_sem_tv_vale_enquanto_ninguem_trocou_a_senha():
+    """Migração não desloga ninguém: token sem "tv" conta como versão 0."""
+    session, user = _session_com_usuario()
+    user.token_version = 0
+    assert await _load_user_from_token(create_access_token(uuid4()), session) is user

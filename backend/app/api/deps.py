@@ -79,39 +79,8 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 # ── Dependências de Autenticação ──────────────────────────────────────────────
 
-async def get_current_user_id(
-    token: Annotated[str, Depends(oauth2_scheme)],
-) -> UUID:
-    """
-    Extrai o user_id do JWT sem acessar o banco.
-
-    Use quando você só precisa do ID (ex: registrar quem fez a ação).
-    Mais leve que get_current_user() pois não faz query.
-
-    FLUXO:
-        Header "Authorization: Bearer eyJ..."
-            → oauth2_scheme extrai o token
-            → decode_token() verifica assinatura e expiração
-            → extrai "sub" do payload
-            → retorna UUID
-    """
-    try:
-        payload = decode_token(token)
-        if payload.get("type") != "access":
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token type",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        return UUID(payload["sub"])
-    except (JWTError, KeyError, ValueError):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
-            headers={"WWW-Authenticate": "Bearer"},
-            # WWW-Authenticate informa ao cliente como se autenticar
-        )
-
+# Não existe variante "só decodifica o JWT, sem ir ao banco": ela pularia as
+# checagens de usuário desativado e de senha trocada (token_version).
 
 async def _load_user_from_token(
     token: str, session: AsyncSession, expected_type: str = "access",
@@ -140,6 +109,16 @@ async def _load_user_from_token(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found or inactive",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Senha trocada depois que o token foi emitido → login antigo não vale mais.
+    # Token sem "tv" (emitido antes deste controle) conta como versão 0.
+    # O ticket do SSE é emitido na hora a partir de um token já validado aqui.
+    if expected_type == "access" and payload.get("tv", 0) != user.token_version:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Sessão encerrada: a senha foi trocada. Entre de novo.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -200,11 +179,8 @@ def require_roles(user: User, *roles: UserRole) -> None:
 # ── Tipos anotados para uso nos endpoints ─────────────────────────────────────
 # Estes tipos são "atalhos" — em vez de repetir Annotated[...] em todo endpoint
 
-# Retorna o UUID do usuário (sem query ao banco — só decodifica o JWT)
-CurrentUserId = Annotated[UUID, Depends(get_current_user_id)]
-
 # Retorna o objeto User completo (faz query ao banco)
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
-# Variante para SSE — autentica via ?token= na URL (ver get_current_user_from_query_token)
+# Variante para SSE — autentica via ?ticket= na URL (ver get_current_user_from_query_token)
 CurrentUserSSE = Annotated[User, Depends(get_current_user_from_query_token)]

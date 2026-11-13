@@ -1,7 +1,7 @@
 import enum
 from uuid import UUID
 
-from sqlalchemy import Enum, ForeignKey, Index, String
+from sqlalchemy import Enum, ForeignKey, Index, Integer, String
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -45,6 +45,9 @@ class User(Base, UUIDMixin, TimestampMixin, SoftDeleteMixin):
         index=True,
     )
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False, index=True)
+    # Vai no token ("tv"). Trocar a senha incrementa: todo login aberto com o
+    # número antigo para de valer na hora (celular perdido, senha vazada...).
+    token_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
 
     company: Mapped["Company"] = relationship(back_populates="users")  # noqa: F821
     establishment: Mapped["Establishment | None"] = relationship(back_populates="users")  # noqa: F821

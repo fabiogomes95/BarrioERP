@@ -614,6 +614,9 @@ class UserService(BaseService):
 
         # Hash da nova senha — igual ao que é feito na criação
         user.password_hash = hash_password(data.new_password)
+        # Derruba os logins abertos com a senha antiga (inclusive o de quem
+        # trocou a própria — o frontend entra de novo com a senha nova).
+        user.token_version += 1
 
         await self.session.flush()
         await self.session.refresh(user)
