@@ -3,7 +3,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Numeric, String, Text
+from sqlalchemy import DateTime, Enum, ForeignKey, Index, Numeric, String, Text, text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -24,6 +24,12 @@ class CashSession(Base, UUIDMixin, TimestampMixin):
     """Sessão de caixa: abre com um fundo de troco e fecha com a contagem."""
 
     __tablename__ = "cash_sessions"
+    # No máximo um caixa aberto por estabelecimento — garantido pelo banco,
+    # não só pelo código (dois cliques simultâneos em "Abrir caixa").
+    __table_args__ = (
+        Index("uq_cash_sessions_one_open", "establishment_id",
+              unique=True, postgresql_where=text("status = 'open'")),
+    )
 
     establishment_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),

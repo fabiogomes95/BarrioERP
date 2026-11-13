@@ -13,6 +13,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import BusinessRuleError, TenantError
@@ -114,7 +115,12 @@ class CashService(BaseService):
             notes=data.notes,
         )
         self.session.add(s)
-        await self.session.flush()
+        try:
+            await self.session.flush()
+        except IntegrityError:
+            # Outro aparelho abriu o caixa no mesmo instante (índice único
+            # uq_cash_sessions_one_open) — a checagem acima não pega essa corrida.
+            raise BusinessRuleError("Já existe um caixa aberto. Feche-o antes de abrir outro.")
         await self.session.refresh(s, attribute_names=["movements"])
         return await self._to_response(s)
 
