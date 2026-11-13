@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { getToken, getUser, fetchOrder, fetchTables, fetchOrderPayments } from './api'
+import { getToken, getUser, fetchOrder, fetchTables, fetchOrderPayments, fetchSseTicket } from './api'
 import { printComanda, printCozinha } from './print'
 
 export interface BillRequestAlert {
@@ -123,10 +123,37 @@ export function useBillRequestAlerts() {
     if (!user || !token) return
     if (user.role === 'waiter' || user.role === 'kitchen') return
 
-    const source = new EventSource(`/api/v1/notifications/stream?token=${encodeURIComponent(token)}`)
-    sourceRef.current = source
+    // A URL vai pro log do servidor: nela vai um ticket de 60s que só abre o
+    // stream, nunca o token de login. Como o ticket vence, a reconexão
+    // automática da EventSource não serve — se cair (servidor reiniciou,
+    // Wi-Fi caiu), fecha e reconecta com um ticket novo.
+    let stopped = false
+    let retryTimer: number | undefined
 
-    source.onmessage = (evt) => {
+    function retry(ms: number) {
+      if (!stopped) retryTimer = window.setTimeout(connect, ms)
+    }
+
+    async function connect() {
+      let ticket: string
+      try {
+        ticket = await fetchSseTicket()
+      } catch {
+        retry(10_000)
+        return
+      }
+      if (stopped) return
+      const source = new EventSource(`/api/v1/notifications/stream?ticket=${encodeURIComponent(ticket)}`)
+      sourceRef.current = source
+      source.onmessage = onMessage
+      source.onerror = () => {
+        source.close()
+        if (sourceRef.current === source) sourceRef.current = null
+        retry(5_000)
+      }
+    }
+
+    function onMessage(evt: MessageEvent) {
       try {
         const data = JSON.parse(evt.data)
         if (data.type === 'table.bill_requested') {
@@ -167,8 +194,12 @@ export function useBillRequestAlerts() {
       }
     }
 
+    connect()
+
     return () => {
-      source.close()
+      stopped = true
+      window.clearTimeout(retryTimer)
+      sourceRef.current?.close()
       sourceRef.current = null
     }
   }, [])

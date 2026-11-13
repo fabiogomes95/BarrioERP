@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 
 from app.api.deps import CurrentUser, CurrentUserSSE, DBSession
 from app.core import events
+from app.core.security import create_sse_ticket
 from app.services import direct_print
 
 router = APIRouter()
@@ -42,13 +43,26 @@ class PrintRequestIn(BaseModel):
     items: list[KitchenItemIn] | None = Field(default=None, max_length=60)
 
 
+@router.post(
+    "/ticket",
+    summary="Ticket de 60s pra abrir o stream (SSE)",
+    description=(
+        "A EventSource não manda header, então a autenticação do /stream vai "
+        "na URL — e URL vai pro log. Por isso ela leva este ticket de vida "
+        "curta, que só serve pro /stream, em vez do token de login."
+    ),
+)
+async def stream_ticket(current_user: CurrentUser) -> dict:
+    return {"ticket": create_sse_ticket(current_user.id)}
+
+
 @router.get(
     "/stream",
     summary="Stream de eventos em tempo real (SSE)",
     description=(
         "Mantém a conexão aberta e empurra eventos assim que acontecem "
         "(hoje: `table.bill_requested`, quando uma mesa solicita a conta). "
-        "Autenticação via `?token=` na query string, não no header — "
+        "Autenticação via `?ticket=` (POST /notifications/ticket, vale 60s) — "
         "a EventSource do navegador não suporta headers customizados."
     ),
 )

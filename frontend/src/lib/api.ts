@@ -541,6 +541,11 @@ export async function requestBill(orderId: string): Promise<Order> {
  * "impressora do bar". `items` (só cozinha) = os escolhidos na tela; sem
  * lista, vão os itens da comanda que vão pra cozinha.
  */
+/** Ticket de 60s pra abrir o stream de notificações — nunca vai o token de login na URL (fica no log). */
+export async function fetchSseTicket(): Promise<string> {
+  return (await request<{ ticket: string }>('/notifications/ticket', { method: 'POST' })).ticket
+}
+
 export async function requestRemotePrint(
   orderId: string,
   printType: 'comanda' | 'cozinha' = 'comanda',

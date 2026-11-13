@@ -113,12 +113,15 @@ async def get_current_user_id(
         )
 
 
-async def _load_user_from_token(token: str, session: AsyncSession) -> User:
-    """Lógica compartilhada entre get_current_user (header) e a variante por
-    query param usada pelo SSE (EventSource não permite headers customizados)."""
+async def _load_user_from_token(
+    token: str, session: AsyncSession, expected_type: str = "access",
+) -> User:
+    """Lógica compartilhada entre get_current_user (header, token "access") e
+    a variante por query param do SSE (ticket "sse" de 60s — ver
+    create_sse_ticket). Um não serve no lugar do outro."""
     try:
         payload = decode_token(token)
-        if payload.get("type") != "access":
+        if payload.get("type") != expected_type:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                                 detail="Invalid token type",
                                 headers={"WWW-Authenticate": "Bearer"})
@@ -162,20 +165,19 @@ async def get_current_user(
 
 
 async def get_current_user_from_query_token(
-    token: str,
+    ticket: str,
     session: DBSession,
 ) -> User:
     """
-    Mesma coisa que get_current_user, mas lê o token de `?token=` na URL em
-    vez do header Authorization.
+    Mesma coisa que get_current_user, mas lê `?ticket=` da URL em vez do
+    header Authorization.
 
     Necessário só para o endpoint SSE de notificações — a EventSource do
-    navegador não permite mandar headers customizados, então não dá pra usar
-    o esquema Bearer normal ali. O token na query string é um trade-off aceito
-    para esse caso específico (rede local/Tailscale, não fica exposto na
-    internet pública).
+    navegador não permite mandar headers customizados. Como URL fica gravada
+    no log de acesso, aqui vai só um ticket de 60s que só abre o stream
+    (POST /notifications/ticket), nunca o token de login.
     """
-    return await _load_user_from_token(token, session)
+    return await _load_user_from_token(ticket, session, expected_type="sse")
 
 
 def require_roles(user: User, *roles: UserRole) -> None:

@@ -106,6 +106,27 @@ def create_refresh_token(subject: UUID) -> str:
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
+SSE_TICKET_SECONDS = 60
+
+
+def create_sse_ticket(subject: UUID) -> str:
+    """
+    Ticket de vida curta (60s) que só serve pra abrir o stream de
+    notificações (SSE). A EventSource do navegador não manda header, então o
+    que autentica vai na URL — e URL vai parar no log de acesso. Antes ia o
+    token de login inteiro (válido por horas, abre a API toda); agora vai
+    este ticket, que expira em 1 minuto e não autentica nenhuma outra rota.
+    """
+    now = datetime.now(UTC)
+    payload: dict[str, Any] = {
+        "sub": str(subject),
+        "exp": now + timedelta(seconds=SSE_TICKET_SECONDS),
+        "iat": now,
+        "type": "sse",
+    }
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
 def decode_token(token: str) -> dict[str, Any]:
     """
     Decodifica e valida um JWT.
