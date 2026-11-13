@@ -32,7 +32,11 @@ INIT = b"\x1b@"
 BOLD_ON, BOLD_OFF = b"\x1bE\x01", b"\x1bE\x00"
 CENTER, LEFT = b"\x1ba\x01", b"\x1ba\x00"
 NORMAL, DOUBLE, TALL = b"\x1d!\x00", b"\x1d!\x11", b"\x1d!\x01"  # TALL = só altura dupla
-FEED_AND_CUT = b"\n\n\n\n\x1dVB\x00"
+# GS V B 0 já avança o papel até a última linha passar da lâmina antes de
+# cortar; antes havia 4 "\n" a mais aqui (≈1,5 cm de papel em branco no fim
+# de cada recibo). Fica 1 por segurança — se a impressora cortar o
+# "Obrigado" no meio, voltar pra 4.
+FEED_AND_CUT = b"\n\x1dVB\x00"
 
 
 def _ascii(text: str) -> bytes:
