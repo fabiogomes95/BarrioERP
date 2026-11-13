@@ -817,9 +817,10 @@ class OrderService(BaseService):
                 "Para ajustes pós-serviço, utilize o processo de estorno manual."
             )
 
-        # Regra 5: motivo obrigatório (fica na auditoria e no item)
+        # Regra 5: motivo obrigatório (fica na auditoria e no item) — exceto
+        # pro dono, pra quem é opcional (decisão do dono).
         reason = (reason or "").strip()
-        if len(reason) < 3:
+        if actor_role != UserRole.OWNER and len(reason) < 3:
             raise BusinessRuleError("Informe o motivo do cancelamento.")
 
         # Regra 6: item que já foi pra cozinha só caixa/gerente/dono cancela
@@ -834,7 +835,7 @@ class OrderService(BaseService):
         # Cancela o item — campos de auditoria registram quando e por quê
         item.status = OrderItemStatus.CANCELLED
         item.cancelled_at = datetime.now(UTC)
-        item.cancelled_reason = reason  # None se não fornecido — aceitável
+        item.cancelled_reason = reason or None  # dono pode cancelar sem motivo
 
         # Recalcula subtotal e total da comanda (exclui automaticamente itens CANCELLED)
         # _recalculate_total() itera sobre order.items já carregados em memória,

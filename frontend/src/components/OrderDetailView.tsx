@@ -72,6 +72,9 @@ function OrderItemRow({
   const role = getUser()?.role
   const canReduce = editable && (item.status === 'pending' || role === 'owner' || role === 'manager' || role === 'cashier')
   const canServe = canCancel && (item.status === 'ready' || item.status === 'pending')
+  // Motivo do cancelamento: opcional só pro dono (mesma regra do servidor)
+  const reasonOptional = role === 'owner'
+  const reasonOk = reasonOptional || reason.trim().length >= 3
 
   // Erro de qualquer ação da linha (quantidade, servir, cancelar) — antes só o
   // cancelar mostrava; quantidade/servir falhavam em silêncio.
@@ -111,7 +114,7 @@ function OrderItemRow({
   }
 
   async function confirmCancel() {
-    if (reason.trim().length < 3 || loading) return
+    if (!reasonOk || loading) return
     setLoading(true)
     setRowError(null)
     try {
@@ -244,7 +247,8 @@ function OrderItemRow({
           <input
             type="text" value={reason} onChange={e => setReason(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') confirmCancel() }}
-            placeholder="Motivo do cancelamento (obrigatório)" maxLength={300} autoFocus
+            placeholder={reasonOptional ? 'Motivo do cancelamento (opcional)' : 'Motivo do cancelamento (obrigatório)'}
+            maxLength={300} autoFocus
             className="w-full h-11 rounded-xl px-3.5 text-sm border border-stone-700/70
                        text-stone-100 placeholder-stone-600 bg-stone-900/60
                        focus:outline-none focus:border-red-500/50"
@@ -255,7 +259,7 @@ function OrderItemRow({
                          hover:bg-stone-800/60 transition-colors">
               Voltar
             </button>
-            <button onClick={confirmCancel} disabled={loading || reason.trim().length < 3}
+            <button onClick={confirmCancel} disabled={loading || !reasonOk}
               className="flex-1 h-10 rounded-xl text-sm font-bold
                          bg-red-500/15 text-red-400 border border-red-500/30
                          hover:bg-red-500/25 disabled:opacity-40 transition-colors">

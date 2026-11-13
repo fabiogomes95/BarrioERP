@@ -335,11 +335,18 @@ class TestPermissaoCancelarItem:
         service._stock_service = AsyncMock()
         return item
 
-    async def test_motivo_e_obrigatorio(self, service, order_id):
+    @pytest.mark.parametrize("role", [UserRole.MANAGER, UserRole.CASHIER, UserRole.WAITER, UserRole.KITCHEN])
+    async def test_motivo_e_obrigatorio(self, service, order_id, role):
         item = self._setup(service, OrderItemStatus.PENDING)
         for vazio in (None, "", "  ", "ab"):
             with pytest.raises(BusinessRuleError, match="motivo"):
-                await service.cancel_item(UUID(order_id), item.id, reason=vazio, actor_role=UserRole.OWNER)
+                await service.cancel_item(UUID(order_id), item.id, reason=vazio, actor_role=role)
+
+    async def test_dono_cancela_sem_motivo(self, service, order_id):
+        item = self._setup(service, OrderItemStatus.PREPARING)
+        await service.cancel_item(UUID(order_id), item.id, reason=None, actor_role=UserRole.OWNER)
+        assert item.status == OrderItemStatus.CANCELLED
+        assert item.cancelled_reason is None
 
     async def test_garcom_cancela_item_pendente(self, service, order_id):
         item = self._setup(service, OrderItemStatus.PENDING)
