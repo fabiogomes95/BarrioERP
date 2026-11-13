@@ -17,12 +17,16 @@ from app.core.exceptions import BusinessRuleError, NotFoundError, OptimisticLock
 
 @pytest.fixture
 def service(mock_session, company_id, establishment_id, user_id):
-    return OrderService(
+    svc = OrderService(
         session=mock_session,
         company_id=UUID(company_id),
         establishment_id=UUID(establishment_id),
         user_id=UUID(user_id),
     )
+    # Padrão: comanda sem pagamento. Testes de "total x já pago" sobrescrevem.
+    svc._order_repo.lock = AsyncMock(return_value=True)
+    svc._order_repo.sum_confirmed_payments = AsyncMock(return_value=Decimal("0"))
+    return svc
 
 
 def make_table(**kwargs) -> MagicMock:
@@ -259,6 +263,62 @@ class TestCancelOrder:
         service._get_or_raise = AsyncMock(return_value=order)
         with pytest.raises(BusinessRuleError, match="já está cancelada"):
             await service.cancel_order(UUID(order_id))
+
+
+# ── total nunca abaixo do já pago ──────────────────────────────────────────────
+
+
+class TestTotalNaoFicaAbaixoDoPago:
+    """Desconto/cancelamento/quantidade/10% depois de pagamento parcial."""
+
+    def _comanda_paga(self, service, pago: str, **kw):
+        item = make_item(unit_price=Decimal("30"), quantity=2, subtotal=Decimal("60"))
+        order = make_order(items=[item], subtotal=Decimal("60"), total=Decimal("60"), **kw)
+        service._get_or_raise = AsyncMock(return_value=order)
+        service._order_repo.get_item = AsyncMock(return_value=item)
+        service._order_repo.sum_confirmed_payments = AsyncMock(return_value=Decimal(pago))
+        return order, item
+
+    async def test_desconto_abaixo_do_pago_e_barrado(self, service, order_id):
+        self._comanda_paga(service, "50")
+        with pytest.raises(BusinessRuleError, match="menor que o já pago"):
+            await service.set_discount(UUID(order_id), Decimal("20"))
+
+    async def test_desconto_que_ainda_cobre_o_pago_passa(self, service, order_id):
+        order, _ = self._comanda_paga(service, "50")
+        await service.set_discount(UUID(order_id), Decimal("10"))
+        assert order.total == Decimal("50")
+
+    async def test_cancelar_item_abaixo_do_pago_e_barrado(self, service, order_id):
+        _, item = self._comanda_paga(service, "50")
+        with pytest.raises(BusinessRuleError, match="menor que o já pago"):
+            await service.cancel_item(UUID(order_id), item.id)
+
+    async def test_diminuir_quantidade_abaixo_do_pago_e_barrado(self, service, order_id):
+        _, item = self._comanda_paga(service, "50")
+        service._stock_service = AsyncMock()  # estoque não é o assunto aqui
+        with pytest.raises(BusinessRuleError, match="menor que o já pago"):
+            await service.set_item_quantity(UUID(order_id), item.id, quantity=1)
+
+    async def test_tirar_taxa_abaixo_do_pago_e_barrado(self, service, order_id):
+        item = make_item(unit_price=Decimal("50"), quantity=1, subtotal=Decimal("50"))
+        order = make_order(items=[item], subtotal=Decimal("50"), service_fee=Decimal("5"),
+                           service_fee_percent=Decimal("10"), total=Decimal("55"))
+        service._get_or_raise = AsyncMock(return_value=order)
+        service._order_repo.sum_confirmed_payments = AsyncMock(return_value=Decimal("55"))
+        with pytest.raises(BusinessRuleError, match="menor que o já pago"):
+            await service.set_service_fee(UUID(order_id), apply=False)
+
+    async def test_total_negativo_e_barrado(self, service, order_id):
+        _, item = self._comanda_paga(service, "0", discount=Decimal("40"))
+        with pytest.raises(BusinessRuleError, match="total negativo"):
+            await service.cancel_item(UUID(order_id), item.id)
+
+    async def test_cancelar_comanda_com_pagamento_e_barrado(self, service, order_id):
+        order, _ = self._comanda_paga(service, "10")
+        with pytest.raises(BusinessRuleError, match="Estorne os pagamentos"):
+            await service.cancel_order(UUID(order_id))
+        assert order.status == OrderStatus.OPEN
 
 
 # ── _recalculate_total ─────────────────────────────────────────────────────────

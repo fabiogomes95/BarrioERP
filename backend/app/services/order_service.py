@@ -217,6 +217,30 @@ class OrderService(BaseService):
         )
         order.total = order.subtotal + order.service_fee - order.discount
 
+    async def _ensure_total_covers_payments(self, order: Order) -> None:
+        """
+        Barra mudanças que deixariam o total da comanda abaixo do que já foi
+        pago (desconto, item cancelado, quantidade menor, tirar os 10%) — o
+        dinheiro a mais sumiria do controle. Também barra total negativo
+        (desconto maior que o que sobrou depois de cancelar itens).
+
+        Trava a comanda antes de somar os pagamentos: um pagamento sendo
+        registrado ao mesmo tempo termina antes e entra na conta
+        (mesma trava do PaymentService.register).
+        """
+        if order.total < 0:
+            raise BusinessRuleError(
+                f"Essa mudança deixa o total negativo (R$ {order.total:.2f}). "
+                f"Diminua o desconto antes."
+            )
+        await self._order_repo.lock(order.id, order.establishment_id)
+        pago = await self._order_repo.sum_confirmed_payments(order.id)
+        if order.total < pago:
+            raise BusinessRuleError(
+                f"Essa mudança deixa o total (R$ {order.total:.2f}) menor que o já pago "
+                f"(R$ {pago:.2f}). Estorne um pagamento antes."
+            )
+
     # ── Helper: busca comanda com itens e verifica tenant ─────────────────────
 
     async def _get_or_raise(self, order_id: UUID, establishment_id: UUID) -> Order:
@@ -782,6 +806,7 @@ class OrderService(BaseService):
         # _recalculate_total() itera sobre order.items já carregados em memória,
         # então o item recém-cancelado já reflete o novo status.
         self._recalculate_total(order)
+        await self._ensure_total_covers_payments(order)
 
         await self._log_audit(
             action="order_item.cancel",
@@ -859,6 +884,8 @@ class OrderService(BaseService):
         item.quantity = quantity
         item.subtotal = item.unit_price * quantity
         self._recalculate_total(order)
+        if quantity < old_quantity:
+            await self._ensure_total_covers_payments(order)
 
         try:
             await self.session.flush()
@@ -1020,6 +1047,7 @@ class OrderService(BaseService):
         old_discount = order.discount
         order.discount = discount
         self._recalculate_total(order)
+        await self._ensure_total_covers_payments(order)
 
         try:
             await self.session.flush()
@@ -1055,6 +1083,7 @@ class OrderService(BaseService):
             order.service_fee_percent = Decimal("0")
 
         self._recalculate_total(order)
+        await self._ensure_total_covers_payments(order)
 
         try:
             await self.session.flush()
@@ -1163,6 +1192,12 @@ class OrderService(BaseService):
 
         if order.status == OrderStatus.CANCELLED:
             raise BusinessRuleError("Comanda já está cancelada.")
+        # Comanda com dinheiro recebido não some dos relatórios: estorna antes
+        await self._order_repo.lock(order.id, establishment_id)
+        if await self._order_repo.sum_confirmed_payments(order.id) > 0:
+            raise BusinessRuleError(
+                "Essa comanda tem pagamento registrado. Estorne os pagamentos antes de cancelar."
+            )
 
         order.status = OrderStatus.CANCELLED
         order.closed_at = datetime.now(UTC)
