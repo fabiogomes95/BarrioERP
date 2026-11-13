@@ -177,6 +177,23 @@ class OrderRepository(BaseRepository[Order]):
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def lock(self, order_id: UUID, establishment_id: UUID) -> bool:
+        """
+        Trava a linha da comanda até o fim da transação (SELECT ... FOR UPDATE).
+
+        Serializa quem mexe no dinheiro da mesma comanda: dois caixas
+        registrando o último pagamento ao mesmo tempo — o segundo espera o
+        primeiro gravar e só então lê o saldo. Retorna False se a comanda
+        não existe neste estabelecimento.
+        """
+        stmt = (
+            select(Order.id)
+            .where(Order.id == order_id, Order.establishment_id == establishment_id)
+            .with_for_update()
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none() is not None
+
     async def sum_confirmed_payments(self, order_id: UUID) -> Decimal:
         """
         Soma o total de pagamentos CONFIRMADOS de uma comanda.

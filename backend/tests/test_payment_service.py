@@ -104,6 +104,40 @@ class TestRegister:
         assert result.amount == Decimal("50.00")
         assert result.method == "pix"
 
+    async def test_register_trava_comanda_antes_de_ler_saldo(self, service, mock_session):
+        """Concorrência: o saldo só pode ser lido com a comanda travada (FOR UPDATE)."""
+        order = make_order(total=Decimal("100.00"))
+        calls: list[str] = []
+        svc = service
+
+        async def lock(*_):
+            calls.append("lock")
+            return True
+
+        async def soma(*_):
+            calls.append("soma")
+            return Decimal("0")
+
+        svc._order_repo.lock = lock
+        svc._order_repo.get_with_items = AsyncMock(return_value=order)
+        svc._payment_repo.sum_confirmed_by_order = soma
+        svc._payment_repo.add = AsyncMock(return_value=make_payment())
+
+        await svc.register(PaymentCreate(order_id=order.id, method="pix", amount=Decimal("50.00")))
+        assert calls == ["lock", "soma"]
+
+    async def test_register_comanda_de_outro_tenant_nao_trava(self, service, mock_session):
+        svc = service
+        svc._order_repo.lock = AsyncMock(return_value=False)
+        svc._order_repo.get_with_items = AsyncMock()
+
+        with pytest.raises(NotFoundError):
+            await svc.register(PaymentCreate(
+                order_id=UUID("00000000-0000-0000-0000-000000000099"),
+                method="pix", amount=Decimal("10.00"),
+            ))
+        svc._order_repo.get_with_items.assert_not_called()
+
     async def test_register_order_not_found(self, service, mock_session):
         svc = service
         svc._order_repo.get_with_items = AsyncMock(return_value=None)

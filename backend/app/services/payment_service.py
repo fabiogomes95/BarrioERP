@@ -205,21 +205,11 @@ class PaymentService(BaseService):
                 Criar Payment com status=CONFIRMED diretamente.
                 Cash, débito, crédito, PIX — todos auto-confirmados.
 
-        RACE CONDITION DOCUMENTADA:
-            Dois caixas registram o último R$20 ao mesmo tempo:
-                Ambos lêem saldo_restante = R$20
-                Ambos calculam: R$20 <= R$20 → OK
-                Ambos tentam inserir
-
-            Resultado possível: dois pagamentos de R$20, total pago = R$40
-            (mas a comanda era de apenas R$20 + algo já pago).
-
-            Proteção disponível mas não implementada aqui:
-                SELECT FOR UPDATE na comanda antes de verificar saldo.
-                Isso bloquearia a 2ª requisição até a 1ª commitar.
-
-            Para aprender: essa limitação existe e é documentada.
-            Para produção: adicionar SELECT FOR UPDATE.
+        CONCORRÊNCIA — dois caixas registram o último R$20 ao mesmo tempo:
+            Sem trava, os dois liam saldo = R$20 e os dois gravavam (R$20 a
+            mais na comanda). Agora a comanda é travada (SELECT ... FOR UPDATE)
+            ANTES de ler o saldo: o segundo espera o primeiro dar commit, lê o
+            saldo já atualizado e recebe "comanda já está totalmente paga".
 
         LANÇA:
             TenantError (400)        → usuário sem estabelecimento
@@ -230,8 +220,10 @@ class PaymentService(BaseService):
         """
         establishment_id = self._require_establishment()
 
-        # 1. Busca e valida a comanda (verificação de tenant via establishment_id)
-        # Usamos get_with_items porque ele filtra por establishment_id
+        # 1. Trava a comanda ANTES de ler o saldo (ver CONCORRÊNCIA acima) e
+        # valida o tenant — lock() e get_with_items filtram por establishment_id
+        if not await self._order_repo.lock(data.order_id, establishment_id):
+            raise NotFoundError("Order", data.order_id)
         order = await self._order_repo.get_with_items(data.order_id, establishment_id)
         if order is None:
             raise NotFoundError("Order", data.order_id)
@@ -330,6 +322,13 @@ class PaymentService(BaseService):
         payment = await self._payment_repo.get(payment_id)
         if payment is None:
             raise NotFoundError("Payment", payment_id)
+
+        # Mesma trava do register(): estorno e pagamento da mesma comanda não
+        # se cruzam, e dois estornos simultâneos do mesmo pagamento também não
+        # (relê o status DEPOIS de travar — o outro pode ter acabado de estornar).
+        if not await self._order_repo.lock(payment.order_id, establishment_id):
+            raise NotFoundError("Payment", payment_id)
+        await self.session.refresh(payment)
 
         order = await self._order_repo.get_with_items(payment.order_id, establishment_id)
         if order is None:
