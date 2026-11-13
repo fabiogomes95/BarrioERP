@@ -16,8 +16,11 @@ function fmtDay(day: string) {
 
 // ── CSV ──────────────────────────────────────────────────────────────────────
 
-function csvField(v: string | number) {
-  const s = String(v)
+export function csvField(v: string | number) {
+  // Nome de cliente vem do cardápio público (internet): "=HYPERLINK(...)"
+  // viraria fórmula ativa ao abrir no Excel. Apóstrofo na frente = texto.
+  // Números (quantidades) continuam números.
+  const s = typeof v === 'number' ? String(v) : v.replace(/^([=+\-@\t\r])/, "'$1")
   return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 

@@ -1,4 +1,5 @@
 const BASE = '/api/v1'
+const REQUEST_TIMEOUT_MS = 20_000
 
 // ── Token ─────────────────────────────────────────────────────────────────────
 
@@ -69,14 +70,25 @@ export function isConflictError(err: unknown): boolean {
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken()
-  const res = await fetch(`${BASE}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(options.headers ?? {}),
-    },
-  })
+  let res: Response
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      // Wi-Fi ruim: sem limite, a chamada ficava pendurada e a tela presa em
+      // "Salvando..." pra sempre. 20s cobre até impressão/relatório lento.
+      ...options,
+      signal: options.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(options.headers ?? {}),
+      },
+    })
+  } catch (err) {
+    if (err instanceof DOMException && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
+      throw new ApiError('Sem resposta do servidor. Confira a internet e tente de novo.', 0, 'TIMEOUT')
+    }
+    throw new ApiError('Sem conexão com o servidor. Confira a internet e tente de novo.', 0, 'NETWORK')
+  }
 
   if (res.status === 401) {
     clearToken()

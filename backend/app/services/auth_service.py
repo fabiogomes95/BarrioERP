@@ -40,6 +40,11 @@ from app.schemas.auth import ForgotPasswordRequest, LoginRequest, TokenResponse
 from app.services.audit_service import AuditService
 
 
+
+# Hash de uma senha qualquer, só pra gastar o mesmo tempo de bcrypt quando o
+# e-mail não existe (ou o usuário não tem senha) — ver login().
+_DUMMY_HASH = hash_password("timing-guard-not-a-real-password")
+
 class AuthService:
     """
     Serviço de autenticação.
@@ -77,8 +82,10 @@ class AuthService:
 
         # Senha fictícia para manter o tempo de resposta constante
         # mesmo quando o usuário não existe (anti-timing-attack)
-        password_to_check = user.password_hash if user else ""
-        is_valid = verify_password(credentials.password, password_to_check) if user else False
+        # (antes o bcrypt era pulado quando o e-mail não existia — a resposta
+        # vinha ~100ms mais rápido e entregava quais e-mails estão cadastrados)
+        password_to_check = (user.password_hash if user else None) or _DUMMY_HASH
+        is_valid = verify_password(credentials.password, password_to_check) and user is not None
 
         if not user or not is_valid:
             # Mesma mensagem para "usuário não encontrado" e "senha errada"

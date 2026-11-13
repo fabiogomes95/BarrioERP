@@ -117,3 +117,18 @@ class TestLogin:
         assert captured["extra"]["role"] == "waiter"
         assert captured["extra"]["name"] == "Garçom"
         assert captured["extra"]["company_name"] == "Bar do Zé"
+
+
+async def test_login_com_email_inexistente_tambem_roda_o_bcrypt(monkeypatch):
+    """Sem isso a resposta vinha mais rápido e revelava quais e-mails existem."""
+    from unittest.mock import AsyncMock, MagicMock
+    from app.services import auth_service as mod
+
+    chamadas = []
+    monkeypatch.setattr(mod, "verify_password", lambda senha, h: chamadas.append(h) or False)
+    svc = mod.AuthService(MagicMock())
+    svc.user_repo.get_by_email = AsyncMock(return_value=None)
+
+    with pytest.raises(mod.AuthenticationError):
+        await svc.login(mod.LoginRequest(email="ninguem@teste.com", password="qualquer123"))
+    assert chamadas == [mod._DUMMY_HASH]
