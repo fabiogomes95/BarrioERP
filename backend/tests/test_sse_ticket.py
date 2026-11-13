@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
-from jose import jwt
+import jwt
 
 from app.api.deps import _load_user_from_token
 from app.core.config import settings

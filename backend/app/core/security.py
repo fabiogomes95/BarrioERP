@@ -28,15 +28,23 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from jose import JWTError, jwt  # noqa: F401 — JWTError importado para uso externo
-from passlib.context import CryptContext
+import bcrypt
+import jwt  # PyJWT (antes python-jose, pouco mantido)
+from jwt import InvalidTokenError  # noqa: F401 — usado pelos callers (deps.py)
 
 from app.core.config import settings
 
-# CryptContext configura o algoritmo de hashing
-# schemes=["bcrypt"] → usa bcrypt
-# deprecated="auto"  → se algoritmos antigos forem encontrados, trata automaticamente
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# bcrypt direto (antes via passlib, abandonado e incompatível com o bcrypt
+# atual — gerava "error reading bcrypt version" no log a cada login). Os
+# hashes são os mesmos ($2b$...): senhas já cadastradas continuam valendo.
+BCRYPT_ROUNDS = 12
+# bcrypt só usa os primeiros 72 bytes da senha; corta explícito (passlib
+# fazia isso calado, e o bcrypt 5 passou a dar erro em vez de cortar).
+_BCRYPT_MAX_BYTES = 72
+
+
+def _pw_bytes(plain: str) -> bytes:
+    return plain.encode("utf-8")[:_BCRYPT_MAX_BYTES]
 
 
 def hash_password(plain: str) -> str:
@@ -47,7 +55,7 @@ def hash_password(plain: str) -> str:
         hash = hash_password("minha_senha")
         # → "$2b$12$xKzA3...oq4p2" (diferente a cada chamada!)
     """
-    return pwd_context.hash(plain)
+    return bcrypt.hashpw(_pw_bytes(plain), bcrypt.gensalt(rounds=BCRYPT_ROUNDS)).decode("ascii")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
@@ -61,7 +69,12 @@ def verify_password(plain: str, hashed: str) -> bool:
         verify_password("minha_senha", hash_armazenado)  # True
         verify_password("senha_errada", hash_armazenado) # False
     """
-    return pwd_context.verify(plain, hashed)
+    if not hashed:
+        return False
+    try:
+        return bcrypt.checkpw(_pw_bytes(plain), hashed.encode("ascii"))
+    except ValueError:  # hash corrompido/formato desconhecido = senha errada, não erro 500
+        return False
 
 
 def create_access_token(subject: UUID, extra: dict[str, Any] | None = None) -> str:
@@ -134,8 +147,8 @@ def decode_token(token: str) -> dict[str, Any]:
     jwt.decode AUTOMATICAMENTE:
     - Verifica a assinatura (detecta adulteração)
     - Verifica a expiração (campo "exp")
-    - Lança JWTError se qualquer verificação falhar
+    - Lança InvalidTokenError se qualquer verificação falhar
 
-    O caller deve capturar JWTError para tratar tokens inválidos.
+    O caller deve capturar InvalidTokenError para tratar tokens inválidos.
     """
     return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
