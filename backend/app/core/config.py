@@ -82,6 +82,11 @@ class Settings(BaseSettings):
     # Vazios = o monitor só grava em logs/monitor.log.
     ALERT_TELEGRAM_BOT_TOKEN: str | None = None
     ALERT_TELEGRAM_CHAT_ID: str | None = None
+    # Alertas de dinheiro (app/alerts.py): cancelamento depois da cozinha, estorno,
+    # desconto grande, comanda cancelada, diferença de caixa. Dono não gera alerta.
+    ALERT_ANOMALIES: bool = True
+    ALERT_DISCOUNT_PERCENT: float = 20   # desconto a partir de X% da conta
+    ALERT_CASH_DIFF: float = 20          # diferença no fechamento a partir de R$ X
     # Endereço público do cardápio no PC (Funnel) — testado de fora do serviço
     MONITOR_PUBLIC_MENU_URL: str | None = None
     # Backup diário (fora do repositório) — avisa se ficar velho

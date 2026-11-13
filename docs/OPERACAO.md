@@ -268,6 +268,36 @@ cd backend
 .venv\Scripts\python.exe -m app.monitoring --test      # manda uma mensagem de teste
 ```
 
+### De olho no dinheiro (mesma tarefa, `app/alerts.py`)
+
+- **Alerta na hora** (lê a auditoria a cada 5 min): item cancelado ou
+  diminuído **depois de ir pra cozinha**, estorno de pagamento, desconto a
+  partir de 20% da conta, comanda cancelada — com quem fez, mesa, valor e
+  motivo. Ações do **dono** não geram alerta. Diferença de caixa no
+  fechamento a partir de R$ 20 avisa sempre. Limites no `.env`:
+  `ALERT_DISCOUNT_PERCENT`, `ALERT_CASH_DIFF`; desligar: `ALERT_ANOMALIES=false`.
+- **Resumo da noite** às 6h (até 7h, se o PC estava desligado): recebido por
+  forma de pagamento, comandas e ticket médio, pedidos do cardápio, fiado
+  novo, o que ficou aberto, caixa, e cancelamentos/estornos/descontos com
+  nome. Noite sem movimento não manda nada.
+- **Limpeza de logs** 1x por dia: apaga arquivos rotacionados com mais de 30
+  dias e deixa `monitor.log`/`publicar_cardapio.log` com as últimas 2000 linhas.
+
+### Configurar o Telegram (uma vez)
+
+1. No Telegram, fale com **@BotFather** → `/newbot` → escolha um nome. Ele
+   responde com o **token** (algo como `123456:ABC...`).
+2. Mande qualquer mensagem pro bot novo (ou adicione ele no grupo do bar).
+3. Abra no navegador `https://api.telegram.org/bot<TOKEN>/getUpdates` e
+   copie o número de `"chat":{"id": ...}` (grupo começa com `-`).
+4. No `backend\.env`:
+   ```
+   ALERT_TELEGRAM_BOT_TOKEN=<token>
+   ALERT_TELEGRAM_CHAT_ID=<id>
+   ```
+5. Teste: `.venv\Scripts\python.exe -m app.monitoring --test`. Não precisa
+   reiniciar nada — o monitor lê o `.env` a cada rodada.
+
 ---
 
 ## 12. O que é público e o que não é

@@ -278,6 +278,14 @@ def main() -> int:
 
     LOGS.mkdir(exist_ok=True)
     STATE_FILE.write_text(json.dumps(new_state), encoding="utf-8")
+
+    # Dinheiro (alertas, resumo da noite) e limpeza de logs — ver app/alerts.py.
+    # Isolado: se quebrar, o monitor de "algo caiu?" continua valendo.
+    try:
+        from app import alerts
+        alerts.run(send_telegram, _log)
+    except Exception as e:  # noqa: BLE001
+        _log(f"[erro] alerts: {type(e).__name__}: {e}")
     return 1 if problems else 0
 
 

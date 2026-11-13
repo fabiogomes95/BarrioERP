@@ -826,7 +826,11 @@ class OrderService(BaseService):
         # Regra 6: item que já foi pra cozinha só caixa/gerente/dono cancela
         self._require_can_reduce(item, actor_role)
 
-        before_item = {"item_name": item.item_name, "status": item.status.value, "quantity": item.quantity}
+        before_item = {"item_name": item.item_name, "status": item.status.value, "quantity": item.quantity,
+                       "subtotal": str(item.subtotal)}
+        # Foto da comanda ANTES de recalcular (antes era tirada depois, e o
+        # "antes" da auditoria saía igual ao "depois")
+        before_order = self._order_snapshot(order)
 
         # Devolve ao estoque os insumos deduzidos quando o item foi adicionado
         if item.menu_item_id is not None:
@@ -847,7 +851,7 @@ class OrderService(BaseService):
             action="order_item.cancel",
             resource_type="order_item",
             resource_id=str(item.id),
-            before={"item": before_item, "order": self._order_snapshot(order)},
+            before={"item": before_item, "order": before_order},
             after={
                 "item": {"item_name": item.item_name, "status": "cancelled", "reason": reason},
                 "order": self._order_snapshot(order),
@@ -907,6 +911,7 @@ class OrderService(BaseService):
             self._require_can_reduce(item, actor_role)
 
         old_quantity = item.quantity
+        before_order = self._order_snapshot(order)  # antes de recalcular (ver cancel_item)
 
         # Ajusta a diferença de estoque pela mudança de quantidade
         if item.menu_item_id is not None:
@@ -935,7 +940,8 @@ class OrderService(BaseService):
             action="order_item.quantity_change",
             resource_type="order_item",
             resource_id=str(item.id),
-            before={"item_name": item.item_name, "quantity": old_quantity, "order": self._order_snapshot(order)},
+            before={"item_name": item.item_name, "quantity": old_quantity, "status": item.status.value,
+                    "unit_price": str(item.unit_price), "order": before_order},
             after={"item_name": item.item_name, "quantity": quantity, "order": self._order_snapshot(order)},
         )
 
