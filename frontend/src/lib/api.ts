@@ -560,6 +560,11 @@ export async function requestBill(orderId: string): Promise<Order> {
  * "impressora do bar". `items` (só cozinha) = os escolhidos na tela; sem
  * lista, vão os itens da comanda que vão pra cozinha.
  */
+/** Manda agora o resumo da noite no Telegram (o automático das 6h não repete). */
+export async function sendNightSummary(): Promise<void> {
+  await request<{ sent: boolean }>('/reports/night-summary/send', { method: 'POST' })
+}
+
 /** Ticket de 60s pra abrir o stream de notificações — nunca vai o token de login na URL (fica no log). */
 export async function fetchSseTicket(): Promise<string> {
   return (await request<{ ticket: string }>('/notifications/ticket', { method: 'POST' })).ticket

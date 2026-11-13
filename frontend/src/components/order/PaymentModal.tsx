@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
-  type Order, type Payment, fetchOrderPayments, registerPayment, voidPayment, finishOrder,
+  type Order, type Payment, type PaymentMethod, fetchOrderPayments, registerPayment, voidPayment, finishOrder,
 } from '../../lib/api'
 import { brl, maskCurrency, parseCurrency, toCurrencyInput } from '../../lib/format'
 import { Field, ModalOverlay } from '../ui'

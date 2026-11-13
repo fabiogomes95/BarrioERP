@@ -37,6 +37,9 @@ from app.core.config import settings
 ROOT = Path(__file__).resolve().parents[2]
 LOGS = ROOT / "logs"
 STATE_FILE = LOGS / "alerts_state.json"
+# Noite cujo resumo já foi enviado à mão pelo botão do Barrio (processo do
+# backend) — arquivo separado pra não disputar o alerts_state.json com o monitor.
+MANUAL_SENT_FILE = LOGS / "summary_sent_manual.txt"
 
 NIGHT_CUTOFF_HOUR = 6        # mesma "noite" do app/services/insights.py
 SUMMARY_SEND_UNTIL = time(7, 0)  # se o PC estava desligado às 6h, ainda manda até as 7h
@@ -390,6 +393,37 @@ async def _night_data(night: date) -> NightData:
     )
 
 
+# ── Envio à mão (botão "Enviar resumo da noite" no Barrio) ────────────────────
+
+def current_night(now_local: datetime) -> date:
+    """Noite a resumir quando alguém aperta o botão: a que está acontecendo
+    (ou acabou de acabar). Sexta 23h ou sábado 3h → sexta; sábado 10h →
+    ainda sexta (fechou e só lembrou de manhã)."""
+    return (now_local - timedelta(hours=12)).date()
+
+
+def _manual_sent() -> str | None:
+    try:
+        return MANUAL_SENT_FILE.read_text(encoding="utf-8").strip() or None
+    except OSError:
+        return None
+
+
+async def send_summary_now(send: Callable[[str], bool], now: datetime | None = None) -> tuple[bool, str | None]:
+    """Monta e manda o resumo da noite atual. Marca a noite como enviada pra
+    o envio automático das 6h não repetir. Retorna (enviou?, texto)."""
+    tz = ZoneInfo(settings.TIMEZONE)
+    night = current_night((now or datetime.now(UTC)).astimezone(tz))
+    text = night_summary(await _night_data(night))
+    if not text:
+        return False, None
+    sent = await asyncio.to_thread(send, text)
+    if sent:
+        LOGS.mkdir(exist_ok=True)
+        MANUAL_SENT_FILE.write_text(night.isoformat(), encoding="utf-8")
+    return sent, text
+
+
 # ── Rodada (chamada pelo monitor) ─────────────────────────────────────────────
 
 def run(send: Callable[[str], bool], log: Callable[[str], None], now: datetime | None = None) -> None:
@@ -420,6 +454,9 @@ def run(send: Callable[[str], bool], log: Callable[[str], None], now: datetime |
     # 2. Resumo da noite
     try:
         night = summary_due(now.astimezone(tz), state.get("summary_sent_for"))
+        if night and _manual_sent() == night.isoformat():
+            state["summary_sent_for"] = night.isoformat()  # já foi pelo botão: não repete às 6h
+            night = None
         if night:
             text = night_summary(asyncio.run(_night_data(night)))
             if text:

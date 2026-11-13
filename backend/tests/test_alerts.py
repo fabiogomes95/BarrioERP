@@ -161,3 +161,28 @@ def test_limpeza_apaga_so_rotacionados_velhos_e_encurta_os_que_crescem(tmp_path)
     assert not velho.exists() and novo.exists() and em_uso.exists()
     linhas = (tmp_path / "monitor.log").read_text().splitlines()
     assert len(linhas) == 2000 and linhas[-1] == "linha 2499"
+
+
+# ── botão "Enviar resumo da noite" ──
+
+def test_noite_do_botao():
+    from app.alerts import current_night
+    assert current_night(datetime(2026, 11, 13, 23, 0, tzinfo=TZ)) == date(2026, 11, 13)   # sexta à noite
+    assert current_night(datetime(2026, 11, 14, 3, 30, tzinfo=TZ)) == date(2026, 11, 13)   # madrugada de sábado
+    assert current_night(datetime(2026, 11, 14, 10, 0, tzinfo=TZ)) == date(2026, 11, 13)   # lembrou de manhã
+
+
+def test_enviado_a_mao_nao_repete_as_6h(tmp_path, monkeypatch):
+    from app import alerts
+    monkeypatch.setattr(alerts, "STATE_FILE", tmp_path / "s.json")
+    monkeypatch.setattr(alerts, "LOGS", tmp_path)
+    monkeypatch.setattr(alerts, "MANUAL_SENT_FILE", tmp_path / "manual.txt")
+    monkeypatch.setattr(alerts.settings, "ALERT_ANOMALIES", False)
+    monkeypatch.setattr(alerts, "prune_logs", lambda *a, **k: (0, 0))
+    (tmp_path / "manual.txt").write_text("2026-11-13")
+    chamou = []
+    async def fake(night):
+        chamou.append(night)
+    monkeypatch.setattr(alerts, "_night_data", fake)
+    alerts.run(lambda t: True, lambda m: None, now=datetime(2026, 11, 14, 6, 5, tzinfo=TZ))
+    assert chamou == []   # não montou nem mandou de novo

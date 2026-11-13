@@ -10,6 +10,7 @@ import { maskCurrency, parseCurrency } from '../lib/format'
 import { inputCls } from '../lib/styles'
 import { exportDailyReportCSV, printDailyReport } from '../lib/reportExport'
 import OnlineOrdersReport from '../components/OnlineOrdersReport'
+import NightSummaryButton from '../components/NightSummaryButton'
 import MovementReport from '../components/MovementReport'
 import CustomersReport from '../components/CustomersReport'
 
@@ -615,6 +616,8 @@ export default function CaixaPage() {
   return (
     <div className="h-full overflow-y-auto">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
+
+        <NightSummaryButton />
 
         {/* Cabeçalho */}
         <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">

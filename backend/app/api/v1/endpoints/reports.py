@@ -20,6 +20,25 @@ from app.services.order_service import OrderService
 router = APIRouter()
 
 
+@router.post("/night-summary/send", summary="Mandar agora o resumo da noite no Telegram")
+async def send_night_summary(current_user: CurrentUser) -> dict:
+    """Botão "Enviar resumo da noite": manda o resumo da noite atual (das 6h
+    até agora) e o envio automático das 6h não repete. Dono/gerente."""
+    from app import alerts, monitoring
+    from app.core.config import settings
+    from app.core.exceptions import BusinessRuleError
+
+    require_roles(current_user, UserRole.OWNER, UserRole.MANAGER)
+    if not (settings.ALERT_TELEGRAM_BOT_TOKEN and settings.ALERT_TELEGRAM_CHAT_ID):
+        raise BusinessRuleError("Telegram não configurado (deploy/windows/configurar_telegram.ps1).")
+    sent, text = await alerts.send_summary_now(monitoring.send_telegram)
+    if text is None:
+        raise BusinessRuleError("Nenhum movimento nesta noite ainda — nada pra resumir.")
+    if not sent:
+        raise BusinessRuleError("O Telegram não respondeu. Confira a internet e tente de novo.")
+    return {"sent": True, "text": text}
+
+
 def _service(session: DBSession, user: CurrentUser) -> OrderService:
     return OrderService(
         session=session,
