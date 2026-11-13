@@ -1,0 +1,75 @@
+# Roda a cada push/PR: testes do backend, migrações num Postgres limpo e
+# checagens do frontend. Não faz deploy — produção continua sendo este PC
+# (build local + reinício do serviço). Serve pra saber ANTES de colocar no ar
+# se algo quebrou.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: barrio
+          POSTGRES_PASSWORD: barrio
+          POSTGRES_DB: barrio_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U barrio"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      # Valores fictícios — só pra Settings carregar. Nada de segredo real aqui.
+      SECRET_KEY: ci-secret-key-not-real-0123456789abcdef0123456789abcdef
+      POSTGRES_HOST: localhost
+      POSTGRES_USER: barrio
+      POSTGRES_PASSWORD: barrio
+      POSTGRES_DB: barrio_ci
+      ONBOARDING_SECRET: ci-onboarding
+      PASSWORD_RECOVERY_CODE: ci-recovery
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: pip install -r requirements.txt
+      - name: Testes
+        run: python -m pytest -q
+      - name: Migrações sobem do zero
+        run: python -m alembic upgrade head
+      - name: Modelos batem com as migrações
+        run: python -m alembic check
+      - name: Migrações descem e sobem de novo
+        run: python -m alembic downgrade base && python -m alembic upgrade head
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - name: Typecheck + build
+        run: npm run build

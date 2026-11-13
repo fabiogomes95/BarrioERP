@@ -341,3 +341,13 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_companies_deleted_at'), table_name='companies')
     op.drop_table('companies')
     # ### end Alembic commands ###
+    # Tipos enum não somem com o drop_table — sem isso, subir de novo depois de
+    # um downgrade falhava com 'type ... already exists'.
+    sa.Enum(name="table_status_enum").drop(op.get_bind(), checkfirst=True)
+    sa.Enum(name="user_role_enum").drop(op.get_bind(), checkfirst=True)
+    sa.Enum(name="order_status_enum").drop(op.get_bind(), checkfirst=True)
+    sa.Enum(name="order_item_status_enum").drop(op.get_bind(), checkfirst=True)
+    sa.Enum(name="payment_method_enum").drop(op.get_bind(), checkfirst=True)
+    sa.Enum(name="payment_status_enum").drop(op.get_bind(), checkfirst=True)
+    sa.Enum(name="print_job_type_enum").drop(op.get_bind(), checkfirst=True)
+    sa.Enum(name="print_job_status_enum").drop(op.get_bind(), checkfirst=True)

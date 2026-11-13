@@ -56,3 +56,6 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_reservations_establishment_id'), table_name='reservations')
     op.drop_table('reservations')
     # ### end Alembic commands ###
+    # Tipo enum não some com o drop_table — sem isso, subir de novo depois de
+    # um downgrade falhava com 'type ... already exists'.
+    sa.Enum(name="reservation_status_enum").drop(op.get_bind(), checkfirst=True)

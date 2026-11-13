@@ -90,3 +90,7 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_stock_items_deleted_at'), table_name='stock_items')
     op.drop_table('stock_items')
     # ### end Alembic commands ###
+    # Tipos enum não somem com o drop_table — sem isso, subir de novo depois de
+    # um downgrade falhava com 'type ... already exists'.
+    sa.Enum(name="stock_unit_enum").drop(op.get_bind(), checkfirst=True)
+    sa.Enum(name="stock_movement_kind_enum").drop(op.get_bind(), checkfirst=True)
