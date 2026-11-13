@@ -140,7 +140,7 @@ const NAV = [
   { to: '/reservas',   label: 'Reservas',      Icon: IconCalendar },
   { to: '/cozinha',    label: 'Cozinha',       Icon: IconKitchen },
   { to: '/caixa',      label: 'Caixa',         Icon: IconCash,    roles: ['owner', 'manager', 'cashier'] },
-  { to: '/fiado',      label: 'Fiado',         Icon: IconFiado },
+  { to: '/fiado',      label: 'Fiado',         Icon: IconFiado,   roles: ['owner', 'manager', 'cashier'] },
   { to: '/cardapio',   label: 'Cardápio',      Icon: IconBook },
   { to: '/estoque',    label: 'Estoque',       Icon: IconBox,     roles: ['owner', 'manager'] },
   { to: '/auditoria',  label: 'Auditoria',     Icon: IconHistory, roles: ['owner', 'manager'] },

@@ -269,7 +269,7 @@ async def update_item_quantity(
 ) -> OrderResponse:
     """Atualiza a quantidade de um item da comanda."""
     return await _service(session, current_user).set_item_quantity(
-        order_id, item_id, quantity=data.quantity
+        order_id, item_id, quantity=data.quantity, actor_role=current_user.role,
     )
 
 
@@ -414,7 +414,7 @@ async def cancel_item(
     e os totais recalculados.
     """
     return await _service(session, current_user).cancel_item(
-        order_id, item_id, reason=reason
+        order_id, item_id, reason=reason, actor_role=current_user.role,
     )
 
 
@@ -454,6 +454,7 @@ async def reopen_order(
     session: DBSession,
     current_user: CurrentUser,
 ) -> OrderResponse:
+    require_roles(current_user, UserRole.OWNER, UserRole.MANAGER, UserRole.CASHIER)
     return await _service(session, current_user).reopen_order(order_id)
 
 

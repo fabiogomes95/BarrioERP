@@ -87,13 +87,18 @@ from uuid import UUID
 
 from fastapi import APIRouter, Query
 
-from app.api.deps import CurrentUser, DBSession
+from app.api.deps import CurrentUser, DBSession, require_roles
+from app.core.exceptions import ForbiddenError
+from app.models.user import UserRole
 from app.models.table import TableStatus
 from app.schemas.common import PaginatedResponse
 from app.schemas.table import TableCreate, TableResponse, TableUpdate
 from app.services.table_service import TableService
 
 router = APIRouter()
+
+# Cadastro de mesas (criar, renomear, desativar) é configuração do bar
+_CONFIG_ROLES = (UserRole.OWNER, UserRole.MANAGER)
 
 
 # ── Helper ────────────────────────────────────────────────────────────────────
@@ -143,6 +148,7 @@ async def create_table(
     O establishment_id NÃO é passado no body — vem do JWT do usuário logado.
     Isso é segurança: o cliente não pode criar mesas em outro estabelecimento.
     """
+    require_roles(current_user, *_CONFIG_ROLES)
     return await _service(session, current_user).create(data)
 
 
@@ -244,6 +250,10 @@ async def update_table(
         A resposta inclui a nova versão (ex: version: 4).
         Use esta versão no próximo PATCH.
     """
+    # Status (liberar/reservar) qualquer um da equipe muda; o cadastro da
+    # mesa (nome, lugares, setor) é configuração do bar.
+    if data.model_fields_set - {"status", "version"} and current_user.role not in _CONFIG_ROLES:
+        raise ForbiddenError("Só o gerente ou o dono pode alterar o cadastro da mesa.")
     return await _service(session, current_user).update(table_id, data)
 
 
@@ -276,4 +286,5 @@ async def deactivate_table(
         Mesas com status OCCUPIED (comanda aberta) não podem ser desativadas.
         → HTTP 422 Business Rule Violation.
     """
+    require_roles(current_user, *_CONFIG_ROLES)
     await _service(session, current_user).deactivate(table_id)

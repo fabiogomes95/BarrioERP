@@ -64,9 +64,14 @@ function OrderItemRow({
   const [loading, setLoading] = useState(false)
   const [qtyLoading, setQtyLoading] = useState(false)
   const [serving, setServing] = useState(false)
+  const [cancelError, setCancelError] = useState<string | null>(null)
 
   const isCancelled = item.status === 'cancelled'
   const editable = canCancel && !isCancelled && item.status !== 'served'
+  // Garçom/cozinha só cancelam (ou diminuem) item ainda pendente; depois que
+  // foi pra cozinha, só caixa/gerente/dono — mesma regra do servidor.
+  const role = getUser()?.role
+  const canReduce = editable && (item.status === 'pending' || role === 'owner' || role === 'manager' || role === 'cashier')
   const canServe = canCancel && (item.status === 'ready' || item.status === 'pending')
 
   async function handleServe() {
@@ -93,14 +98,18 @@ function OrderItemRow({
   }
 
   async function confirmCancel() {
+    if (reason.trim().length < 3 || loading) return
     setLoading(true)
+    setCancelError(null)
     try {
-      const updated = await cancelOrderItem(item.order_id, item.id, reason.trim() || undefined)
+      const updated = await cancelOrderItem(item.order_id, item.id, reason.trim())
       onCancelled(updated)
-    } finally {
-      setLoading(false)
       setCancelling(false)
       setReason('')
+    } catch (err) {
+      setCancelError(err instanceof Error ? err.message : 'Não deu pra cancelar o item.')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -111,7 +120,7 @@ function OrderItemRow({
           <div className="flex items-center gap-2">
             {editable ? (
               <div className="flex items-center rounded-lg border border-stone-700/60 shrink-0 overflow-hidden">
-                <button onClick={() => changeQty(-1)} disabled={qtyLoading || item.quantity <= 1}
+                <button onClick={() => changeQty(-1)} disabled={qtyLoading || item.quantity <= 1 || !canReduce}
                   className="w-6 h-6 flex items-center justify-center
                              text-stone-300 hover:bg-stone-800/60 disabled:opacity-30 transition-colors">
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
@@ -187,8 +196,8 @@ function OrderItemRow({
                   )}
                 </button>
               )}
-              {canCancel && !isCancelled && item.status !== 'served' && (
-                <button onClick={() => setCancelling(v => !v)}
+              {canReduce && (
+                <button onClick={() => { setCancelling(v => !v); setCancelError(null) }}
                   className="w-6 h-6 flex items-center justify-center rounded-lg
                              text-stone-700 hover:text-red-400 hover:bg-red-500/10 transition-all">
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -206,18 +215,19 @@ function OrderItemRow({
         <div className="mt-2.5 pl-5 space-y-2">
           <input
             type="text" value={reason} onChange={e => setReason(e.target.value)}
-            placeholder="Motivo (opcional)"
+            placeholder="Motivo (obrigatório)" maxLength={300} autoFocus
             className="w-full rounded-lg px-3 py-1.5 text-xs border border-stone-700/60
                        text-stone-300 placeholder-stone-700 bg-stone-900/60
                        focus:outline-none focus:border-red-500/40"
           />
           <div className="flex gap-2">
-            <button onClick={() => { setCancelling(false); setReason('') }}
+            {cancelError && <p className="text-red-400 text-xs">{cancelError}</p>}
+            <button onClick={() => { setCancelling(false); setReason(''); setCancelError(null) }}
               className="flex-1 py-1.5 rounded-lg text-xs text-stone-500 border border-stone-700/50
                          hover:bg-stone-800/50 transition-colors">
               Voltar
             </button>
-            <button onClick={confirmCancel} disabled={loading}
+            <button onClick={confirmCancel} disabled={loading || reason.trim().length < 3}
               className="flex-1 py-1.5 rounded-lg text-xs font-semibold
                          bg-red-500/15 text-red-400 border border-red-500/20
                          hover:bg-red-500/25 disabled:opacity-40 transition-colors">

@@ -12,7 +12,8 @@ from app.models.establishment import Establishment
 from app.models.menu import MenuItem
 from app.schemas.order import OrderCreate, OrderItemAdd, OrderClose
 from app.services.order_service import OrderService
-from app.core.exceptions import BusinessRuleError, NotFoundError, OptimisticLockError
+from app.core.exceptions import BusinessRuleError, ForbiddenError, NotFoundError, OptimisticLockError
+from app.models.user import UserRole
 
 
 @pytest.fixture
@@ -292,7 +293,7 @@ class TestTotalNaoFicaAbaixoDoPago:
     async def test_cancelar_item_abaixo_do_pago_e_barrado(self, service, order_id):
         _, item = self._comanda_paga(service, "50")
         with pytest.raises(BusinessRuleError, match="menor que o já pago"):
-            await service.cancel_item(UUID(order_id), item.id)
+            await service.cancel_item(UUID(order_id), item.id, reason="Lançado errado")
 
     async def test_diminuir_quantidade_abaixo_do_pago_e_barrado(self, service, order_id):
         _, item = self._comanda_paga(service, "50")
@@ -312,13 +313,59 @@ class TestTotalNaoFicaAbaixoDoPago:
     async def test_total_negativo_e_barrado(self, service, order_id):
         _, item = self._comanda_paga(service, "0", discount=Decimal("40"))
         with pytest.raises(BusinessRuleError, match="total negativo"):
-            await service.cancel_item(UUID(order_id), item.id)
+            await service.cancel_item(UUID(order_id), item.id, reason="Lançado errado")
 
     async def test_cancelar_comanda_com_pagamento_e_barrado(self, service, order_id):
         order, _ = self._comanda_paga(service, "10")
         with pytest.raises(BusinessRuleError, match="Estorne os pagamentos"):
             await service.cancel_order(UUID(order_id))
         assert order.status == OrderStatus.OPEN
+
+
+# ── quem pode cancelar/diminuir item ───────────────────────────────────────────
+
+
+class TestPermissaoCancelarItem:
+    def _setup(self, service, status):
+        item = make_item(status=status)
+        order = make_order(items=[item], subtotal=Decimal("20"), total=Decimal("20"))
+        service._get_or_raise = AsyncMock(return_value=order)
+        service._order_repo.get_item = AsyncMock(return_value=item)
+        service._stock_service = AsyncMock()
+        return item
+
+    async def test_motivo_e_obrigatorio(self, service, order_id):
+        item = self._setup(service, OrderItemStatus.PENDING)
+        for vazio in (None, "", "  ", "ab"):
+            with pytest.raises(BusinessRuleError, match="motivo"):
+                await service.cancel_item(UUID(order_id), item.id, reason=vazio, actor_role=UserRole.OWNER)
+
+    async def test_garcom_cancela_item_pendente(self, service, order_id):
+        item = self._setup(service, OrderItemStatus.PENDING)
+        await service.cancel_item(UUID(order_id), item.id, reason="Lançou errado", actor_role=UserRole.WAITER)
+        assert item.status == OrderItemStatus.CANCELLED
+
+    @pytest.mark.parametrize("status", [OrderItemStatus.SENT, OrderItemStatus.PREPARING, OrderItemStatus.READY])
+    async def test_garcom_nao_cancela_item_que_foi_pra_cozinha(self, service, order_id, status):
+        item = self._setup(service, status)
+        with pytest.raises(ForbiddenError, match="só o caixa ou o gerente"):
+            await service.cancel_item(UUID(order_id), item.id, reason="Cliente desistiu", actor_role=UserRole.WAITER)
+        assert item.status == status
+
+    async def test_caixa_cancela_item_que_foi_pra_cozinha(self, service, order_id):
+        item = self._setup(service, OrderItemStatus.PREPARING)
+        await service.cancel_item(UUID(order_id), item.id, reason="Cliente desistiu", actor_role=UserRole.CASHIER)
+        assert item.status == OrderItemStatus.CANCELLED
+
+    async def test_garcom_nao_diminui_quantidade_de_item_na_cozinha(self, service, order_id):
+        item = self._setup(service, OrderItemStatus.PREPARING)
+        with pytest.raises(ForbiddenError):
+            await service.set_item_quantity(UUID(order_id), item.id, quantity=1, actor_role=UserRole.WAITER)
+
+    async def test_garcom_pode_aumentar_quantidade_de_item_na_cozinha(self, service, order_id):
+        item = self._setup(service, OrderItemStatus.PREPARING)
+        await service.set_item_quantity(UUID(order_id), item.id, quantity=3, actor_role=UserRole.WAITER)
+        assert item.quantity == 3
 
 
 # ── _recalculate_total ─────────────────────────────────────────────────────────

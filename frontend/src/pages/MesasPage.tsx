@@ -8,6 +8,7 @@ import {
   createOrder,
   fetchOpenOrders,
   createReservation,
+  getUser,
 } from '../lib/api'
 import { Field, ModalOverlay } from '../components/ui'
 import { inputCls } from '../lib/styles'
@@ -381,6 +382,8 @@ type Modal =
 
 export default function MesasPage() {
   const navigate = useNavigate()
+  const role = getUser()?.role
+  const canConfigTables = role === 'owner' || role === 'manager'
   const [tables, setTables] = useState<Table[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -485,15 +488,17 @@ export default function MesasPage() {
                          0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
             </button>
-            {/* Nova mesa */}
-            <button
-              onClick={() => setModal({ type: 'new-table' })}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold
-                         bg-amber-500 hover:bg-amber-400 text-stone-900 transition-colors"
-            >
-              <span className="text-base leading-none">+</span>
-              Nova mesa
-            </button>
+            {/* Nova mesa — cadastro de mesa é configuração: só gerente/dono */}
+            {canConfigTables && (
+              <button
+                onClick={() => setModal({ type: 'new-table' })}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold
+                           bg-amber-500 hover:bg-amber-400 text-stone-900 transition-colors"
+              >
+                <span className="text-base leading-none">+</span>
+                Nova mesa
+              </button>
+            )}
           </div>
         </div>
 
@@ -578,7 +583,7 @@ export default function MesasPage() {
             <p className="text-stone-600 text-xs mt-1">
               {search || filter !== 'all'
                 ? 'Tente outro filtro ou busca'
-                : 'Clique em "Nova mesa" para começar'}
+                : canConfigTables ? 'Clique em "Nova mesa" para começar' : 'Peça ao gerente para cadastrar as mesas'}
             </p>
           </div>
         ) : (

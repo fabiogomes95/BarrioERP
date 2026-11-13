@@ -99,10 +99,12 @@ from app.core import events
 from app.core.config import settings
 from app.core.exceptions import (
     BusinessRuleError,
+    ForbiddenError,
     NotFoundError,
     OptimisticLockError,
     TenantError,
 )
+from app.models.user import UserRole
 from app.models.establishment import Establishment
 from app.models.order import Order, OrderItem, OrderItemStatus, OrderStatus, OrderType
 from app.models.payment import Payment, PaymentStatus
@@ -133,6 +135,10 @@ from app.services.base import BaseService
 from app.services.online_order_pricing import half_pizza_name, is_pizza_category
 from app.services.stock_service import StockService
 from sqlalchemy.ext.asyncio import AsyncSession
+
+
+# Quem cancela/diminui item que já saiu de PENDENTE (foi pra cozinha)
+_CAN_CANCEL_SENT_ITEMS = (UserRole.OWNER, UserRole.MANAGER, UserRole.CASHIER)
 
 
 class OrderService(BaseService):
@@ -216,6 +222,21 @@ class OrderService(BaseService):
             order.subtotal * order.service_fee_percent / Decimal("100"), 2
         )
         order.total = order.subtotal + order.service_fee - order.discount
+
+    @staticmethod
+    def _require_can_reduce(item: OrderItem, actor_role: UserRole | None) -> None:
+        """
+        Garçom/cozinha só cancelam (ou diminuem) item ainda PENDENTE — lançado
+        errado, não foi pra cozinha. Depois disso, só caixa/gerente/dono:
+        evita "lança, cobra, cancela" sem ninguém do caixa ver.
+        actor_role=None = chamada interna (sem usuário), não restringe.
+        """
+        if actor_role is None or actor_role in _CAN_CANCEL_SENT_ITEMS:
+            return
+        if item.status != OrderItemStatus.PENDING:
+            raise ForbiddenError(
+                f"'{item.item_name}' já foi pra cozinha — só o caixa ou o gerente pode cancelar."
+            )
 
     async def _ensure_total_covers_payments(self, order: Order) -> None:
         """
@@ -723,6 +744,7 @@ class OrderService(BaseService):
         item_id: UUID,
         *,
         reason: str | None = None,
+        actor_role: UserRole | None = None,
     ) -> OrderResponse:
         """
         Cancela um item de uma comanda aberta.
@@ -791,6 +813,14 @@ class OrderService(BaseService):
                 "Para ajustes pós-serviço, utilize o processo de estorno manual."
             )
 
+        # Regra 5: motivo obrigatório (fica na auditoria e no item)
+        reason = (reason or "").strip()
+        if len(reason) < 3:
+            raise BusinessRuleError("Informe o motivo do cancelamento.")
+
+        # Regra 6: item que já foi pra cozinha só caixa/gerente/dono cancela
+        self._require_can_reduce(item, actor_role)
+
         before_item = {"item_name": item.item_name, "status": item.status.value, "quantity": item.quantity}
 
         # Devolve ao estoque os insumos deduzidos quando o item foi adicionado
@@ -834,6 +864,7 @@ class OrderService(BaseService):
         item_id: UUID,
         *,
         quantity: int,
+        actor_role: UserRole | None = None,
     ) -> OrderResponse:
         """
         Altera a quantidade de um item da comanda e recalcula o total.
@@ -866,6 +897,9 @@ class OrderService(BaseService):
             raise BusinessRuleError(
                 f"O item '{item.item_name}' já foi servido e não pode ser alterado."
             )
+        # Diminuir quantidade é cancelar uma parte: mesma regra do cancel_item
+        if quantity < item.quantity:
+            self._require_can_reduce(item, actor_role)
 
         old_quantity = item.quantity
 

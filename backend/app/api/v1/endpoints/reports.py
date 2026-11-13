@@ -39,6 +39,7 @@ async def fiado_list(
     session: DBSession,
     current_user: CurrentUser,
 ) -> list[FiadoEntry]:
+    require_roles(current_user, UserRole.OWNER, UserRole.MANAGER, UserRole.CASHIER)
     return await _service(session, current_user).list_fiado()
 
 
@@ -52,6 +53,7 @@ async def fiado_grouped(
     session: DBSession,
     current_user: CurrentUser,
 ) -> list[FiadoCustomerGroup]:
+    require_roles(current_user, UserRole.OWNER, UserRole.MANAGER, UserRole.CASHIER)
     return await _service(session, current_user).list_fiado_grouped()
 
 

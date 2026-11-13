@@ -82,7 +82,7 @@ export default function App() {
           <Route path="admin"    element={<RequireRole roles={['owner', 'manager']}><AdminPage /></RequireRole>} />
           <Route path="cardapio" element={<CardapioPage />} />
           <Route path="equipe"   element={<RequireRole roles={['owner', 'manager']}><EquipePage /></RequireRole>} />
-          <Route path="fiado"    element={<FiadoPage />} />
+          <Route path="fiado"    element={<RequireRole roles={['owner', 'manager', 'cashier']}><FiadoPage /></RequireRole>} />
           <Route path="auditoria" element={<RequireRole roles={['owner', 'manager']}><AuditoriaPage /></RequireRole>} />
           <Route path="estoque"  element={<RequireRole roles={['owner', 'manager']}><EstoquePage /></RequireRole>} />
         </Route>
