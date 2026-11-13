@@ -86,8 +86,12 @@ class Order(Base, UUIDMixin, TimestampMixin, VersionMixin):
     establishment: Mapped["Establishment"] = relationship(back_populates="orders")  # noqa: F821
     table: Mapped["Table | None"] = relationship(back_populates="orders")  # noqa: F821
     waiter: Mapped["User | None"] = relationship(back_populates="orders", foreign_keys=[waiter_id])  # noqa: F821
+    # Ordem fixa: hora do lançamento (id desempata). Sem order_by o Postgres
+    # devolve na ordem física — e um UPDATE (ex: mudar a quantidade) grava a
+    # linha em outro lugar, então o item "pulava" de posição na comanda.
     items: Mapped[list["OrderItem"]] = relationship(
-        back_populates="order", cascade="all, delete-orphan"
+        back_populates="order", cascade="all, delete-orphan",
+        order_by=lambda: (OrderItem.created_at, OrderItem.id),
     )
     payments: Mapped[list["Payment"]] = relationship(  # noqa: F821
         back_populates="order", cascade="all, delete-orphan"

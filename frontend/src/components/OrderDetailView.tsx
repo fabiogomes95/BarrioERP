@@ -1476,8 +1476,13 @@ export function OrderDetail({
   const role = getUser()?.role
   const canSeeMoney = role !== 'waiter' && role !== 'kitchen'
 
-  const activeItems = order.items.filter(i => i.status !== 'cancelled')
-  const cancelledItems = order.items.filter(i => i.status === 'cancelled')
+  // Ordem do lançamento, sempre — mexer na quantidade não pode mudar a posição
+  // (o servidor já manda assim; aqui é só garantia).
+  const sortedItems = [...order.items].sort(
+    (a, b) => Date.parse(a.created_at) - Date.parse(b.created_at) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+  )
+  const activeItems = sortedItems.filter(i => i.status !== 'cancelled')
+  const cancelledItems = sortedItems.filter(i => i.status === 'cancelled')
   const hasUnservedItems = activeItems.some(i => i.status !== 'served')
 
   async function handleRequestBill() {
