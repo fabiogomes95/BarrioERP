@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   type Order, type Table, type OrderType, type OnlineOrder,
   fetchOpenOrders, fetchTables, createOrder, getUser, cancelOrder, mergeOrders,
-  fetchOnlineOrders, acceptOnlineOrder, rejectOnlineOrder, fetchOnlineOrdersPause, setOnlineOrdersPause,
-  fetchDayNotice, setDayNotice, type DayNotice,
+  fetchOnlineOrders, acceptOnlineOrder, rejectOnlineOrder,
 } from '../lib/api'
 import { ONLINE_ORDER_EVENT } from '../lib/notifications'
 import { brl, timeAgo } from '../lib/format'
@@ -386,160 +385,6 @@ function acceptedMessage(oo: OnlineOrder) {
     ? 'Já estamos preparando e logo sai pra entrega.'
     : 'Já estamos preparando, te avisamos quando estiver pronto pra retirar.'
   return `Oi ${first}! Seu pedido #${oo.number} foi aceito. ${next}`
-}
-
-/**
- * Pausar/retomar os pedidos pelo cardápio. Pausado, o cardápio continua no ar
- * com o aviso e o pedido segue pelo WhatsApp. Faixa chamativa enquanto
- * pausado — pra ninguém esquecer de religar no fim da correria.
- */
-function OnlinePauseBar() {
-  const [paused, setPaused] = useState<boolean | null>(null)
-  const [busy, setBusy] = useState(false)
-
-  useEffect(() => {
-    const load = () => { fetchOnlineOrdersPause().then(setPaused).catch(() => {}) }
-    load()
-    const id = setInterval(load, 60_000)  // outro aparelho pode ter mudado
-    return () => clearInterval(id)
-  }, [])
-
-  async function toggle() {
-    if (paused === null || busy) return
-    setBusy(true)
-    try { setPaused(await setOnlineOrdersPause(!paused)) } catch { /* mantém o estado atual */ }
-    finally { setBusy(false) }
-  }
-
-  if (paused === null) return null
-  if (paused) {
-    return (
-      <div className="flex items-center gap-3 rounded-xl border border-amber-500/40 bg-amber-500/15 px-3.5 py-2.5 mb-3">
-        <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shrink-0" />
-        <p className="flex-1 min-w-0 text-sm text-stone-200">
-          <span className="text-amber-400 font-bold">Pedidos pelo site pausados.</span>
-          <span className="text-stone-400"> O cardápio avisa o cliente e o pedido vem pelo WhatsApp.</span>
-        </p>
-        <button onClick={toggle} disabled={busy}
-          className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-400 text-stone-900 disabled:opacity-50">
-          {busy ? '...' : 'Retomar'}
-        </button>
-      </div>
-    )
-  }
-  return (
-    <div className="flex justify-end mb-2">
-      <button onClick={toggle} disabled={busy}
-        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-stone-500 hover:text-amber-400 hover:bg-stone-800/60 disabled:opacity-50">
-        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-        Pedidos pelo site: recebendo · {busy ? '...' : 'Pausar'}
-      </button>
-    </div>
-  )
-}
-
-const LAST_NOTICE_KEY = 'barrio:last-day-notice'
-
-/**
- * Aviso do dia no cardápio — ex: "Hoje sem delivery: só bebidas (cerveja e
- * destilados) e churrasco na brasa". Opcionalmente desliga a entrega (o
- * cardápio só oferece retirada). Vale até as 5h: não precisa lembrar de tirar.
- */
-function DayNoticeBar() {
-  const [notice, setNotice] = useState<DayNotice | null>(null)
-  const [editing, setEditing] = useState(false)
-  const [text, setText] = useState('')
-  const [noDelivery, setNoDelivery] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    const load = () => { fetchDayNotice().then(setNotice).catch(() => {}) }
-    load()
-    const id = setInterval(load, 60_000)  // outro aparelho pode ter mudado / venceu às 5h
-    return () => clearInterval(id)
-  }, [])
-
-  function openEditor() {
-    let last = ''
-    try { last = localStorage.getItem(LAST_NOTICE_KEY) ?? '' } catch { /* sem storage */ }
-    setText(notice?.active ? notice.text : last)
-    setNoDelivery(notice?.active ? notice.no_delivery : false)
-    setError(null)
-    setEditing(true)
-  }
-
-  async function save(t: string, nd: boolean) {
-    setBusy(true); setError(null)
-    try {
-      const saved = await setDayNotice(t.trim(), nd)
-      setNotice(saved)
-      if (t.trim()) { try { localStorage.setItem(LAST_NOTICE_KEY, t.trim()) } catch { /* ok */ } }
-      setEditing(false)
-    } catch {
-      setError('Não deu pra salvar. Tente de novo.')
-    } finally { setBusy(false) }
-  }
-
-  if (notice === null) return null
-  return (
-    <>
-      {notice.active ? (
-        <div className="flex items-start gap-3 rounded-xl border border-orange-500/40 bg-orange-500/10 px-3.5 py-2.5 mb-3">
-          <span className="text-base leading-5 shrink-0" aria-hidden>📢</span>
-          <div className="flex-1 min-w-0 text-sm text-stone-200">
-            <p className="text-orange-400 font-bold text-xs uppercase tracking-wider mb-0.5">Aviso do dia no cardápio</p>
-            {notice.text && <p className="break-words">{notice.text}</p>}
-            {notice.no_delivery && <p className="text-stone-400 text-xs mt-0.5">Sem entrega hoje — o cardápio só oferece retirada.</p>}
-            <p className="text-stone-500 text-[11px] mt-1">Sai sozinho às 5h.</p>
-          </div>
-          <div className="flex flex-col sm:flex-row gap-1.5 shrink-0">
-            <button onClick={openEditor} disabled={busy}
-              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-stone-800 hover:bg-stone-700 text-stone-200 disabled:opacity-50">
-              Editar
-            </button>
-            <button onClick={() => save('', false)} disabled={busy}
-              className="px-3 py-1.5 rounded-lg text-xs font-bold text-stone-400 hover:text-red-400 hover:bg-stone-800/60 disabled:opacity-50">
-              {busy ? '...' : 'Tirar'}
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="flex justify-end -mt-1 mb-2">
-          <button onClick={openEditor}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-stone-500 hover:text-orange-400 hover:bg-stone-800/60">
-            📢 Aviso do dia no cardápio
-          </button>
-        </div>
-      )}
-
-      {editing && (
-        <ModalOverlay title="Aviso do dia no cardápio" onClose={() => setEditing(false)}>
-          <div className="space-y-4">
-            <Field label="Mensagem" hint={`Aparece em destaque no topo do cardápio. ${text.length}/280`}>
-              <textarea value={text} onChange={e => setText(e.target.value.slice(0, 280))} rows={3} autoFocus
-                placeholder="Ex.: Hoje sem delivery: só bebidas (cerveja e destilados) e churrasco na brasa."
-                className={inputCls + ' resize-none'} />
-            </Field>
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input type="checkbox" checked={noDelivery} onChange={e => setNoDelivery(e.target.checked)}
-                className="mt-0.5 w-4 h-4 accent-orange-500" />
-              <span className="text-sm text-stone-200">
-                Sem entrega hoje
-                <span className="block text-xs text-stone-500">O cardápio tira a opção "Entrega" e deixa só retirada.</span>
-              </span>
-            </label>
-            <p className="text-xs text-stone-500">Vale até as 5h da manhã e some sozinho.</p>
-            {error && <p className="text-sm text-red-400">{error}</p>}
-            <button onClick={() => save(text, noDelivery)} disabled={busy || (!text.trim() && !noDelivery)}
-              className="w-full py-3 rounded-xl text-sm font-bold bg-orange-500 hover:bg-orange-400 text-stone-900 disabled:opacity-40">
-              {busy ? 'Salvando...' : 'Publicar no cardápio'}
-            </button>
-          </div>
-        </ModalOverlay>
-      )}
-    </>
-  )
 }
 
 function OnlineOrdersPanel({ onAccepted }: { onAccepted: () => void }) {
@@ -960,8 +805,6 @@ export default function PedidosPage() {
 
       {/* Conteúdo */}
       <div className="flex-1 overflow-auto p-4" onScroll={onListScroll}>
-        {canHandleOnline && <OnlinePauseBar />}
-        {canHandleOnline && <DayNoticeBar />}
         {canHandleOnline && <OnlineOrdersPanel onAccepted={load} />}
 
         {error && (

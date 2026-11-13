@@ -10,6 +10,7 @@ import {
 import { brl, maskCurrency, parseCurrency, toCurrencyInput } from '../lib/format'
 import { Field, ModalOverlay as BaseModal, ErrorBanner } from '../components/ui'
 import { inputCls } from '../lib/styles'
+import OnlineMenuControls from '../components/OnlineMenuControls'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -402,6 +403,8 @@ function ItemCard({ item, canEdit, onToggleAvailable, onEdit, onToggleActive }: 
 export default function CardapioPage() {
   const user = getUser()
   const canEdit = user?.role === 'owner' || user?.role === 'manager'
+  // Pausa/aviso do cardápio online: mesmos papéis que cuidam dos pedidos do site
+  const canHandleOnline = canEdit || user?.role === 'cashier'
 
   const [categories, setCategories] = useState<Category[]>([])
   const [items, setItems] = useState<MenuItem[]>([])
@@ -499,6 +502,7 @@ export default function CardapioPage() {
               {categories.length} {categories.length === 1 ? 'categoria' : 'categorias'}
             </p>
           )}
+          {canHandleOnline && <OnlineMenuControls />}
         </div>
 
         <div className="flex-1 overflow-y-auto p-2">
