@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   type Order, type Table,
-  fetchOpenOrders, fetchTables, getUser,
+  fetchOpenOrders, fetchTables, getUser, remainingToPay,
 } from '../lib/api'
 import { brl, timeAgo } from '../lib/format'
 
@@ -96,6 +96,8 @@ export default function DashboardPage() {
   const openCount = orders.length
   const billRequested = orders.filter(o => o.status === 'bill_requested').length
   const openTotal = orders.reduce((sum, o) => sum + Number(o.total), 0)
+  // "Em aberto" = o que ainda falta receber (desconta contas parciais)
+  const openRemaining = orders.reduce((sum, o) => sum + remainingToPay(o), 0)
   const avgTicket = openCount > 0 ? openTotal / openCount : 0
 
   const activeTables = tables.filter(t => t.is_active)
@@ -159,7 +161,7 @@ export default function DashboardPage() {
               {canSeeMoney && (
                 <StatCard
                   label="Em aberto"
-                  value={brl(openTotal)}
+                  value={brl(openRemaining)}
                   hint={`${openCount} ${openCount === 1 ? 'comanda' : 'comandas'}`}
                   accent="amber"
                   onClick={() => navigate('/pedidos')}
@@ -233,7 +235,9 @@ export default function DashboardPage() {
                         </div>
                       </div>
                       {canSeeMoney && (
-                        <span className="text-amber-400 text-sm font-bold shrink-0">{brl(o.total)}</span>
+                        <span className="text-amber-400 text-sm font-bold shrink-0">
+                          {Number(o.paid ?? 0) > 0 ? `Falta ${brl(remainingToPay(o))}` : brl(o.total)}
+                        </span>
                       )}
                     </button>
                   )

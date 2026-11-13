@@ -194,6 +194,17 @@ class OrderRepository(BaseRepository[Order]):
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none() is not None
 
+    async def sum_confirmed_payments_by_order(self, order_ids: list[UUID]) -> dict[UUID, Decimal]:
+        """Total pago (confirmado) de várias comandas numa query só — {order_id: soma}."""
+        if not order_ids:
+            return {}
+        stmt = (
+            select(Payment.order_id, func.sum(Payment.amount))
+            .where(Payment.order_id.in_(order_ids), Payment.status == PaymentStatus.CONFIRMED)
+            .group_by(Payment.order_id)
+        )
+        return {oid: Decimal(total) for oid, total in (await self.session.execute(stmt)).all()}
+
     async def sum_confirmed_payments(self, order_id: UUID) -> Decimal:
         """
         Soma o total de pagamentos CONFIRMADOS de uma comanda.

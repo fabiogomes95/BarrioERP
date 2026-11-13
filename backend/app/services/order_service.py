@@ -404,7 +404,11 @@ class OrderService(BaseService):
             establishment_id,
             table_id=table_id,
         )
-        return [OrderResponse.model_validate(o) for o in orders]
+        paid = await self._order_repo.sum_confirmed_payments_by_order([o.id for o in orders])
+        return [
+            OrderResponse.model_validate(o).model_copy(update={"paid": paid.get(o.id, Decimal("0"))})
+            for o in orders
+        ]
 
     async def get(self, order_id: UUID) -> OrderResponse:
         """

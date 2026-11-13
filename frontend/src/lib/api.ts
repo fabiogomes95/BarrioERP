@@ -276,6 +276,13 @@ export interface Order {
   created_at: string
   updated_at: string
   is_fiado?: boolean
+  /** Já pago (confirmado) — vem na lista de comandas abertas */
+  paid?: string
+}
+
+/** Quanto falta pagar. Sem `paid` (outras rotas), considera nada pago. */
+export function remainingToPay(order: Pick<Order, 'total' | 'paid'>): number {
+  return Math.max(0, Number(order.total) - Number(order.paid ?? 0))
 }
 
 export async function fetchOpenOrders(tableId?: string): Promise<Order[]> {

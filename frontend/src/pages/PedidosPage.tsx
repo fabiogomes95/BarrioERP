@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   type Order, type Table, type OrderType, type OnlineOrder,
   fetchOpenOrders, fetchTables, createOrder, getUser, cancelOrder, mergeOrders,
-  fetchOnlineOrders, acceptOnlineOrder, rejectOnlineOrder,
+  fetchOnlineOrders, acceptOnlineOrder, rejectOnlineOrder, remainingToPay,
 } from '../lib/api'
 import { ONLINE_ORDER_EVENT } from '../lib/notifications'
 import { brl, timeAgo } from '../lib/format'
@@ -131,7 +131,15 @@ function OrderCard({ order, table, selecting, selected, onClick, onLongPress }: 
       <div className="flex items-center justify-between pt-2.5 border-t border-stone-800/50">
         <span className="text-stone-600 text-xs">{activeItems} {activeItems === 1 ? 'item' : 'itens'}</span>
         {getUser()?.role !== 'waiter' && getUser()?.role !== 'kitchen' && (
-          <span className="text-amber-400 text-sm font-bold">{brl(order.total)}</span>
+          // Conta parcial já feita: o que importa é quanto falta; o total fica pequeno embaixo
+          Number(order.paid ?? 0) > 0 ? (
+            <span className="text-right leading-tight">
+              <span className="block text-amber-400 text-sm font-bold">Falta {brl(remainingToPay(order))}</span>
+              <span className="block text-stone-500 text-[11px]">de {brl(order.total)}</span>
+            </span>
+          ) : (
+            <span className="text-amber-400 text-sm font-bold">{brl(order.total)}</span>
+          )
         )}
       </div>
     </button>

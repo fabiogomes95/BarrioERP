@@ -358,6 +358,9 @@ class OrderResponse(UUIDSchema, TimestampSchema):
     version: int                     # necessário para o próximo PATCH
     items: list[OrderItemResponse]   # itens já carregados (eager loaded)
     is_fiado: bool = False           # fechada mas com saldo em aberto — setado manualmente pelo service
+    # Quanto já foi pago (pagamentos confirmados). Preenchido na listagem de
+    # comandas abertas, pro card mostrar "Falta R$ X" depois de conta parcial.
+    paid: Decimal = Decimal("0")
 
 
 class OrderHistoryResponse(OrderResponse):

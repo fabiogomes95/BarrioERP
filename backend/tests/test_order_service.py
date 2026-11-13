@@ -2,6 +2,7 @@
 
 from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -407,3 +408,23 @@ class TestRecalculateTotal:
         service = object.__new__(OrderService)
         service._recalculate_total(order)
         assert order.total == Decimal("80")
+
+
+# ── list_open: quanto já foi pago (card "Falta R$ X") ──────────────────────────
+
+
+AGORA = datetime(2026, 11, 13, 21, 0, tzinfo=UTC)
+
+
+class TestListOpenPago:
+    async def test_lista_traz_o_pago_de_cada_comanda(self, service):
+        a = make_order(id=UUID("00000000-0000-0000-0000-0000000000a1"), waiter_id=None, created_at=AGORA, updated_at=AGORA, total=Decimal("50"))
+        b = make_order(id=UUID("00000000-0000-0000-0000-0000000000b2"), waiter_id=None, created_at=AGORA, updated_at=AGORA, total=Decimal("19.80"))
+        service._order_repo.list_open = AsyncMock(return_value=[a, b])
+        service._order_repo.sum_confirmed_payments_by_order = AsyncMock(return_value={a.id: Decimal("30")})
+
+        result = {r.id: r for r in await service.list_open()}
+
+        assert result[a.id].paid == Decimal("30")
+        assert result[b.id].paid == Decimal("0")
+        service._order_repo.sum_confirmed_payments_by_order.assert_awaited_once_with([a.id, b.id])
