@@ -54,7 +54,7 @@ from app.models.order import OrderType
 from app.repositories.base import BaseRepository
 from app.repositories.menu_repository import MenuCategoryRepository, MenuItemRepository
 from app.services.online_order_pricing import CartError, CartLine, is_pizza_category, price_cart
-from app.services.establishment_settings import online_orders_paused
+from app.services.establishment_settings import active_day_notice, online_orders_paused
 from app.services.opening_hours import is_open
 
 
@@ -140,6 +140,12 @@ class PublicMenuOut(BaseModel):
     # Casa pausou os pedidos pelo site (noite cheia): a página mostra o aviso
     # e o pedido segue pelo WhatsApp, como quando o PC está fora do ar.
     orders_paused: bool = False
+    # Aviso do dia ("Hoje sem delivery: só bebidas e churrasco na brasa").
+    # notice_until vai junto pra cópia do GitHub esconder o aviso vencido
+    # mesmo com o PC desligado (o menu.json pode ficar parado dias).
+    notice: str | None = None
+    notice_until: datetime | None = None
+    delivery_available: bool = True
 
 
 # ── API ──────────────────────────────────────────────────────────────────────
@@ -189,6 +195,7 @@ async def get_public_menu(slug: str, request: Request) -> PublicMenuOut:
         if items_by_category.get(cat.id)  # esconde categorias sem item disponível
     ]
 
+    notice = active_day_notice(establishment, _now())
     return PublicMenuOut(
         establishment_name=settings.PUBLIC_MENU_DISPLAY_NAME or establishment.name,
         whatsapp=settings.PUBLIC_MENU_WHATSAPP,
@@ -197,11 +204,18 @@ async def get_public_menu(slug: str, request: Request) -> PublicMenuOut:
         hours=settings.PUBLIC_MENU_HOURS,
         open_now=_open_now(),
         orders_paused=online_orders_paused(establishment),
+        notice=(notice.text or None) if notice else None,
+        notice_until=notice.until if notice else None,
+        delivery_available=not (notice and notice.no_delivery),
     )
 
 
+def _now() -> datetime:
+    return datetime.now(ZoneInfo(settings.TIMEZONE))
+
+
 def _open_now() -> bool:
-    return is_open(settings.PUBLIC_MENU_HOURS, datetime.now(ZoneInfo(settings.TIMEZONE)))
+    return is_open(settings.PUBLIC_MENU_HOURS, _now())
 
 
 # ── Envio de pedido (fica pendente até alguém aceitar no app) ────────────────
@@ -267,6 +281,12 @@ async def create_online_order(slug: str, data: OnlineOrderIn, request: Request) 
             raise HTTPException(
                 status_code=409,
                 detail="Os pedidos pelo site estão pausados agora. Finalize pelo WhatsApp!",
+            )
+        notice = active_day_notice(establishment, _now())
+        if data.fulfillment == "delivery" and notice and notice.no_delivery:
+            raise HTTPException(
+                status_code=409,
+                detail="Hoje não estamos fazendo entrega — escolha retirada.",
             )
 
         pending = await session.scalar(

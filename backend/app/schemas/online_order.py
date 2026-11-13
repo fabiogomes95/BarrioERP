@@ -2,6 +2,8 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
+from pydantic import Field
+
 from app.models.online_order import OnlineOrderStatus
 from app.models.order import OrderType
 from app.schemas.common import BaseSchema
@@ -37,6 +39,19 @@ class OnlineOrderAccepted(BaseSchema):
 
 class OnlineOrdersPause(BaseSchema):
     paused: bool
+
+
+class DayNoticeIn(BaseSchema):
+    """Aviso do dia no cardápio. Texto vazio + entrega ligada = tira o aviso."""
+    text: str = Field(default="", max_length=280)
+    no_delivery: bool = False
+
+
+class DayNoticeOut(BaseSchema):
+    active: bool
+    text: str = ""
+    no_delivery: bool = False
+    until: datetime | None = None  # some sozinho às 5h
 
 
 class OnlineTopItem(BaseSchema):

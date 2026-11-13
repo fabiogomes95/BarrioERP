@@ -18,7 +18,7 @@ from app.core.config import settings
 from app.models.online_order import OnlineOrderStatus
 from app.models.user import UserRole
 from app.schemas.online_order import (
-    OnlineOrderAccepted, OnlineOrderResponse, OnlineOrdersPause, OnlineOrdersReport,
+    DayNoticeIn, DayNoticeOut, OnlineOrderAccepted, OnlineOrderResponse, OnlineOrdersPause, OnlineOrdersReport,
 )
 from app.services import direct_print
 from app.services.online_order_service import OnlineOrderService
@@ -67,6 +67,22 @@ async def set_online_orders_pause(
     data: OnlineOrdersPause, session: DBSession, current_user: CurrentUser,
 ) -> OnlineOrdersPause:
     return OnlineOrdersPause(paused=await _service(session, current_user).set_paused(data.paused))
+
+
+def _notice_out(notice) -> DayNoticeOut:
+    if notice is None:
+        return DayNoticeOut(active=False)
+    return DayNoticeOut(active=True, text=notice.text, no_delivery=notice.no_delivery, until=notice.until)
+
+
+@router.get("/day-notice", response_model=DayNoticeOut, summary="Aviso do dia no cardápio")
+async def get_day_notice(session: DBSession, current_user: CurrentUser) -> DayNoticeOut:
+    return _notice_out(await _service(session, current_user).day_notice())
+
+
+@router.put("/day-notice", response_model=DayNoticeOut, summary="Definir/tirar o aviso do dia no cardápio")
+async def set_day_notice(data: DayNoticeIn, session: DBSession, current_user: CurrentUser) -> DayNoticeOut:
+    return _notice_out(await _service(session, current_user).set_day_notice(data.text, data.no_delivery))
 
 
 @router.post("/{online_order_id}/accept", response_model=OnlineOrderAccepted,

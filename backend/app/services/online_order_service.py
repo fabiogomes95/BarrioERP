@@ -24,7 +24,9 @@ from app.models.order import OrderType
 from app.schemas.online_order import OnlineOrderResponse, OnlineOrdersReport, OnlineTopItem
 from app.schemas.order import OrderCreate, OrderItemAdd
 from app.services.base import BaseService
-from app.services.establishment_settings import ONLINE_ORDERS_PAUSED, online_orders_paused, write_setting
+from app.services.establishment_settings import (
+    ONLINE_ORDERS_PAUSED, DayNotice, active_day_notice, online_orders_paused, set_day_notice, write_setting,
+)
 from app.services.order_service import OrderService
 
 
@@ -206,6 +208,30 @@ class OnlineOrderService(BaseService):
                 after={"paused": paused},
             )
         return paused
+
+    @staticmethod
+    def _now() -> datetime:
+        return datetime.now(ZoneInfo(settings.TIMEZONE))
+
+    async def day_notice(self) -> DayNotice | None:
+        return active_day_notice(await self._establishment(), self._now())
+
+    async def set_day_notice(self, text: str, no_delivery: bool) -> DayNotice | None:
+        """Aviso do dia no cardápio ("Hoje sem delivery: só bebidas e churrasco").
+        Vale até as 5h — não precisa lembrar de apagar no fim da noite."""
+        establishment = await self._establishment()
+        now = self._now()
+        before = active_day_notice(establishment, now)
+        notice = set_day_notice(establishment, text, no_delivery, now)
+        await self.session.flush()
+        await self._log_audit(
+            action="online_order.day_notice",
+            resource_type="establishment",
+            resource_id=str(establishment.id),
+            before={"text": before.text, "no_delivery": before.no_delivery} if before else None,
+            after={"text": notice.text, "no_delivery": notice.no_delivery} if notice else None,
+        )
+        return notice
 
     async def reject(self, online_order_id: UUID) -> None:
         online_order = await self._get_pending_for_update(online_order_id)

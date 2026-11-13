@@ -338,6 +338,25 @@ export async function setOnlineOrdersPause(paused: boolean): Promise<boolean> {
   })).paused
 }
 
+/** Aviso do dia no cardápio ("Hoje sem delivery: só bebidas e churrasco"). Some sozinho às 5h. */
+export interface DayNotice {
+  active: boolean
+  text: string
+  no_delivery: boolean
+  until: string | null
+}
+
+export async function fetchDayNotice(): Promise<DayNotice> {
+  return request<DayNotice>('/online-orders/day-notice')
+}
+
+/** Texto vazio + entrega ligada = tira o aviso. */
+export async function setDayNotice(text: string, noDelivery: boolean): Promise<DayNotice> {
+  return request<DayNotice>('/online-orders/day-notice', {
+    method: 'PUT', body: JSON.stringify({ text, no_delivery: noDelivery }),
+  })
+}
+
 export async function rejectOnlineOrder(id: string): Promise<void> {
   return request<void>(`/online-orders/${id}/reject`, { method: 'POST' })
 }
