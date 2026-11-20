@@ -497,7 +497,8 @@ class OrderLifecycleMixin(OrderServiceBase):
         recriados: mantêm preço, status de cozinha e a baixa de estoque já feita.
         As comandas de origem ficam CANCELLED com nota "Itens movidos para a comanda X"
         (os itens agora contam na receita da comanda destino) e as mesas delas
-        são liberadas. Desconto das origens é somado no destino.
+        são liberadas. Desconto das origens é somado no destino. Taxa de serviço:
+        se alguma comanda tinha, a final fica com a maior porcentagem.
 
         POR QUE NÃO `target.items.append(item)`:
             items tem cascade "delete-orphan" — tirar o item da coleção da
@@ -543,6 +544,13 @@ class OrderLifecycleMixin(OrderServiceBase):
             update(OrderItem)
             .where(OrderItem.order_id.in_([s.id for s in sources]))
             .values(order_id=target.id)
+        )
+
+        # Taxa de serviço é UMA porcentagem pra comanda inteira. Se alguma das
+        # comandas tinha taxa, a final fica com taxa (a maior delas) — antes
+        # valia só a do destino, e a taxa da outra sumia (decisão do dono, 20/11).
+        target.service_fee_percent = max(
+            [target.service_fee_percent] + [s.service_fee_percent for s in sources]
         )
 
         now = datetime.now(UTC)

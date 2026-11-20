@@ -463,3 +463,41 @@ class TestReabrirFiado:
 
         assert fiado.table_id == UUID(table_id)
         assert mesa.status == TableStatus.OCCUPIED
+
+
+# ── Mesclar comandas: taxa de serviço ─────────────────────────────────────────
+
+async def _merge(service, target, source):
+    from unittest.mock import patch
+    orders = {target.id: target, source.id: source}
+    service.session.scalar = AsyncMock(return_value=Decimal("0"))   # sem pagamento na origem
+    service.session.execute = AsyncMock()
+    service.session.flush = AsyncMock()
+    service.session.refresh = AsyncMock()
+    with patch.object(service, "_get_or_raise", AsyncMock(side_effect=lambda oid, _e: orders[oid])), \
+         patch.object(service, "_order_label", AsyncMock(return_value="gabi")), \
+         patch.object(service, "_log_audit", AsyncMock()):
+        await service.merge_orders(target.id, [source.id])
+
+
+@pytest.mark.asyncio
+async def test_mesclar_mantem_taxa_se_a_origem_tinha(service):
+    """Destino sem taxa + origem com 10% → final com 10% (antes a taxa sumia)."""
+    item = make_item(subtotal=Decimal("115"))
+    target = make_order(id=UUID("00000000-0000-0000-0000-0000000000a1"), table_id=None, items=[item])
+    source = make_order(id=UUID("00000000-0000-0000-0000-0000000000a2"), table_id=None,
+                        service_fee_percent=Decimal("10"))
+    await _merge(service, target, source)
+    assert target.service_fee_percent == Decimal("10")
+    assert target.service_fee == Decimal("11.50")
+    assert target.total == Decimal("126.50")
+
+
+@pytest.mark.asyncio
+async def test_mesclar_sem_taxa_nas_duas_continua_sem(service):
+    item = make_item(subtotal=Decimal("50"))
+    target = make_order(id=UUID("00000000-0000-0000-0000-0000000000a1"), table_id=None, items=[item])
+    source = make_order(id=UUID("00000000-0000-0000-0000-0000000000a2"), table_id=None)
+    await _merge(service, target, source)
+    assert target.service_fee_percent == Decimal("0")
+    assert target.total == Decimal("50")

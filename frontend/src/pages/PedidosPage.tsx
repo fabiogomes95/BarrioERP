@@ -207,6 +207,16 @@ function MergeModal({ orders, tables, onClose, onMerged }: {
         <span className="text-stone-500">Subtotal somado</span>
         <span className="text-stone-100 font-bold">{brl(total)}</span>
       </div>
+      {(() => {
+        // Mesma regra do servidor: se alguma tinha taxa, a final fica com a maior
+        const pcts = orders.map(o => Number(o.service_fee_percent))
+        const max = Math.max(...pcts)
+        return max > 0 && pcts.some(p => p !== max) ? (
+          <p className="text-amber-300/90 text-xs bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2 mb-4">
+            Uma das comandas tem taxa de serviço de {max}%. A comanda final vai ter {max}% de taxa sobre tudo.
+          </p>
+        ) : null
+      })()}
       {error && (
         <p className="text-red-400 text-xs bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2.5 mb-3">{error}</p>
       )}
