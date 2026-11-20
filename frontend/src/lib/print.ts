@@ -1,6 +1,6 @@
 import { type Order, type Table, type Payment } from './api'
 import { brl } from './format'
-import { groupForReceipt } from './groupItems'
+import { receiptSections } from './groupItems'
 
 const METHOD_LABEL: Record<string, string> = {
   cash: 'Dinheiro', credit_card: 'Crédito', debit_card: 'Débito',
@@ -83,7 +83,8 @@ export function printComanda(
   }
 
   // Itens iguais lançados em horas diferentes saem juntos ("12x Churrasco")
-  const groups = groupForReceipt(order.items)
+  // e, se a comanda tiver itens de mais de uma noite (mesclada), uma seção por noite
+  const sections = receiptSections(order.items)
   const now = new Date().toLocaleString('pt-BR')
   const typeLabel = order.order_type === 'delivery'
     ? 'Delivery'
@@ -92,13 +93,15 @@ export function printComanda(
       : 'Consumo no local'
   const where = table ? `Mesa ${table.number}` : typeLabel
 
-  const itemRows = groups.map(g => `
+  const itemRows = sections.map(sec => (sec.label
+    ? `<tr><td class="night">NOITE DE ${esc(sec.label.toUpperCase())}</td><td class="val night">${brl(sec.subtotal)}</td></tr>`
+    : '') + sec.groups.map(g => `
     <tr>
       <td class="qtyname">${g.quantity}x ${esc(g.item_name)}${g.quantity > 1
         ? `<div class="unit">${g.quantity} x ${brl(g.unit_price)}</div>` : ''}</td>
       <td class="val">${brl(g.subtotal)}</td>
     </tr>
-  `).join('')
+  `).join('')).join('')
 
   const subRow = Number(order.service_fee) > 0
     ? `<tr><td>Subtotal</td><td class="val">${brl(order.subtotal)}</td></tr>` : ''
@@ -148,6 +151,7 @@ export function printComanda(
   .qtyname { text-align: left; word-break: break-word; }
   .unit { font-size: 11px; font-weight: normal; color: #333; }
   .val { text-align: right; white-space: nowrap; padding-left: 2mm; }
+  .night { padding-top: 2mm; border-bottom: 1px dashed #000; font-size: 9pt; }
   .total-row td { font-size: 12pt; font-weight: bold; padding-top: 1.5mm; border-top: 1px solid #000; }
   .delivery { font-size: 10pt; line-height: 1.35; word-break: break-word; }
   .foot { margin-top: 3mm; font-size: 9pt; text-align: center; }

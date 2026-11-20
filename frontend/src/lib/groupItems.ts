@@ -61,3 +61,62 @@ export function groupForReceipt(items: OrderItem[]): ItemGroup[] {
 export function groupForScreen(items: OrderItem[]): ItemGroup[] {
   return group(items, i => `${norm(i.item_name)}|${Number(i.unit_price).toFixed(2)}|${norm(i.notes)}`)
 }
+
+// ── Separação por noite (comandas mescladas de dias diferentes) ───────────────
+
+/** A "noite" D vai de D 06:00 até D+1 06:00 — mesma regra do resumo da noite (backend). */
+const NIGHT_CUTOFF_HOUR = 6
+const WEEKDAY = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb']
+
+/** Chave da noite do lançamento ("2026-11-18"), em hora local. */
+export function nightKey(iso: string): string {
+  const d = new Date(Date.parse(iso) - NIGHT_CUTOFF_HOUR * 3600_000)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** "qua 18/11" */
+export function nightLabel(key: string): string {
+  const [y, m, d] = key.split('-').map(Number)
+  return `${WEEKDAY[new Date(y, m - 1, d).getDay()]} ${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`
+}
+
+export interface NightSection<T> {
+  key: string
+  label: string
+  items: T[]
+}
+
+/**
+ * Separa os lançamentos por noite, na ordem das noites. Comanda de uma noite
+ * só → uma seção (quem chama não mostra cabeçalho). Usado quando duas
+ * comandas de dias diferentes foram mescladas: o cliente precisa ver o que
+ * pediu em cada dia.
+ */
+export function splitByNight(items: OrderItem[]): NightSection<OrderItem>[] {
+  const map = new Map<string, OrderItem[]>()
+  for (const it of [...items].sort(byLaunch)) {
+    const k = nightKey(it.created_at)
+    const list = map.get(k)
+    if (list) list.push(it)
+    else map.set(k, [it])
+  }
+  return [...map.keys()].sort().map(k => ({ key: k, label: nightLabel(k), items: map.get(k)! }))
+}
+
+export interface ReceiptSection {
+  /** null quando a comanda é de uma noite só (conta sai igual sempre saiu) */
+  label: string | null
+  subtotal: number
+  groups: ItemGroup[]
+}
+
+/** Conta do cliente: uma seção por noite (só se tiver mais de uma), itens agrupados dentro dela. */
+export function receiptSections(items: OrderItem[]): ReceiptSection[] {
+  const nights = splitByNight(items.filter(i => i.status !== 'cancelled'))
+  if (nights.length <= 1) return [{ label: null, subtotal: 0, groups: groupForReceipt(items) }]
+  return nights.map(n => {
+    const groups = groupForReceipt(n.items)
+    const subtotal = Math.round(groups.reduce((s, g) => s + g.subtotal * 100, 0)) / 100
+    return { label: n.label, subtotal, groups }
+  })
+}

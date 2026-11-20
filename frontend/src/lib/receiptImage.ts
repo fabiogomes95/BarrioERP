@@ -1,6 +1,6 @@
 import { type Order, type Table, type Payment, type FiadoEntry } from './api'
 import { brl } from './format'
-import { groupForReceipt } from './groupItems'
+import { receiptSections } from './groupItems'
 
 const METHOD_LABEL: Record<string, string> = {
   cash: 'Dinheiro', credit_card: 'Crédito', debit_card: 'Débito',
@@ -45,8 +45,9 @@ function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number)
 export async function buildReceiptImage(
   order: Order, table: Table | undefined, barName: string, payments: Payment[] = [],
 ): Promise<Blob> {
-  // Itens iguais lançados em horas diferentes saem juntos ("12x Churrasco")
-  const groups = groupForReceipt(order.items)
+  // Itens iguais lançados em horas diferentes saem juntos ("12x Churrasco").
+  // Comanda com itens de mais de uma noite (mesclada): uma seção por noite.
+  const sections = receiptSections(order.items)
   const typeLabel = order.order_type === 'delivery'
     ? 'Delivery'
     : order.order_type === 'pickup'
@@ -67,13 +68,18 @@ export async function buildReceiptImage(
   const measure = document.createElement('canvas').getContext('2d')!
 
   // sub = linha menor embaixo do nome (valor unitário: "12 x R$ 15,00")
-  type Row = { lines: string[]; value: string; bold?: boolean; muted?: boolean; sub?: string }
+  // header = cabeçalho da noite ("Noite de qua 18/11 ..... R$ 120,00")
+  type Row = { lines: string[]; value: string; bold?: boolean; muted?: boolean; sub?: string; header?: boolean }
   measure.font = `bold 14px ${FONT}`
-  const itemRows: Row[] = groups.map(g => ({
-    lines: wrapText(measure, `${g.quantity}x ${g.item_name}`, nameColW),
-    value: brl(g.subtotal),
-    sub: g.quantity > 1 ? `${g.quantity} x ${brl(g.unit_price)}` : undefined,
-  }))
+  const itemRows: Row[] = sections.flatMap(sec => [
+    ...(sec.label ? [{ lines: [`Noite de ${sec.label}`], value: brl(sec.subtotal), header: true }] : []),
+    ...sec.groups.map(g => ({
+      lines: wrapText(measure, `${g.quantity}x ${g.item_name}`, nameColW),
+      value: brl(g.subtotal),
+      sub: g.quantity > 1 ? `${g.quantity} x ${brl(g.unit_price)}` : undefined,
+    })),
+  ])
+  const HEADER_ROW_EXTRA = 14  // respiro acima do cabeçalho da noite
 
   const totalsRows: Row[] = []
   if (Number(order.service_fee) > 0) {
@@ -101,7 +107,8 @@ export async function buildReceiptImage(
     ? confirmedPayments.length * TOTALS_ROW_H + 34 : 0
   const FOOTER_H = 50
 
-  const itemsH = itemRows.reduce((h, r) => h + r.lines.length * ITEM_ROW_LINE_H + (r.sub ? ITEM_SUB_H : 0) + ITEM_ROW_GAP, 0)
+  const itemsH = itemRows.reduce((h, r) => h + r.lines.length * ITEM_ROW_LINE_H + (r.sub ? ITEM_SUB_H : 0)
+    + (r.header ? HEADER_ROW_EXTRA : 0) + ITEM_ROW_GAP, 0)
   const totalsH = totalsRows.length * TOTALS_ROW_H
 
   const H = PAD + HEADER_H + DASH_H + itemsH + DASH_H + totalsH + TOTAL_ROW_H + PAID_BLOCK_H + DASH_H + FOOTER_H + PAD
@@ -156,7 +163,25 @@ export async function buildReceiptImage(
     ctx.fillText('(sem itens)', W / 2, y)
     ctx.textAlign = 'left'
   } else {
-    for (const row of itemRows) {
+    for (const [idx, row] of itemRows.entries()) {
+      if (row.header) {
+        if (idx > 0) y += HEADER_ROW_EXTRA
+        y += ITEM_ROW_LINE_H
+        ctx.font = `bold 13px ${FONT}`
+        ctx.fillStyle = MUTED
+        ctx.textAlign = 'left'
+        ctx.fillText(row.lines[0].toUpperCase(), PAD, y)
+        ctx.textAlign = 'right'
+        ctx.fillText(row.value, W - PAD, y)
+        ctx.strokeStyle = DASH
+        ctx.lineWidth = 1
+        ctx.beginPath()
+        ctx.moveTo(PAD, y + 6)
+        ctx.lineTo(W - PAD, y + 6)
+        ctx.stroke()
+        y += ITEM_ROW_GAP
+        continue
+      }
       ctx.font = `bold 14px ${FONT}`
       row.lines.forEach((line, i) => {
         y += ITEM_ROW_LINE_H

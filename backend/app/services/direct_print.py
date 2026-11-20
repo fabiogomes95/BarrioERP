@@ -14,14 +14,17 @@ requisição já foi fechada.
 
 import asyncio
 import logging
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Literal
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import events
+from app.core.config import settings
 from app.database.session import AsyncSessionLocal
 from app.models.company import Company
 from app.models.online_order import OnlineOrder
@@ -104,6 +107,35 @@ def receipt_items(items) -> list[tuple[int, str, Decimal, Decimal]]:
     return [(qty, name, unit, total) for qty, name, unit, total in groups.values()]
 
 
+NIGHT_CUTOFF_HOUR = 6  # a "noite" D vai de D 06:00 a D+1 06:00 (igual app/alerts.py)
+_WEEKDAY = ["seg", "ter", "qua", "qui", "sex", "sab", "dom"]
+
+
+def receipt_sections(items, tz: ZoneInfo | None = None) -> list[tuple[str | None, Decimal, list]]:
+    """
+    Conta separada por noite — pra comanda que juntou itens de dias diferentes
+    (mesclagem): o cliente vê o que pediu em cada noite. Cada seção é
+    (rótulo "qua 18/11", subtotal da noite, itens agrupados como receipt_items).
+    Comanda de uma noite só → uma seção sem rótulo (conta igual sempre foi).
+    Mesma regra do receiptSections() do frontend.
+    """
+    tz = tz or ZoneInfo(settings.TIMEZONE)
+    nights: dict = {}
+    for it in sorted(items, key=lambda i: (i.created_at, str(getattr(i, "id", "")))):
+        if it.status == OrderItemStatus.CANCELLED:
+            continue
+        night = (it.created_at.astimezone(tz) - timedelta(hours=NIGHT_CUTOFF_HOUR)).date()
+        nights.setdefault(night, []).append(it)
+    if len(nights) <= 1:
+        return [(None, Decimal("0"), receipt_items(items))]
+    out = []
+    for night in sorted(nights):
+        groups = receipt_items(nights[night])
+        label = f"{_WEEKDAY[night.weekday()]} {night:%d/%m}"
+        out.append((label, sum((g[3] for g in groups), Decimal("0")), groups))
+    return out
+
+
 async def print_receipt(session: AsyncSession, company_id: UUID, establishment_id: UUID, order_id: UUID) -> None:
     order = await _load(session, establishment_id, order_id)
     online = await _online(session, order)
@@ -116,7 +148,7 @@ async def print_receipt(session: AsyncSession, company_id: UUID, establishment_i
     data = thermal_printer.receipt(
         bar_name=company.name if company else "Barrio",
         where=await _where(session, order, receipt=True),
-        items=receipt_items(order.items),
+        items=receipt_sections(order.items),
         subtotal=order.subtotal, service_fee=order.service_fee,
         service_fee_percent=order.service_fee_percent, discount=order.discount, total=order.total,
         payments=[(method(p), p.amount) for p in payments],

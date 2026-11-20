@@ -56,7 +56,15 @@ export function timeAgo(iso: string) {
   return `${Math.floor(h / 24)}d`
 }
 
-/** Hora (HH:mm) do último lançamento do item — quantidade incrementada conta como novo lançamento. */
+/**
+ * Quando o item foi pedido (HH:mm; com o dia "18/11 21:30" se não for de hoje).
+ * Usa created_at, não updated_at: mesclar comandas, servir ou mudar a
+ * quantidade mexe no updated_at, e aí todos os itens apareciam com a hora da
+ * mesclagem — e a cliente não sabia o que pediu em cada dia.
+ */
 export function itemTime(item: OrderItem) {
-  return new Date(item.updated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  const d = new Date(item.created_at)
+  const time = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  if (d.toDateString() === new Date().toDateString()) return time
+  return `${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} ${time}`
 }

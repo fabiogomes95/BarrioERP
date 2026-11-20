@@ -114,7 +114,12 @@ def kitchen_ticket(where: str, items: list[tuple[int, str, str | None]],
     return b"".join(out)
 
 
-def receipt(bar_name: str, where: str, items: list[tuple[int, str, Decimal, Decimal]],
+ReceiptLine = tuple[int, str, Decimal, Decimal]
+# (rótulo da noite ou None, subtotal da noite, linhas) — ver direct_print.receipt_sections
+ReceiptSection = tuple[str | None, Decimal, list[ReceiptLine]]
+
+
+def receipt(bar_name: str, where: str, items: list[ReceiptLine] | list[ReceiptSection],
             subtotal: Decimal, service_fee: Decimal, service_fee_percent: Decimal,
             discount: Decimal, total: Decimal, payments: list[tuple[str, Decimal]],
             delivery: list[tuple[str, str]] | None = None,
@@ -132,14 +137,23 @@ def receipt(bar_name: str, where: str, items: list[tuple[int, str, Decimal, Deci
             out += [BOLD_ON, _text(f"{label}:"), BOLD_OFF]
             out += [_text(f"  {l}") for l in _wrap(value, WIDTH - 2)]
         out.append(_line())
-    if not items:
+    # items = linhas (quantidade, nome, preço unitário, total da linha) já
+    # agrupadas (direct_print.receipt_items), ou seções por noite
+    # (direct_print.receipt_sections). Unitário embaixo quando qtd > 1.
+    sections: list[ReceiptSection] = (
+        items if items and len(items[0]) == 3 else [(None, Decimal("0"), items)]  # type: ignore[list-item]
+    )
+    if not any(lines for _, _, lines in sections):
         out.append(_text("(sem itens)"))
-    # items = (quantidade, nome, preço unitário, total da linha) — já agrupados
-    # (ver direct_print.receipt_items). Unitário embaixo quando qtd > 1.
-    for qty, name, unit_price, line_total in items:
-        out += [_text(l) for l in _two_cols(f"{qty}x {name}", _money(line_total))]
-        if qty > 1:
-            out.append(_text(f"   {qty} x {_money(unit_price)}"))
+    for i, (label, night_total, lines) in enumerate(sections):
+        if label:
+            if i > 0:
+                out.append(_text(""))
+            out += [BOLD_ON, _text(_two_cols(f"NOITE DE {label.upper()}", _money(night_total))[0]), BOLD_OFF, _line(".")]
+        for qty, name, unit_price, line_total in lines:
+            out += [_text(l) for l in _two_cols(f"{qty}x {name}", _money(line_total))]
+            if qty > 1:
+                out.append(_text(f"   {qty} x {_money(unit_price)}"))
     out.append(_line())
     if service_fee > 0:
         out += [_text(l) for l in _two_cols("Subtotal", _money(subtotal))]

@@ -4,7 +4,7 @@ import {
 } from '../lib/api'
 import { brl, timeAgo } from '../lib/format'
 import { ORDER_STATUS } from '../lib/orderStatus'
-import { groupForScreen } from '../lib/groupItems'
+import { groupForScreen, splitByNight } from '../lib/groupItems'
 import { shareReceiptWhatsApp } from '../lib/receiptImage'
 import { ModalOverlay } from './ui'
 import { closeOrFinish } from './order/closeOrFinish'
@@ -366,11 +366,32 @@ export function OrderDetail({
                     onKitchenToggle={() => toggleKitchenItem(item.id)}
                   />
                 ))
-              : groupForScreen(activeItems).map(g => g.items.length === 1 ? (
-                  <OrderItemRow key={g.key} item={g.items[0]} canCancel={canEdit} onCancelled={onUpdated} />
-                ) : (
-                  <ItemGroupRow key={g.key} group={g} canEdit={canEdit} onUpdated={onUpdated} />
-                ))}
+              : (() => {
+                  // Comanda com itens de mais de uma noite (ex: duas comandas
+                  // mescladas): separa por noite, cada uma com seu subtotal.
+                  const nights = splitByNight(activeItems)
+                  return nights.map(night => (
+                    <div key={night.key}>
+                      {nights.length > 1 && (
+                        <div className="px-4 py-2 bg-stone-900/40 flex justify-between items-center border-b border-stone-800/40">
+                          <p className="text-amber-400/90 text-[11px] font-bold uppercase tracking-wider">
+                            Noite de {night.label}
+                          </p>
+                          {canSeeMoney && (
+                            <p className="text-stone-400 text-xs font-semibold tabular-nums">
+                              {brl(night.items.reduce((s, i) => s + Number(i.subtotal), 0))}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      {groupForScreen(night.items).map(g => g.items.length === 1 ? (
+                        <OrderItemRow key={g.key} item={g.items[0]} canCancel={canEdit} onCancelled={onUpdated} />
+                      ) : (
+                        <ItemGroupRow key={g.key} group={g} canEdit={canEdit} onUpdated={onUpdated} />
+                      ))}
+                    </div>
+                  ))
+                })()}
 
             {cancelledItems.length > 0 && (
               <>

@@ -106,3 +106,31 @@ def test_conta_junta_itens_iguais_lancados_em_horas_diferentes():
                                          service_fee=Decimal("0"), service_fee_percent=Decimal("0"),
                                          discount=Decimal("0"), total=Decimal("216"), payments=[], now=NOW)))
     assert "12x Churrasco" in text and "R$ 180,00" in text and "12 x R$ 15,00" in text
+
+
+def test_conta_mesclada_separa_por_noite():
+    from datetime import UTC, datetime
+    from types import SimpleNamespace as I
+    from zoneinfo import ZoneInfo
+    from app.models.order import OrderItemStatus as S
+    from app.services.direct_print import receipt_sections
+
+    def it(name, qty, sub, when):
+        return I(item_name=name, unit_price=Decimal(sub) / qty, quantity=qty, subtotal=Decimal(sub),
+                 status=S.SERVED, created_at=when)
+
+    tz = ZoneInfo("America/Sao_Paulo")
+    itens = [
+        it("Churrasco", 3, "18", datetime(2026, 11, 14, 0, 18, tzinfo=UTC)),   # 13/11 21:18 local
+        it("Cerveja", 1, "10", datetime(2026, 11, 14, 5, 0, tzinfo=UTC)),      # 14/11 02:00 local → noite de 13/11
+        it("Churrasco", 2, "12", datetime(2026, 11, 15, 0, 0, tzinfo=UTC)),    # 14/11 21:00 local
+    ]
+    secs = receipt_sections(itens, tz)
+    assert [(lbl, tot) for lbl, tot, _ in secs] == [("sex 13/11", Decimal("28")), ("sab 14/11", Decimal("12"))]
+    text = "\n".join(_text_lines(receipt("Bar", "Mesa 1", secs, subtotal=Decimal("40"),
+                                         service_fee=Decimal("0"), service_fee_percent=Decimal("0"),
+                                         discount=Decimal("0"), total=Decimal("40"), payments=[], now=NOW)))
+    assert "NOITE DE SEX 13/11" in text and "NOITE DE SAB 14/11" in text
+
+    # uma noite só: conta igual sempre foi, sem cabeçalho
+    assert receipt_sections(itens[:2], tz)[0][0] is None
